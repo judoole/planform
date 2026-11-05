@@ -223,6 +223,12 @@
         "type": {
           "const": "door"
         },
+        "style": {
+          "enum": ["hinged", "sliding"]
+        },
+        "slideDirection": {
+          "enum": [-1, 1]
+        },
         "hostId": {
           "type": "string",
           "minLength": 1,
@@ -403,7 +409,9 @@
             "cabinet",
             "counter",
             "toilet",
-            "shower"
+            "shower",
+            "fireplace-rounded",
+            "fireplace-square"
           ]
         }
       },

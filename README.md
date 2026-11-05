@@ -77,6 +77,7 @@ Room labels are included in browser SVG/PNG exports and agent CLI previews. Room
 
 - **Wall** creates connected corners; **Room** creates four walls with a drag. Room is a drawing tool, not a persistent room object. Shared corners use equal endpoint coordinates; split T-junctions into wall segments when they need shared endpoint editing.
 - Select walls to edit length, thickness, angle or endpoints. **Door** and **Window** attach to walls. Manual edits retain the existing fit-to-wall behavior: openings may move/shrink when space changes, and are removed when less than 5 cm remains. Deleting a wall removes its openings. Undo restores the edit. Strict agent imports/commands reject these conflicts instead.
+- In the **Door** tool, choose a hinged or sliding door before clicking a wall. Change an existing door's type or flip its slide direction in **Properties**.
 - Place stairs, furniture, labels and dimensions. Symbols have resize and rotation handles. Dimensions have independent endpoints and are not attached to walls. Joins use simple rounded corner fills.
 - Group furniture, stairs, labels or other groups. Walls, openings and dimensions cannot be grouped. Ungrouping non-uniformly scaled groups with rotated children is blocked when it would require shear.
 - Use box selection, Shift-click, Objects search and the overlapping-object picker. Properties offers exact numeric editing, locking, duplication and deletion.

@@ -625,7 +625,8 @@ button svg {
   align-items: center;
   position: relative;
 }
-.field input {
+.field input,
+.field select {
   background: #fcfdfb;
   border: 1px solid #e0e7d9;
   border-radius: 5px;

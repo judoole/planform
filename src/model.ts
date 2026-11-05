@@ -1,4 +1,5 @@
 import { readProject } from "./validation";
+import type { FurnitureKind } from "./furniture";
 export type Point = { x: number; y: number };
 export type Box = Point & { w: number; h: number };
 export type Evidence = { basis: "measured" | "estimated"; note: string };
@@ -9,6 +10,7 @@ export type Wall = Base & {
   b: Point;
   thickness: number;
 };
+export type DoorStyle = "hinged" | "sliding";
 export type Opening = Base & {
   type: "door" | "window";
   hostId: string;
@@ -16,16 +18,9 @@ export type Opening = Base & {
   width: number;
   hinge: number;
   swing: number;
+  style?: DoorStyle;
+  slideDirection?: -1 | 1;
 };
-export type FurnitureKind =
-  | "sofa"
-  | "table"
-  | "chair"
-  | "bed"
-  | "cabinet"
-  | "counter"
-  | "toilet"
-  | "shower";
 export type RectItem = Base &
   Box & {
     type: "furniture" | "stairs" | "text" | "group";
@@ -185,10 +180,10 @@ export function bounds(i: Item, items: Item[]): Box {
     if (!f) return { x: 0, y: 0, w: 0, h: 0 };
     const half = i.width / 2,
       thickness = f.wall.thickness / 2;
-    const yMin =
-      i.type === "door" ? Math.min(-i.width * i.swing, -thickness) : -thickness;
-    const yMax =
-      i.type === "door" ? Math.max(-i.width * i.swing, thickness) : thickness;
+    const swingTip =
+      i.type === "door" && i.style !== "sliding" ? -i.width * i.swing : 0;
+    const yMin = Math.min(swingTip, -thickness);
+    const yMax = Math.max(swingTip, thickness);
     return pointsBox(
       [
         { x: -half, y: yMin },

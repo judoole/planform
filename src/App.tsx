@@ -40,8 +40,8 @@ import {
 import {
   type Plan,
   type Point,
-  type RectItem,
   type Item,
+  type DoorStyle,
   emptyPlan,
   clone,
   normalizeOpenings,
@@ -55,11 +55,12 @@ import {
   isRect,
   uid,
 } from "./model";
+import { furniture, type FurnitureKind } from "./furniture";
 import { download, exportSvg, exportPng } from "./exports";
 import AgentPanel from "./AgentPanel";
 import { parseProject } from "./model";
 import Canvas, { type Tool, type Camera } from "./Canvas";
-import Properties, { NumberField } from "./Properties";
+import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
 const RECOVERY = "planform-recovery-v2";
 const palette: {
@@ -100,7 +101,8 @@ export default function App() {
     [selection, setSelection] = useState<string[]>([]),
     [tool, setTool] = useState<Tool>("select"),
     [snap, setSnap] = useState(true),
-    [kind, setKind] = useState<RectItem["kind"]>("sofa"),
+    [kind, setKind] = useState<FurnitureKind>("sofa"),
+    [doorStyle, setDoorStyle] = useState<DoorStyle>("hinged"),
     [wallThickness, setWallThickness] = useState(15),
     [camera, setCamera] = useState<Camera>({ x: 100, y: 100, k: 0.8 }),
     [panelOpen, setPanelOpen] = useState(false),
@@ -388,7 +390,8 @@ export default function App() {
   }
   function chooseTool(t: Tool) {
     setTool(t);
-    if (t === "furniture" && window.innerWidth < 760) setPanelOpen(false);
+    if ((t === "furniture" || t === "door") && window.innerWidth < 760)
+      setPanelOpen(false);
   }
   const selected = plan.items.filter((i) => selection.includes(i.id));
   const matching = plan.items.filter(
@@ -640,7 +643,10 @@ export default function App() {
               </button>
             </div>
           )}
-          {(tool === "furniture" || tool === "wall" || tool === "room") && (
+          {(tool === "furniture" ||
+            tool === "door" ||
+            tool === "wall" ||
+            tool === "room") && (
             <div className="context-toolbar">
               {tool === "furniture" ? (
                 <>
@@ -648,27 +654,23 @@ export default function App() {
                   <select
                     aria-label="Furniture symbol"
                     value={kind}
-                    onChange={(e) =>
-                      setKind(e.target.value as RectItem["kind"])
-                    }
+                    onChange={(e) => setKind(e.target.value as FurnitureKind)}
                   >
-                    {[
-                      "sofa",
-                      "table",
-                      "chair",
-                      "bed",
-                      "cabinet",
-                      "counter",
-                      "toilet",
-                      "shower",
-                    ].map((k) => (
+                    {Object.entries(furniture).map(([k, { label }]) => (
                       <option key={k} value={k}>
-                        {k === "counter"
-                          ? "Kitchen counter"
-                          : k.charAt(0).toUpperCase() + k.slice(1)}
+                        {label}
                       </option>
                     ))}
                   </select>
+                </>
+              ) : tool === "door" ? (
+                <>
+                  <span>PLACE</span>
+                  <DoorStyleSelect
+                    label="New door type"
+                    value={doorStyle}
+                    onChange={setDoorStyle}
+                  />
                 </>
               ) : (
                 <>
@@ -701,6 +703,7 @@ export default function App() {
             setTool={setTool}
             snap={snap}
             kind={kind}
+            doorStyle={doorStyle}
             wallThickness={wallThickness}
             camera={camera}
             setCamera={setCamera}

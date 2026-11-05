@@ -66,6 +66,37 @@ const rect = (
   rx = 0,
   fill = "white",
 ) => <rect x={x} y={y} width={w} height={h} rx={rx} fill={fill} />;
+function Fireplace({
+  w,
+  h,
+  rounded,
+}: {
+  w: number;
+  h: number;
+  rounded: boolean;
+}) {
+  const front = h * 0.42;
+  const size = Math.min(w, h);
+  return (
+    <g>
+      {rounded ? (
+        <path
+          d={`M 0 0 H ${w} V ${front} A ${w / 2} ${h - front} 0 0 1 0 ${front} Z`}
+          fill={light}
+        />
+      ) : (
+        rect(0, 0, w, h, 0, light)
+      )}
+      {rect(w * 0.17, h * 0.17, w * 0.66, h * 0.65, rounded ? size * 0.22 : 0)}
+      <path
+        transform={`translate(${w * 0.5} ${h * 0.5}) scale(${size * 0.017})`}
+        d="M 0 13 C -8 13 -12 8 -12 2 C -12 -2 -10 -6 -7 -8 C -8 -3 -4 -2 -4 -2 C -5 -8 -1 -10 0 -15 C 7 -10 12 -4 12 2 C 12 8 8 13 0 13 Z"
+        fill="#b35f39"
+        stroke="none"
+      />
+    </g>
+  );
+}
 function Symbol({ i }: { i: RectItem }) {
   const w = i.w,
     h = i.h;
@@ -109,6 +140,8 @@ function Symbol({ i }: { i: RectItem }) {
         </text>
       </g>
     );
+  if (i.kind === "fireplace-rounded" || i.kind === "fireplace-square")
+    return <Fireplace w={w} h={h} rounded={i.kind === "fireplace-rounded"} />;
   return (
     <g>
       {i.kind === "sofa" ? (
@@ -200,6 +233,34 @@ function Symbol({ i }: { i: RectItem }) {
           )}
         </>
       )}
+    </g>
+  );
+}
+function SlidingDoor({
+  width: w,
+  thickness: t,
+  direction,
+}: {
+  width: number;
+  thickness: number;
+  direction: -1 | 1;
+}) {
+  const depth = Math.min(t, w / 4);
+  const arrowX = -w * 0.07,
+    arrowY = -depth * 0.25,
+    arrowHead = depth * 0.35;
+  return (
+    <g
+      transform={`scale(${direction} 1)`}
+      strokeWidth={Math.min(1.5, depth * 0.09)}
+    >
+      <path d={`M ${-w / 2} ${-t / 2} v ${t} M ${w / 2} ${-t / 2} v ${t}`} />
+      {rect(-w / 2, -depth * 0.02, w * 0.56, depth * 0.22)}
+      {rect(-w * 0.06, depth * 0.23, w * 0.56, depth * 0.22, 0, light)}
+      <path
+        d={`M ${-w * 0.38} ${arrowY} H ${arrowX} m ${-arrowHead} ${-depth * 0.15} l ${arrowHead} ${depth * 0.15} l ${-arrowHead} ${depth * 0.15}`}
+        fill="none"
+      />
     </g>
   );
 }
@@ -314,6 +375,12 @@ export const DrawItem = memo(
               <line x1={-w / 2 + 4} x2={-w / 2 + 4} y1={-t / 2} y2={t / 2} />
               <line x1={w / 2 - 4} x2={w / 2 - 4} y1={-t / 2} y2={t / 2} />
             </>
+          ) : i.style === "sliding" ? (
+            <SlidingDoor
+              width={w}
+              thickness={t}
+              direction={i.slideDirection ?? 1}
+            />
           ) : (
             <g transform={`scale(${i.hinge} ${i.swing})`}>
               <line x1={-w / 2} y1={0} x2={-w / 2} y2={-w} strokeWidth={2.5} />

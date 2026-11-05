@@ -69,6 +69,23 @@ describe("agent project contract", () => {
     expect(parseProject(serialize(output))).toEqual(example);
     expect(output.items).toHaveLength(29);
   });
+  it("adds and reopens both fireplace kinds as editable furniture", () => {
+    const items = (["fireplace-rounded", "fireplace-square"] as const).map(
+      (kind, index) => ({
+        id: kind,
+        name: kind,
+        type: "furniture" as const,
+        kind,
+        x: index * 100,
+        y: 0,
+        w: 80,
+        h: 70 + index * 10,
+        rotation: index * 90,
+      }),
+    );
+    const { plan } = applyCommands(emptyPlan(), batch([{ op: "add", items }]));
+    expect(parseProject(serialize(plan)).items).toEqual(items);
+  });
   it("rejects orphaned, out-of-wall and overlapping openings with object IDs", () => {
     const p = plan();
     (p.items[1] as Opening).hostId = "missing";
@@ -181,6 +198,42 @@ describe("atomic architectural commands", () => {
     expect((output.plan.items[1] as Opening).t).toBe(0.25);
     expect(output.changedIds).toEqual(["entry"]);
     expect(p.items).toHaveLength(1);
+  });
+  it("round-trips sliding doors and enforces the same wall-opening constraints", () => {
+    const sliding = {
+      op: "opening",
+      id: "slider",
+      name: "Sliding door",
+      type: "door",
+      style: "sliding",
+      slideDirection: -1,
+      hostId: wall.id,
+      offset: 150,
+      width: 120,
+    } as const;
+    const result = applyCommands(plan(), batch([sliding]));
+    expect(parseProject(serialize(result.plan)).items.at(-1)).toMatchObject({
+      type: "door",
+      style: "sliding",
+      slideDirection: -1,
+      hostId: wall.id,
+      t: 0.25,
+      width: 120,
+    });
+    expect(() =>
+      applyCommands(plan(), batch([{ ...sliding, offset: 300 }])),
+    ).toThrow("overlaps");
+    expect(() =>
+      applyCommands(plan(), batch([{ ...sliding, type: "window" }])),
+    ).toThrow(ProjectError);
+    expect(() =>
+      applyCommands(
+        result.plan,
+        batch([
+          { op: "update", id: sliding.id, changes: { slideDirection: 0 } },
+        ]),
+      ),
+    ).toThrow(ProjectError);
   });
   it("rejects an invalid final result without applying earlier operations", () => {
     const p = plan(),
