@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { Fragment, memo } from "react";
 import {
   type Item,
   type Plan,
@@ -89,9 +89,11 @@ function Symbol({ i }: { i: RectItem }) {
             [0.82, 0.1],
             [0.08, 0.78],
             [0.82, 0.78],
-          ].map(([x, y], n) =>
-            rect(w * x, h * y, w * 0.1, h * 0.12, 2, "#ccd5cc"),
-          )}
+          ].map(([x, y], n) => (
+            <Fragment key={n}>
+              {rect(w * x, h * y, w * 0.1, h * 0.12, 2, "#ccd5cc")}
+            </Fragment>
+          ))}
         </>
       ) : i.kind === "chair" ? (
         <>
@@ -154,7 +156,15 @@ function Symbol({ i }: { i: RectItem }) {
     </g>
   );
 }
-function WallShape({ wall: w, plan }: { wall: Wall; plan: Plan }) {
+function WallShape({
+  wall: w,
+  plan,
+  interactive,
+}: {
+  wall: Wall;
+  plan: Plan;
+  interactive: boolean;
+}) {
   const len = dist(w.a, w.b);
   const openings = plan.items
     .filter(
@@ -172,16 +182,18 @@ function WallShape({ wall: w, plan }: { wall: Wall; plan: Plan }) {
   if (start < len) segments.push({ start, end: len });
   return (
     <g transform={`translate(${w.a.x} ${w.a.y}) rotate(${angle(w.a, w.b)})`}>
-      <line
-        data-hit="true"
-        x1={0}
-        x2={len}
-        y1={0}
-        y2={0}
-        stroke="transparent"
-        strokeWidth={Math.max(w.thickness, 12)}
-        pointerEvents="stroke"
-      />
+      {interactive && (
+        <line
+          data-hit="true"
+          x1={0}
+          x2={len}
+          y1={0}
+          y2={0}
+          stroke="transparent"
+          strokeWidth={Math.max(w.thickness, 12)}
+          pointerEvents="stroke"
+        />
+      )}
       {segments.map((s, n) => (
         <rect
           key={n}
@@ -214,9 +226,18 @@ function WallShape({ wall: w, plan }: { wall: Wall; plan: Plan }) {
   );
 }
 export const DrawItem = memo(
-  function DrawItem({ item: i, plan }: { item: Item; plan: Plan }) {
+  function DrawItem({
+    item: i,
+    plan,
+    interactive = true,
+  }: {
+    item: Item;
+    plan: Plan;
+    interactive?: boolean;
+  }) {
     let shape;
-    if (i.type === "wall") shape = <WallShape wall={i} plan={plan} />;
+    if (i.type === "wall")
+      shape = <WallShape wall={i} plan={plan} interactive={interactive} />;
     else if (i.type === "door" || i.type === "window") {
       const f = openingFrame(i, plan.items);
       if (!f) return null;
@@ -228,15 +249,17 @@ export const DrawItem = memo(
           stroke={ink}
           strokeWidth={1.5}
         >
-          <rect
-            data-hit="true"
-            x={-w / 2}
-            y={-t / 2 - 5}
-            width={w}
-            height={t + 10}
-            fill="transparent"
-            stroke="none"
-          />
+          {interactive && (
+            <rect
+              data-hit="true"
+              x={-w / 2}
+              y={-t / 2 - 5}
+              width={w}
+              height={t + 10}
+              fill="transparent"
+              stroke="none"
+            />
+          )}
           {i.type === "window" ? (
             <>
               <rect x={-w / 2} y={-t / 2} width={w} height={t} fill="#dfedf0" />
@@ -283,31 +306,33 @@ export const DrawItem = memo(
             strokeWidth={5}
             paintOrder="stroke"
           >
-            {l.toFixed(1)} cm
+            {l.toFixed(1)} {plan.calibration.calibrated ? "cm" : "units"}
           </text>
-          <path
-            data-hit="true"
-            d={`M 0 ${d} H ${l}`}
-            stroke="transparent"
-            strokeWidth={18}
-          />
+          {interactive && (
+            <path
+              data-hit="true"
+              d={`M 0 ${d} H ${l}`}
+              stroke="transparent"
+              strokeWidth={18}
+            />
+          )}
         </g>
       );
     } else if (isRect(i)) {
       const b = i.sourceBox;
       shape = (
         <g transform={`translate(${i.x} ${i.y}) rotate(${i.rotation})`}>
-          {i.type === "vector" && b ? (
-            <g
-              transform={`scale(${i.w / (b.w || 1)} ${i.h / (b.h || 1)}) translate(${-b.x} ${-b.y})`}
-              dangerouslySetInnerHTML={{ __html: i.svg || "" }}
-            />
-          ) : i.type === "group" && b ? (
+          {i.type === "group" && b ? (
             <g
               transform={`scale(${i.w / (b.w || 1)} ${i.h / (b.h || 1)}) translate(${-b.x} ${-b.y})`}
             >
               {i.children?.map((c) => (
-                <DrawItem key={c.id} item={c} plan={plan} />
+                <DrawItem
+                  key={c.id}
+                  item={c}
+                  plan={plan}
+                  interactive={interactive}
+                />
               ))}
             </g>
           ) : (
@@ -325,6 +350,7 @@ export const DrawItem = memo(
     );
   },
   (a, b) =>
+    a.interactive === b.interactive &&
     a.item === b.item &&
     ((a.item.type !== "wall" &&
       a.item.type !== "door" &&

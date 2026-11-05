@@ -49,17 +49,16 @@ describe("screen and real-world coordinates", () => {
 describe("dense drawing updates and export bounds", () => {
   const v: RectItem = {
     id: "v",
-    name: "Vector",
-    type: "vector",
+    name: "Sofa",
+    type: "furniture",
+    kind: "sofa",
     x: 0,
     y: 0,
     w: 100,
     h: 80,
     rotation: 0,
-    sourceBox: { x: 0, y: 0, w: 100, h: 80 },
-    svg: '<path d="M0 0 C20 30 80 50 100 80"/>',
   };
-  it("preserves references of untouched vectors during interactive moves", () => {
+  it("preserves references of untouched symbols during interactive moves", () => {
     const p = {
       ...emptyPlan(),
       items: Array.from({ length: 2658 }, (_, n) => ({

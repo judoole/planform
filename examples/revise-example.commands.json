@@ -1,0 +1,28 @@
+{
+  "format": "planform-commands",
+  "version": 1,
+  "operations": [
+    {
+      "op": "update",
+      "id": "sofa",
+      "changes": {
+        "x": 100,
+        "y": 540,
+        "rotation": 0
+      }
+    },
+    {
+      "op": "opening",
+      "id": "south-window",
+      "name": "New living window",
+      "type": "window",
+      "hostId": "south-living",
+      "offset": 300,
+      "width": 180,
+      "evidence": {
+        "basis": "estimated",
+        "note": "Proposed opening; location is a design choice."
+      }
+    }
+  ]
+}

@@ -1,0 +1,377 @@
+{
+  "format": "planform",
+  "version": 2,
+  "name": "Three-room example",
+  "units": "cm",
+  "grid": 10,
+  "calibration": {
+    "calibrated": true,
+    "imported": false,
+    "factor": 1
+  },
+  "source": {
+    "file": "Illustrative example \u2014 not a surveyed building",
+    "notes": [
+      "Dimensions are invented to demonstrate editable architecture. This drawing is not a reconstruction of a real house.",
+      "Exterior walls are 20 cm thick; partitions are 12 cm. The width annotation measures wall centerlines."
+    ]
+  },
+  "items": [
+    {
+      "id": "north-living",
+      "name": "North living wall",
+      "type": "wall",
+      "a": {
+        "x": 0,
+        "y": 0
+      },
+      "b": {
+        "x": 600,
+        "y": 0
+      },
+      "thickness": 20
+    },
+    {
+      "id": "north-bedroom",
+      "name": "North bedroom wall",
+      "type": "wall",
+      "a": {
+        "x": 600,
+        "y": 0
+      },
+      "b": {
+        "x": 1000,
+        "y": 0
+      },
+      "thickness": 20
+    },
+    {
+      "id": "east-bedroom",
+      "name": "East bedroom wall",
+      "type": "wall",
+      "a": {
+        "x": 1000,
+        "y": 0
+      },
+      "b": {
+        "x": 1000,
+        "y": 450
+      },
+      "thickness": 20
+    },
+    {
+      "id": "east-bath",
+      "name": "East bathroom wall",
+      "type": "wall",
+      "a": {
+        "x": 1000,
+        "y": 450
+      },
+      "b": {
+        "x": 1000,
+        "y": 800
+      },
+      "thickness": 20
+    },
+    {
+      "id": "south-bath",
+      "name": "South bathroom wall",
+      "type": "wall",
+      "a": {
+        "x": 1000,
+        "y": 800
+      },
+      "b": {
+        "x": 600,
+        "y": 800
+      },
+      "thickness": 20
+    },
+    {
+      "id": "south-living",
+      "name": "South living wall",
+      "type": "wall",
+      "a": {
+        "x": 600,
+        "y": 800
+      },
+      "b": {
+        "x": 0,
+        "y": 800
+      },
+      "thickness": 20
+    },
+    {
+      "id": "west-entry",
+      "name": "West entry wall",
+      "type": "wall",
+      "a": {
+        "x": 0,
+        "y": 800
+      },
+      "b": {
+        "x": 0,
+        "y": 450
+      },
+      "thickness": 20
+    },
+    {
+      "id": "west-living",
+      "name": "West living wall",
+      "type": "wall",
+      "a": {
+        "x": 0,
+        "y": 450
+      },
+      "b": {
+        "x": 0,
+        "y": 0
+      },
+      "thickness": 20
+    },
+    {
+      "id": "partition-bedroom",
+      "name": "Bedroom partition",
+      "type": "wall",
+      "a": {
+        "x": 600,
+        "y": 0
+      },
+      "b": {
+        "x": 600,
+        "y": 450
+      },
+      "thickness": 12
+    },
+    {
+      "id": "partition-bath",
+      "name": "Bathroom partition",
+      "type": "wall",
+      "a": {
+        "x": 600,
+        "y": 450
+      },
+      "b": {
+        "x": 600,
+        "y": 800
+      },
+      "thickness": 12
+    },
+    {
+      "id": "partition-cross",
+      "name": "Bedroom / bathroom partition",
+      "type": "wall",
+      "a": {
+        "x": 600,
+        "y": 450
+      },
+      "b": {
+        "x": 1000,
+        "y": 450
+      },
+      "thickness": 12
+    },
+    {
+      "id": "entry",
+      "name": "Entry door",
+      "type": "door",
+      "hostId": "west-entry",
+      "t": 0.5,
+      "width": 90,
+      "hinge": 1,
+      "swing": -1
+    },
+    {
+      "id": "bedroom-door",
+      "name": "Bedroom door",
+      "type": "door",
+      "hostId": "partition-bedroom",
+      "t": 0.6666666666666666,
+      "width": 90,
+      "hinge": 1,
+      "swing": 1
+    },
+    {
+      "id": "bath-door",
+      "name": "Bathroom door",
+      "type": "door",
+      "hostId": "partition-bath",
+      "t": 0.5,
+      "width": 80,
+      "hinge": 1,
+      "swing": 1
+    },
+    {
+      "id": "living-window",
+      "name": "Living window",
+      "type": "window",
+      "hostId": "north-living",
+      "t": 0.5,
+      "width": 180,
+      "hinge": 1,
+      "swing": 1
+    },
+    {
+      "id": "bedroom-window",
+      "name": "Bedroom window",
+      "type": "window",
+      "hostId": "north-bedroom",
+      "t": 0.5,
+      "width": 140,
+      "hinge": 1,
+      "swing": 1
+    },
+    {
+      "id": "bath-window",
+      "name": "Bathroom window",
+      "type": "window",
+      "hostId": "east-bath",
+      "t": 0.45,
+      "width": 80,
+      "hinge": 1,
+      "swing": 1
+    },
+    {
+      "id": "sofa",
+      "name": "Living sofa",
+      "type": "furniture",
+      "x": 70,
+      "y": 520,
+      "w": 230,
+      "h": 90,
+      "rotation": 0,
+      "kind": "sofa"
+    },
+    {
+      "id": "table",
+      "name": "Dining table",
+      "type": "furniture",
+      "x": 290,
+      "y": 150,
+      "w": 150,
+      "h": 90,
+      "rotation": 0,
+      "kind": "table"
+    },
+    {
+      "id": "chair",
+      "name": "Dining chair",
+      "type": "furniture",
+      "x": 340,
+      "y": 270,
+      "w": 45,
+      "h": 45,
+      "rotation": 0,
+      "kind": "chair",
+      "evidence": {
+        "basis": "estimated",
+        "note": "Illustrative furniture size; replace with actual product measurements."
+      }
+    },
+    {
+      "id": "bed",
+      "name": "Double bed",
+      "type": "furniture",
+      "x": 710,
+      "y": 170,
+      "w": 160,
+      "h": 210,
+      "rotation": 0,
+      "kind": "bed"
+    },
+    {
+      "id": "cabinet",
+      "name": "Wardrobe",
+      "type": "furniture",
+      "x": 920,
+      "y": 120,
+      "w": 50,
+      "h": 180,
+      "rotation": 0,
+      "kind": "cabinet"
+    },
+    {
+      "id": "toilet",
+      "name": "Toilet",
+      "type": "furniture",
+      "x": 670,
+      "y": 630,
+      "w": 45,
+      "h": 70,
+      "rotation": 0,
+      "kind": "toilet"
+    },
+    {
+      "id": "shower",
+      "name": "Shower",
+      "type": "furniture",
+      "x": 870,
+      "y": 660,
+      "w": 100,
+      "h": 100,
+      "rotation": 0,
+      "kind": "shower"
+    },
+    {
+      "id": "stairs",
+      "name": "Stairs",
+      "type": "stairs",
+      "x": 430,
+      "y": 560,
+      "w": 90,
+      "h": 180,
+      "rotation": 0,
+      "steps": 12
+    },
+    {
+      "id": "label-living",
+      "name": "Living / dining",
+      "type": "text",
+      "x": 140,
+      "y": 350,
+      "w": 290,
+      "h": 30,
+      "rotation": 0,
+      "text": "Living / dining",
+      "fontSize": 24
+    },
+    {
+      "id": "label-bedroom",
+      "name": "Bedroom",
+      "type": "text",
+      "x": 700,
+      "y": 80,
+      "w": 200,
+      "h": 30,
+      "rotation": 0,
+      "text": "Bedroom",
+      "fontSize": 24
+    },
+    {
+      "id": "label-bath",
+      "name": "Bathroom",
+      "type": "text",
+      "x": 690,
+      "y": 520,
+      "w": 220,
+      "h": 30,
+      "rotation": 0,
+      "text": "Bathroom",
+      "fontSize": 24
+    },
+    {
+      "id": "overall-width",
+      "name": "Overall centerline width",
+      "type": "dimension",
+      "a": {
+        "x": 0,
+        "y": -80
+      },
+      "b": {
+        "x": 1000,
+        "y": -80
+      },
+      "offset": -30
+    }
+  ]
+}

@@ -55,17 +55,12 @@ import {
   isRect,
   uid,
 } from "./model";
-import {
-  importSvg,
-  freshImportedPlan,
-  safeOpenProject,
-  download,
-  exportSvg,
-  exportPng,
-} from "./svg";
+import { download, exportSvg, exportPng } from "./exports";
+import AgentPanel from "./AgentPanel";
+import { parseProject } from "./model";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { NumberField } from "./Properties";
-const RECOVERY = "planform-recovery-v1";
+const RECOVERY = "planform-recovery-v2";
 const palette: {
   tool: Tool;
   label: string;
@@ -92,8 +87,10 @@ const palette: {
 ];
 function startup() {
   try {
-    const s = localStorage.getItem(RECOVERY);
-    if (s) return safeOpenProject(s).plan;
+    const s =
+      localStorage.getItem(RECOVERY) ||
+      localStorage.getItem("planform-recovery-v1");
+    if (s) return parseProject(s);
   } catch {}
   return emptyPlan();
 }
@@ -114,7 +111,7 @@ export default function App() {
     [exportMenu, setExportMenu] = useState(false),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
-    [report, setReport] = useState<string[] | null>(null),
+    [agentOpen, setAgentOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [autosave, setAutosave] = useState("Saved locally"),
     [coords, setCoords] = useState("0.0, 0.0"),
@@ -128,7 +125,6 @@ export default function App() {
     [, setHistoryTick] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null),
     fileRef = useRef<HTMLInputElement>(null),
-    importRef = useRef<HTMLInputElement>(null),
     history = useRef(new History()),
     planRef = useRef(plan),
     clipboard = useRef<Item[]>([]),
@@ -137,9 +133,9 @@ export default function App() {
   const showNotice = useCallback((s: string) => {
     setNotice(s);
   }, []);
-  const commit = useCallback((next: Plan, base?: Plan) => {
+  const commit = useCallback((next: Plan, base?: Plan, strict = false) => {
     const before = base || planRef.current;
-    const clean = normalizeOpenings(next);
+    const clean = strict ? next : normalizeOpenings(next);
     history.current.push(before);
     setPlan(clean);
     setHistoryTick((v) => v + 1);
@@ -264,52 +260,27 @@ export default function App() {
       "Project downloaded. Open the JSON file to continue editing later.",
     );
   }
-  async function loadFile(file: File | undefined, svg: boolean) {
+  function openPlan(next: Plan) {
+    cancel();
+    commit(next, undefined, true);
+    setSelection([]);
+    setTimeout(() => fit(next), 50);
+    showNotice(
+      "Drawing opened. All objects are editable; Undo restores the previous drawing.",
+    );
+  }
+  async function loadFile(file: File | undefined) {
     if (!file) return;
     setBusy(true);
-    cancel();
     try {
       if (file.size > 15_000_000)
         throw Error("Files must be smaller than 15 MB.");
-      const text = await file.text();
-      if (svg) {
-        const result = await importSvg(text, file.name);
-        let next = plan.items.length
-          ? clone(plan)
-          : freshImportedPlan(file.name);
-        next.items.push(...result.items);
-        next.defs += result.defs;
-        next.papers = [...(next.papers || []), result.viewBox];
-        next.calibration = {
-          calibrated: false,
-          imported: true,
-          factor: 1,
-          source: file.name,
-        };
-        commit(next);
-        setSelection([]);
-        setReport([
-          `Imported ${result.items.length.toLocaleString()} editable vector objects in original drawing order.`,
-          "This drawing is uncalibrated. Select two known points and enter their real distance before planning in centimeters.",
-          ...(result.warnings.length
-            ? result.warnings
-            : ["No unsupported SVG features found."]),
-        ]);
-        setTimeout(() => fit(next), 50);
-      } else {
-        const result = safeOpenProject(text);
-        commit(result.plan);
-        setSelection([]);
-        if (result.warnings.length) setReport(result.warnings);
-        setTimeout(() => fit(result.plan), 50);
-        showNotice("Project opened. All objects are ready to edit.");
-      }
+      openPlan(parseProject(await file.text()));
     } catch (e) {
       showNotice((e as Error).message);
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
-      if (importRef.current) importRef.current.value = "";
     }
   }
   async function exporting(png: boolean) {
@@ -338,7 +309,7 @@ export default function App() {
       if (e.key === "Escape") {
         cancel();
         setMeasure(null);
-        setReport(null);
+        setAgentOpen(false);
         setHelp(false);
         return;
       }
@@ -470,12 +441,12 @@ export default function App() {
             <span>Open</span>
           </button>
           <button
-            onClick={() => importRef.current?.click()}
-            title="Import editable SVG"
+            onClick={() => setAgentOpen(true)}
+            title="Create drawings with an AI agent"
             className="import-button"
           >
             <Upload size={16} />
-            <span>Import SVG</span>
+            <span>AI drawings</span>
           </button>
           <button onClick={save} title="Download editable project">
             <Download size={16} />
@@ -490,9 +461,7 @@ export default function App() {
             </button>
             {exportMenu && (
               <div className="dropdown">
-                <button onClick={() => exporting(false)}>
-                  SVG · editable vectors
-                </button>
+                <button onClick={() => exporting(false)}>SVG · drawing</button>
                 <button onClick={() => exporting(true)}>PNG · image</button>
               </div>
             )}
@@ -528,11 +497,11 @@ export default function App() {
           </button>
           <button
             onClick={() => {
-              importRef.current?.click();
+              setAgentOpen(true);
               setMenu(false);
             }}
           >
-            Import SVG
+            AI drawings
           </button>
           <button
             onClick={() => {
@@ -549,14 +518,7 @@ export default function App() {
         ref={fileRef}
         accept=".json,.planform.json"
         hidden
-        onChange={(e) => loadFile(e.target.files?.[0], false)}
-      />
-      <input
-        type="file"
-        ref={importRef}
-        accept=".svg,image/svg+xml"
-        hidden
-        onChange={(e) => loadFile(e.target.files?.[0], true)}
+        onChange={(e) => loadFile(e.target.files?.[0])}
       />
       <div className="workspace-toolbar">
         <div className="floor-badge">
@@ -826,7 +788,6 @@ export default function App() {
               selection={selection}
               commit={commit}
               setSelection={setSelection}
-              tool={tool}
               setTool={setTool}
               onDuplicate={duplicate}
               onDelete={del}
@@ -867,13 +828,7 @@ export default function App() {
                     }
                   >
                     <span className={`object-type ${i.type}`}>
-                      {i.type === "wall"
-                        ? "━"
-                        : i.type === "vector"
-                          ? "◇"
-                          : i.type === "door"
-                            ? "⌒"
-                            : "□"}
+                      {i.type === "wall" ? "━" : i.type === "door" ? "⌒" : "□"}
                     </span>
                     <span>
                       {i.name}
@@ -888,20 +843,6 @@ export default function App() {
                   Showing first 150. Search an object name to find any element.
                 </p>
               )}
-              <button
-                onClick={() => {
-                  const p = clone(plan);
-                  const lock = !p.items
-                    .filter((i) => i.type === "vector")
-                    .every((i) => i.locked);
-                  p.items.forEach((i) => {
-                    if (i.type === "vector") i.locked = lock;
-                  });
-                  commit(p);
-                }}
-              >
-                Toggle reference-vector locks
-              </button>
             </div>
           )}
           <div className="inspector-footer">
@@ -916,7 +857,7 @@ export default function App() {
             ? `${selected.length} selected`
             : tool === "select"
               ? "Ready to design"
-              : palette.find((p) => p.tool === tool)?.label || "Edit nodes"}
+              : palette.find((p) => p.tool === tool)?.label || "Select"}
         </span>
         <span className="navigation-hint">
           Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
@@ -943,49 +884,19 @@ export default function App() {
           <div className="modal">
             <div className="spinner" />
             <h2>Preparing your drawing…</h2>
-            <p>Preserving every vector and its drawing order.</p>
+            <p>Validating architectural objects and their relationships.</p>
           </div>
         </div>
       )}
-      {report && (
-        <div className="modal-backdrop">
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Import report"
-          >
-            <button
-              className="modal-close"
-              aria-label="Close import report"
-              onClick={() => setReport(null)}
-            >
-              <X size={20} />
-            </button>
-            <div className="modal-icon">
-              <Upload size={25} />
-            </div>
-            <span className="eyebrow">SVG IMPORT</span>
-            <h2>Your drawing, ready to edit.</h2>
-            <ul className="report-list">
-              {report.map((r, n) => (
-                <li key={n}>{r}</li>
-              ))}
-            </ul>
-            <div className="modal-actions">
-              <button onClick={() => setReport(null)}>Continue editing</button>
-              <button
-                className="primary"
-                onClick={() => {
-                  setReport(null);
-                  setTool("calibrate");
-                }}
-              >
-                Calibrate scale <Ruler size={16} />
-              </button>
-            </div>
-          </section>
-        </div>
+      {agentOpen && (
+        <AgentPanel
+          plan={plan}
+          onClose={() => setAgentOpen(false)}
+          onApply={(next) => {
+            openPlan(next);
+            setAgentOpen(false);
+          }}
+        />
       )}
       {measure && (
         <div className="modal-backdrop">
@@ -1113,8 +1024,8 @@ export default function App() {
             <h2>Your next space starts here.</h2>
             <p>
               Draw walls by clicking connected corners, or drag a Room. Use
-              Finish or Cancel to stop. Doors and windows attach to
-              architectural walls; imported paths remain ordinary vectors.
+              Finish or Cancel to stop. Doors and windows attach to walls. AI
+              drawings opens projects created by your agent.
             </p>
             <p>
               Drag selected objects to move them. Circular wall handles edit
@@ -1123,9 +1034,8 @@ export default function App() {
             </p>
             <p>
               Use Box select, Shift-click, Objects search, or the
-              overlapping-object picker for dense drawings. Lock imported
-              reference geometry from Objects. Select two vectors or symbols and
-              use Group in Properties.
+              overlapping-object picker for dense drawings. Lock objects from
+              Properties. Select two symbols and use Group in Properties.
             </p>
             <p>
               Scroll to pan; Ctrl/⌘ + scroll or pinch to zoom. Pan tool makes
@@ -1143,8 +1053,8 @@ export default function App() {
               <b>Cancel / Fit drawing</b>
             </div>
             <p className="notice">
-              Import first, then calibrate a known distance. Calibrating scales
-              the entire document. Dimensions measure their own endpoints and do
+              Use AI drawings for instructions, an example project, and
+              validated imports. Dimensions measure their own endpoints and do
               not attach to walls. Project downloads preserve every editable
               object.
             </p>

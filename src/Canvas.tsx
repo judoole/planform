@@ -28,7 +28,6 @@ import {
   rotate,
 } from "./model";
 import { DrawItem } from "./Drawing";
-import { updateVectorNode, vectorNodeWorld } from "./svg";
 export type Tool =
   | "select"
   | "box"
@@ -42,8 +41,7 @@ export type Tool =
   | "dimension"
   | "measure"
   | "calibrate"
-  | "text"
-  | "node";
+  | "text";
 export type { Camera } from "./coordinates";
 const toolHelp: Record<Tool, string> = {
   select: "Click an object to select · drag to move · Shift-click to add",
@@ -59,17 +57,14 @@ const toolHelp: Record<Tool, string> = {
   measure: "Choose two points to measure their distance",
   calibrate: "Choose two points with a known real-world distance",
   text: "Click to add a label · edit its text in Properties",
-  node: "Select a straight vector, then drag its circular nodes",
 };
 type Gesture = {
-  kind:
-    "move" | "pan" | "box" | "room" | "resize" | "rotate" | "endpoint" | "node";
+  kind: "move" | "pan" | "box" | "room" | "resize" | "rotate" | "endpoint";
   start: Point;
   screen: Point;
   base: Plan;
   ids: string[];
   handle?: string;
-  index?: number;
   moved: boolean;
   cam: Camera;
 };
@@ -243,19 +238,14 @@ export default function Canvas({
         kind:
           handle === "a" || handle === "b"
             ? "endpoint"
-            : handle.startsWith("node")
-              ? "node"
-              : handle === "rotate"
-                ? "rotate"
-                : "resize",
+            : handle === "rotate"
+              ? "rotate"
+              : "resize",
         handle,
-        index: handle.startsWith("node")
-          ? Number(handle.split(":")[1])
-          : undefined,
       };
     } else if (tool === "room")
       g = { ...base, start: snapped(p), kind: "room" };
-    else if (tool === "select" || tool === "box" || tool === "node") {
+    else if (tool === "select" || tool === "box") {
       const stack = overlaps(e),
         hit = e.altKey
           ? stack[(stack.indexOf(selection[0]) + 1) % stack.length]
@@ -270,7 +260,7 @@ export default function Canvas({
             ? selection
             : [hit];
         setSelection(ids);
-        if (object && !object.locked && tool !== "node")
+        if (object && !object.locked)
           g = {
             ...base,
             ids: ids.filter(
@@ -345,12 +335,6 @@ export default function Canvas({
         g.handle as "a" | "b",
         snapped(p, g.ids),
       );
-    } else if (g.kind === "node" && isRect(item)) {
-      const updated = updateVectorNode(item, g.index!, snapped(p, g.ids));
-      return {
-        ...g.base,
-        items: g.base.items.map((i) => (i.id === item.id ? updated : i)),
-      };
     } else if (isRect(item)) {
       const i = { ...item },
         next = {
@@ -448,13 +432,7 @@ export default function Canvas({
       if (g.moved || dist(s, g.screen) > 3) commit(gesturePlan(g, p), g.base);
       return;
     }
-    if (
-      tool === "pan" ||
-      tool === "select" ||
-      tool === "box" ||
-      tool === "node"
-    )
-      return;
+    if (tool === "pan" || tool === "select" || tool === "box") return;
     const q = snapped(p);
     if (["wall", "dimension", "measure", "calibrate"].includes(tool)) {
       if (!anchor) {
@@ -501,9 +479,7 @@ export default function Canvas({
         !wall ||
         wall.distance > Math.max(wall.w.thickness / 2, 22 / camera.k)
       ) {
-        onStatus(
-          "Choose an unlocked architectural wall. Imported vectors are not walls.",
-        );
+        onStatus("Choose an unlocked wall to attach this opening.");
         return;
       }
       const i: Item = {
@@ -646,10 +622,6 @@ export default function Canvas({
             <circle cx={0} cy={0} r={0.75 / camera.k} fill="#ccd7ce" />
           </pattern>
         </defs>
-        <defs
-          data-export="true"
-          dangerouslySetInnerHTML={{ __html: plan.defs }}
-        />
         <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.k})`}>
           <rect
             {...{
@@ -662,17 +634,6 @@ export default function Canvas({
             pointerEvents="none"
           />
           <g data-drawing="true">
-            {plan.papers?.map((b, n) => (
-              <rect
-                key={`paper-${n}`}
-                x={b.x}
-                y={b.y}
-                width={b.w}
-                height={b.h}
-                fill="white"
-                pointerEvents="none"
-              />
-            ))}
             {plan.items.map((i) => (
               <DrawItem key={i.id} item={i} plan={plan} />
             ))}
@@ -731,10 +692,6 @@ export default function Canvas({
                     },
                     "rotate",
                   )}
-                  {tool === "node" &&
-                    single.nodes?.map((n, j) =>
-                      handle(vectorNodeWorld(single, n), `node:${j}`),
-                    )}
                 </>
               ) : null)}
           </g>
@@ -833,7 +790,9 @@ export default function Canvas({
           <button className="primary" onClick={() => setTool("wall")}>
             Draw your first wall <span>↗</span>
           </button>
-          <small>Choose Import SVG above to start from a drawing.</small>
+          <small>
+            Open a project from your AI agent, or draw a room to start.
+          </small>
         </div>
       )}
     </div>

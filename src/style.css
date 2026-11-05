@@ -1440,3 +1440,67 @@ button svg {
     animation: none !important;
   }
 }
+
+.agent-modal {
+  max-width: 760px;
+  width: min(760px, calc(100vw - 32px));
+  max-height: 90dvh;
+  overflow: auto;
+}
+.agent-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0;
+}
+.agent-downloads a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid #d6dfd7;
+  border-radius: 8px;
+  color: #34443f;
+  font-size: 12px;
+  text-decoration: none;
+}
+.agent-modal textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #ccd7ce;
+  border-radius: 8px;
+  font: 12px/1.5 monospace;
+  box-sizing: border-box;
+}
+.agent-modal .field {
+  margin-top: 16px;
+}
+.agent-errors {
+  max-height: 200px;
+  overflow: auto;
+  padding-left: 20px;
+  color: #8b3e2d;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.agent-errors li {
+  margin-bottom: 8px;
+}
+.agent-preview svg {
+  width: 100%;
+  max-height: 300px;
+  background: white;
+  border: 1px solid #d6dfd7;
+  border-radius: 8px;
+}
+
+.agent-modal select {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #ccd7ce;
+  border-radius: 8px;
+  background: white;
+  color: #34443f;
+}
