@@ -5,10 +5,12 @@ import { createShareUrl } from "./share";
 
 export default function ShareDialog({
   plan,
+  versionName,
   onClose,
   onDownload,
 }: {
   plan: Plan;
+  versionName?: string;
   onClose: () => void;
   onDownload: () => void;
 }) {
@@ -77,8 +79,9 @@ export default function ShareDialog({
       <h2 id="share-title">Share this plan</h2>
       <p>
         Anyone with the link can open and edit their own copy. The link contains
-        the whole project, including any source notes, and captures the plan as
-        it is now.
+        {versionName
+          ? ` the ${versionName} version and its source notes. Download the project to share both versions.`
+          : " the whole project, including any source notes, and captures the plan as it is now."}
       </p>
       {local && (
         <p>
@@ -106,8 +109,12 @@ export default function ShareDialog({
       <div className="modal-actions">
         <button
           onClick={() => {
-            onDownload();
-            setStatus("Project downloaded.");
+            try {
+              onDownload();
+              setStatus("Project downloaded.");
+            } catch (error) {
+              setStatus((error as Error).message);
+            }
           }}
         >
           <Download size={15} /> Download project

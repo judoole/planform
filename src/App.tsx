@@ -60,6 +60,7 @@ import {
   calibrate,
   dist,
   serialize,
+  parseProject,
   isRect,
   uid,
 } from "./model";
@@ -68,11 +69,20 @@ import { download, exportSvg, exportPng } from "./exports";
 import AgentPanel from "./AgentPanel";
 import ShareDialog from "./ShareDialog";
 import { isShareHash, readShareHash } from "./share";
-import { parseProject } from "./model";
+import {
+  activePlan,
+  planVersions,
+  replaceActivePlan,
+  versionNames,
+  type ComparisonProject,
+  type PlanVersion,
+  type Project,
+} from "./project";
+import { checkJsonSize, readProjectFile } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
-const RECOVERY = "planform-recovery-v2";
+const RECOVERY = "planform-recovery-v3";
 const palette: {
   tool: Tool;
   label: string;
@@ -97,12 +107,13 @@ const palette: {
   { tool: "measure", label: "Measure", icon: ScanLine, key: "M" },
   { tool: "text", label: "Label", icon: Type, key: "T" },
 ];
-function startup() {
+function startup(): Project {
   try {
     const s =
       localStorage.getItem(RECOVERY) ||
+      localStorage.getItem("planform-recovery-v2") ||
       localStorage.getItem("planform-recovery-v1");
-    if (s) return parseProject(s);
+    if (s) return readProjectFile(s);
   } catch {}
   return emptyPlan();
 }
@@ -164,7 +175,11 @@ function SharedPlan({ hash }: { hash: string }) {
 }
 
 function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
-  const [plan, setPlan] = useState<Plan>(() => sharedPlan ?? startup()),
+  const [project, setProject] = useState<Project>(
+      () => sharedPlan ?? startup(),
+    ),
+    [preview, setPreview] = useState<Plan | null>(null),
+    [overlay, setOverlay] = useState(false),
     [selection, setSelection] = useState<string[]>([]),
     [tool, setTool] = useState<Tool>("select"),
     [snap, setSnap] = useState(true),
@@ -196,12 +211,19 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     [, setHistoryTick] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null),
     fileRef = useRef<HTMLInputElement>(null),
-    history = useRef(new History()),
-    planRef = useRef(plan),
-    lastSaved = useRef(plan),
+    proposedFileRef = useRef<HTMLInputElement>(null),
+    histories = useRef({ existing: new History(), proposed: new History() }),
+    projectRef = useRef(project),
+    lastSaved = useRef(project),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
-  planRef.current = plan;
+  const version = project.version === 3 ? project.active : "existing";
+  const otherVersion = version === "existing" ? "proposed" : "existing";
+  const drawing = activePlan(project);
+  const plan = preview ?? drawing;
+  const history = histories.current[version];
+  const ghost =
+    overlay && project.version === 3 ? project.plans[otherVersion] : undefined;
   const { rooms, roomError } = useMemo(() => {
     try {
       return { rooms: findRooms(plan.items), roomError: undefined };
@@ -218,14 +240,24 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
   const showNotice = useCallback((s: string) => {
     setNotice(s);
   }, []);
-  const commit = useCallback((next: Plan, base?: Plan, strict = false) => {
-    const before = base || planRef.current;
-    const clean = strict ? next : normalizeOpenings(next);
-    history.current.push(before);
-    setPlan(clean);
-    setHistoryTick((v) => v + 1);
+  const updateProject = useCallback((next: Project) => {
+    projectRef.current = next;
+    setProject(next);
   }, []);
-  const fit = useCallback((p: Plan = planRef.current) => {
+  const commit = useCallback(
+    (next: Plan, base?: Plan, strict = false) => {
+      const current = projectRef.current;
+      const before = base || activePlan(current);
+      const clean = strict ? next : normalizeOpenings(next);
+      histories.current[
+        current.version === 3 ? current.active : "existing"
+      ].push(before);
+      setPreview(null);
+      updateProject(replaceActivePlan(current, clean));
+    },
+    [updateProject],
+  );
+  const fit = useCallback((p: Plan = activePlan(projectRef.current)) => {
     const svg = svgRef.current;
     if (!svg) return;
     const box = planBounds(p),
@@ -248,13 +280,15 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     });
   }, []);
   useEffect(() => {
-    if (planRef.current.items.length) fit();
+    if (activePlan(projectRef.current).items.length) fit();
   }, []);
   const saveRecovery = useCallback(() => {
-    const current = planRef.current;
+    const current = projectRef.current;
     if (lastSaved.current !== current) {
       try {
-        localStorage.setItem(RECOVERY, serialize(current));
+        const contents = serialize(current);
+        checkJsonSize(contents);
+        localStorage.setItem(RECOVERY, contents);
         lastSaved.current = current;
       } catch {
         return "Recovery unavailable · download to save";
@@ -275,35 +309,72 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
   }, [sharedPlan, saveRecovery]);
   useEffect(() => {
     if (sharedPlan) return;
-    if (plan === lastSaved.current) {
+    if (project === lastSaved.current) {
       setAutosave("Saved locally");
       return;
     }
     setAutosave("Saving…");
     const timer = setTimeout(() => setAutosave(saveRecovery()), 900);
     return () => clearTimeout(timer);
-  }, [plan, sharedPlan, saveRecovery]);
+  }, [project, sharedPlan, saveRecovery]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 7000);
     return () => clearTimeout(t);
   }, [notice]);
   function cancel() {
+    setPreview(null);
     setCancelToken((v) => v + 1);
     setTool("select");
     setOverlapOpen(false);
   }
-  function undo() {
+  function clearDrawingContext() {
     cancel();
-    setPlan(history.current.undo(planRef.current));
     setSelection([]);
-    setHistoryTick((v) => v + 1);
+    setOverlap([]);
+    setMeasure(null);
+  }
+  function undo() {
+    clearDrawingContext();
+    updateProject(replaceActivePlan(project, history.undo(drawing)));
   }
   function redo() {
-    cancel();
-    setPlan(history.current.redo(planRef.current));
-    setSelection([]);
-    setHistoryTick((v) => v + 1);
+    clearDrawingContext();
+    updateProject(replaceActivePlan(project, history.redo(drawing)));
+  }
+  function switchVersion(next: PlanVersion) {
+    if (project.version !== 3 || next === version) return;
+    clearDrawingContext();
+    updateProject({ ...project, active: next });
+  }
+  function setProposed(proposed: Plan) {
+    const current = projectRef.current;
+    const next: ComparisonProject = {
+      format: "planform",
+      version: 3,
+      name: current.name,
+      active: "proposed",
+      plans: {
+        existing: current.version === 3 ? current.plans.existing : current,
+        proposed,
+      },
+    };
+    checkJsonSize(serialize(next));
+    if (current.version === 3)
+      histories.current.proposed.push(current.plans.proposed);
+    clearDrawingContext();
+    updateProject(next);
+  }
+  function duplicateAsProposed() {
+    const existing = projectRef.current;
+    if (existing.version !== 2) return;
+    try {
+      setProposed(clone(existing));
+    } catch {
+      showNotice(
+        "This drawing is too large to duplicate into a 15 MB project.",
+      );
+    }
   }
   function del() {
     const ids = selection.filter(
@@ -358,50 +429,89 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     setSelection(r.ids);
   }
   function downloadProject() {
+    const current = projectRef.current;
+    const contents = serialize(current);
+    checkJsonSize(contents);
     download(
-      new Blob([serialize(plan)], { type: "application/json" }),
-      `${plan.name || "Untitled"}.planform.json`,
+      new Blob([contents], { type: "application/json" }),
+      `${current.name || "Untitled"}.planform.json`,
     );
   }
   function save() {
-    downloadProject();
-    showNotice(
-      "Project downloaded. Open the JSON file to continue editing later.",
-    );
+    try {
+      downloadProject();
+      showNotice(
+        "Project downloaded. Open the JSON file to continue editing later.",
+      );
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
   }
-  function openPlan(next: Plan) {
-    cancel();
+  function openDrawing(next: Plan) {
+    clearDrawingContext();
     commit(next, undefined, true);
-    setSelection([]);
-    setTimeout(() => fit(next), 50);
+    fit(next);
     showNotice(
       "Drawing opened. All objects are editable; Undo restores the previous drawing.",
     );
   }
-  async function loadFile(file: File | undefined) {
-    if (!file) return;
+  function replaceProject(next: Project) {
+    clearDrawingContext();
+    setOverlay(false);
+    histories.current = { existing: new History(), proposed: new History() };
+    updateProject(next);
+  }
+  function newProject() {
+    if (project.version === 2) {
+      clearDrawingContext();
+      commit(emptyPlan());
+    } else {
+      replaceProject(emptyPlan());
+    }
+    setCamera({ x: 100, y: 100, k: 0.8 });
+    setMenu(false);
+  }
+  async function loadFile(
+    input: HTMLInputElement,
+    target: "project" | "proposed" = "project",
+  ) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || busy) return;
     setBusy(true);
     try {
       if (file.size > 15_000_000)
         throw Error("Files must be smaller than 15 MB.");
-      openPlan(parseProject(await file.text()));
+      const contents = await file.text();
+      if (target === "proposed") {
+        setProposed(parseProject(contents));
+        showNotice("Drawing loaded as Proposed.");
+        return;
+      }
+      const next = readProjectFile(contents);
+      if (next.version === 2 && projectRef.current.version === 2) {
+        openDrawing(next);
+      } else {
+        replaceProject(next);
+        fit(activePlan(next));
+        showNotice("Project opened.");
+      }
     } catch (e) {
       showNotice((e as Error).message);
     } finally {
       setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   }
   async function exporting(png: boolean) {
     setExportMenu(false);
     try {
       const svg = exportSvg(svgRef.current!, planBounds(plan));
-      if (png) await exportPng(svg, `${plan.name}.png`);
-      else
-        download(
-          new Blob([svg], { type: "image/svg+xml" }),
-          `${plan.name}.svg`,
-        );
+      const name =
+        project.version === 3
+          ? `${project.name} - ${versionNames[version]}`
+          : plan.name;
+      if (png) await exportPng(svg, `${name}.png`);
+      else download(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
       showNotice(
         `${png ? "PNG" : "SVG"} exported with a white background, without the editing grid or selection.`,
       );
@@ -411,7 +521,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
-      if (shareOpen) return;
+      if (shareOpen || busy) return;
       const el = e.target as HTMLElement;
       if (el.closest('input,textarea,select,[contenteditable="true"]')) return;
       const mod = e.metaKey || e.ctrlKey,
@@ -423,6 +533,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
         setHelp(false);
         return;
       }
+      if (agentOpen) return;
       if (mod && ["s", "o"].includes(k)) {
         e.preventDefault();
         if (k === "s") save();
@@ -513,14 +624,21 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
         <div className="project-heading">
           <input
             aria-label="Project name"
-            value={plan.name}
-            onChange={(e) => setPlan({ ...plan, name: e.target.value })}
+            value={project.name}
+            maxLength={200}
+            onChange={(e) =>
+              updateProject({ ...projectRef.current, name: e.target.value })
+            }
             onFocus={() => {
-              nameBefore.current = plan;
+              nameBefore.current = project.version === 2 ? project : null;
             }}
             onBlur={() => {
-              if (nameBefore.current && nameBefore.current.name !== plan.name) {
-                history.current.push(nameBefore.current);
+              if (
+                project.version === 2 &&
+                nameBefore.current &&
+                nameBefore.current.name !== project.name
+              ) {
+                history.push(nameBefore.current);
                 setHistoryTick((v) => v + 1);
               }
               nameBefore.current = null;
@@ -532,15 +650,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           </span>
         </div>
         <div className="header-actions">
-          <button
-            onClick={() => {
-              commit(emptyPlan());
-              setSelection([]);
-              cancel();
-              setCamera({ x: 100, y: 100, k: 0.8 });
-            }}
-            title="New empty project"
-          >
+          <button onClick={newProject} title="New empty project">
             <FilePlus2 size={16} />
             <span>New</span>
           </button>
@@ -604,16 +714,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       )}
       {menu && (
         <div className="mobile-project-menu">
-          <button
-            onClick={() => {
-              commit(emptyPlan());
-              cancel();
-              setSelection([]);
-              setMenu(false);
-            }}
-          >
-            New project
-          </button>
+          <button onClick={newProject}>New project</button>
           <button
             onClick={() => {
               fileRef.current?.click();
@@ -645,19 +746,65 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
         ref={fileRef}
         accept=".json,.planform.json"
         hidden
-        onChange={(e) => loadFile(e.target.files?.[0])}
+        onChange={(e) => loadFile(e.currentTarget)}
+      />
+      <input
+        type="file"
+        ref={proposedFileRef}
+        aria-label="Proposed drawing file"
+        accept=".json,.planform.json"
+        hidden
+        onChange={(e) => loadFile(e.currentTarget, "proposed")}
       />
       <div className="workspace-toolbar">
-        <div className="floor-badge">
-          <Layers size={15} />
-          <span>Ground floor</span>
-          <small>01</small>
+        <div className="plan-toolbar-group">
+          <div className="floor-badge">
+            <Layers size={15} />
+            <span>Ground floor</span>
+            <small>01</small>
+          </div>
+          <div className="plan-versions" role="group" aria-label="Plan version">
+            {project.version === 2 ? (
+              <>
+                <span className="plan-version-name">Existing</span>
+                <button onClick={duplicateAsProposed}>
+                  <Copy size={14} /> Duplicate as proposed
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="plan-switch">
+                  {planVersions.map((option) => (
+                    <button
+                      key={option}
+                      aria-pressed={version === option}
+                      onClick={() => switchVersion(option)}
+                    >
+                      {versionNames[option]}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="plan-overlay-toggle"
+                  aria-pressed={overlay}
+                  title="Show the other version as a reference"
+                  onClick={() => setOverlay(!overlay)}
+                >
+                  <Layers size={14} /> Overlay
+                </button>
+              </>
+            )}
+            <button onClick={() => proposedFileRef.current?.click()}>
+              <FolderOpen size={14} />
+              {project.version === 2 ? "Load as proposed" : "Replace proposed"}
+            </button>
+          </div>
         </div>
         <div className="toolbar-separator" />
         <button
           aria-label="Undo"
           title="Undo · ⌘/Ctrl Z"
-          disabled={!history.current.past.length}
+          disabled={!history.past.length}
           onClick={undo}
         >
           <Undo2 size={18} />
@@ -665,7 +812,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
         <button
           aria-label="Redo"
           title="Redo · ⌘/Ctrl Shift Z"
-          disabled={!history.current.future.length}
+          disabled={!history.future.length}
           onClick={redo}
         >
           <Redo2 size={18} />
@@ -700,7 +847,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           <Magnet size={16} />
           <span>Snap {snap ? "on" : "off"}</span>
         </button>
-        <button className="cancel-button" onClick={cancel}>
+        <button className="cancel-button" aria-label="Cancel" onClick={cancel}>
           <X size={15} />
           <span>Cancel</span>
         </button>
@@ -741,7 +888,12 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           <div className="drawing-topline">
             <span>
               <span className="tiny-square" /> FLOOR PLAN{" "}
-              <span className="muted">/</span> <b>DESIGN MODE</b>
+              <span className="muted">/</span>{" "}
+              <b className={ghost ? "plan-overlay-key" : undefined}>
+                {ghost
+                  ? `${versionNames[otherVersion]} overlay`
+                  : "DESIGN MODE"}
+              </b>
             </span>
             <span className="private-badge">
               {sharedPlan ? "SHARED COPY" : "LOCAL & PRIVATE"}
@@ -806,8 +958,9 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           )}
           <Canvas
             plan={plan}
+            ghost={ghost}
             rooms={rooms}
-            setPreview={setPlan}
+            setPreview={setPreview}
             commit={commit}
             selection={selection}
             setSelection={setSelection}
@@ -1022,17 +1175,20 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       )}
       {agentOpen && (
         <AgentPanel
-          plan={plan}
+          plan={drawing}
           onClose={() => setAgentOpen(false)}
           onApply={(next) => {
-            openPlan(next);
+            openDrawing(next);
             setAgentOpen(false);
           }}
         />
       )}
       {shareOpen && (
         <ShareDialog
-          plan={plan}
+          plan={drawing}
+          versionName={
+            project.version === 3 ? versionNames[version] : undefined
+          }
           onClose={() => setShareOpen(false)}
           onDownload={downloadProject}
         />

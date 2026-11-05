@@ -1,6 +1,8 @@
 import Ajv from "ajv";
 import schema from "../public/agent/planform.schema.json";
+import comparisonSchema from "../public/agent/comparison.schema.json";
 import type { Item, Plan, RectItem, Wall } from "./model";
+import { planVersions, type ComparisonProject, type Project } from "./project";
 
 export type Issue = {
   path: string;
@@ -23,35 +25,38 @@ export class ProjectError extends Error {
     this.issues = issues;
   }
 }
-const validateSchema = new Ajv({
+const ajv = new Ajv({
   allErrors: true,
   useDefaults: true,
   discriminator: true,
-}).compile(schema);
+}).addSchema(schema, "planform.schema.json");
+const validateSchema = ajv.getSchema("planform.schema.json")!;
+const validateComparisonSchema = ajv.compile(comparisonSchema);
 const length = (w: Wall) => Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
 
-/** Strict and non-destructive. Defaults are filled on a clone; geometry is never repaired. */
-export function validateProject(input: unknown): Plan {
-  const p = structuredClone(input);
-  // Bound recursion before handing a potentially recursive document to the schema validator.
+// Bound recursion before cloning or handing the drawing to the schema validator.
+function guardDrawing(input: unknown, path: string) {
   let count = 0;
   function guard(value: unknown, depth = 0) {
     if (!Array.isArray(value)) return;
     if (depth > 15 || (count += value.length) > 50000)
       throw new ProjectError([
         {
-          path: "/items",
+          path: path + "/items",
           code: "limit",
-          message: "Projects allow 50,000 total objects and 15 group levels.",
+          message: "Drawings allow 50,000 total objects and 15 group levels.",
         },
       ]);
     for (const item of value)
       if (item && typeof item === "object") guard(item.children, depth + 1);
   }
-  guard((p as Plan | null)?.items);
-  if (!validateSchema(p)) {
+  guard((input as Plan | null)?.items);
+}
+
+function validateStructure(input: unknown, validate: typeof validateSchema) {
+  if (!validate(input)) {
     throw new ProjectError(
-      (validateSchema.errors || []).slice(0, 100).map((e) => ({
+      (validate.errors || []).slice(0, 100).map((e) => ({
         path:
           e.instancePath +
           (e.keyword === "required"
@@ -67,7 +72,18 @@ export function validateProject(input: unknown): Plan {
       })),
     );
   }
-  const plan = p as Plan;
+}
+
+/** Strict and non-destructive. Defaults are filled on a clone; geometry is never repaired. */
+export function validateProject(input: unknown): Plan {
+  guardDrawing(input, "");
+  const plan = structuredClone(input) as Plan;
+  validateStructure(plan, validateSchema);
+  validateRelationships(plan, "");
+  return plan;
+}
+
+function validateRelationships(plan: Plan, path: string) {
   const issues: Issue[] = [];
   const all = new Map<string, Item>();
   function walk(items: Item[], path: string) {
@@ -94,7 +110,7 @@ export function validateProject(input: unknown): Plan {
       if (item.type === "group") walk(item.children!, `${here}/children`);
     });
   }
-  walk(plan.items, "/items");
+  walk(plan.items, path + "/items");
   const walls = new Map(
     plan.items
       .filter((i): i is Wall => i.type === "wall")
@@ -108,7 +124,7 @@ export function validateProject(input: unknown): Plan {
     if (item.type !== "door" && item.type !== "window") return;
     const fail = (field: string, code: string, message: string) =>
       issues.push({
-        path: `/items/${n}/${field}`,
+        path: `${path}/items/${n}/${field}`,
         code,
         message,
         objectId: item.id,
@@ -144,10 +160,24 @@ export function validateProject(input: unknown): Plan {
     occupied.set(wall.id, spans);
   });
   if (issues.length) throw new ProjectError(issues);
-  return plan;
 }
 
-export function readJson(text: string): unknown {
+function isComparison(input: unknown): input is ComparisonProject {
+  const p = input as Partial<ComparisonProject> | null;
+  return p?.format === "planform" && p.version === 3;
+}
+
+function validateComparison(input: ComparisonProject): ComparisonProject {
+  for (const version of planVersions)
+    guardDrawing(input.plans?.[version], `/plans/${version}`);
+  const project = structuredClone(input);
+  validateStructure(project, validateComparisonSchema);
+  for (const version of planVersions)
+    validateRelationships(project.plans[version], `/plans/${version}`);
+  return project;
+}
+
+export function checkJsonSize(text: string) {
   if (new TextEncoder().encode(text).length > 15_000_000)
     throw new ProjectError([
       {
@@ -156,6 +186,10 @@ export function readJson(text: string): unknown {
         message: "JSON files must be smaller than 15 MB.",
       },
     ]);
+}
+
+export function readJson(text: string): unknown {
+  checkJsonSize(text);
   let input;
   try {
     input = JSON.parse(text);
@@ -172,7 +206,28 @@ export function readJson(text: string): unknown {
 }
 
 export function readProject(text: string): Plan {
-  let input = readJson(text) as Record<string, any> | null;
+  const input = readJson(text);
+  if (isComparison(input))
+    throw new ProjectError([
+      {
+        path: "/version",
+        code: "comparison_project",
+        message:
+          "This file contains two drawings. Use Open project to load both versions.",
+      },
+    ]);
+  return readSinglePlan(input);
+}
+
+export function readProjectFile(text: string): Project {
+  const input = readJson(text);
+  return isComparison(input)
+    ? validateComparison(input)
+    : readSinglePlan(input);
+}
+
+function readSinglePlan(value: unknown): Plan {
+  let input = value as Record<string, any> | null;
   if (input?.format === "planform" && input.version === 1) {
     let legacyCount = 0;
     function hasVectors(items: unknown, depth = 0): boolean {

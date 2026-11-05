@@ -230,6 +230,51 @@ button svg {
   padding: 2px 5px;
   border-radius: 3px;
 }
+.plan-toolbar-group,
+.plan-versions {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.plan-toolbar-group {
+  gap: 12px;
+}
+.plan-versions {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plan-versions button {
+  font-size: 12px;
+  padding-inline: 9px;
+}
+.plan-version-name {
+  color: #596b60;
+  font-size: 12px;
+}
+.plan-switch {
+  display: flex;
+  border: 1px solid #dde3da;
+  border-radius: 7px;
+  background: #f3f6f0;
+}
+.plan-switch button {
+  border-color: transparent;
+  background: transparent;
+}
+.plan-switch button:hover {
+  background: #e9eee5;
+}
+.plan-switch button[aria-pressed="true"] {
+  background: #e2eee4;
+  border-color: #bfcec2;
+  color: #1c5e49;
+  font-weight: 600;
+}
+.plan-overlay-toggle[aria-pressed="true"] {
+  background: #e6eff7;
+  border-color: #b4cce0;
+  color: #305f86;
+}
 .toolbar-separator {
   height: 20px;
   width: 1px;
@@ -341,6 +386,26 @@ button svg {
 .drawing-topline b {
   font-weight: 400;
   font-size: 9px;
+}
+.drawing-topline .plan-overlay-key {
+  color: #305f86;
+  text-transform: uppercase;
+}
+.plan-overlay {
+  opacity: 0.5;
+}
+.plan-overlay [stroke]:not([stroke="none"]) {
+  stroke: #497daa;
+}
+.plan-overlay [fill]:not([fill="none"], [fill="white"]) {
+  fill: #497daa;
+}
+.plan-overlay [fill="white"] {
+  fill: none;
+}
+.plan-overlay [data-item-type="text"],
+.plan-overlay [data-item-type="dimension"] {
+  display: none;
 }
 .tiny-square {
   width: 6px;
@@ -1165,6 +1230,20 @@ button svg {
     padding: 0 15px;
   }
 }
+@media (max-width: 930px) {
+  .workspace-toolbar {
+    padding-block: 4px;
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .plan-toolbar-group {
+    flex-basis: 100%;
+  }
+  .plan-toolbar-group + .toolbar-separator {
+    display: none;
+  }
+}
 @media (max-width: 600px) {
   .topbar {
     height: 65px;
@@ -1235,9 +1314,8 @@ button svg {
     min-height: 40px;
   }
   .workspace-toolbar {
-    padding: 0 8px;
-    height: 45px;
-    gap: 0;
+    padding: 4px 8px;
+    gap: 4px 0;
   }
   .floor-badge {
     font-size: 10px;
@@ -1254,9 +1332,6 @@ button svg {
     padding: 7px;
   }
   .workspace-toolbar .floor-badge {
-    display: none;
-  }
-  .workspace-toolbar > .toolbar-separator:first-of-type {
     display: none;
   }
   .workspace-toolbar .snap-toggle span {
@@ -1426,6 +1501,11 @@ button svg {
   }
   .header-actions > button[aria-label] {
     display: inline-flex;
+  }
+}
+@media (max-width: 390px) {
+  .cancel-button span {
+    display: none;
   }
 }
 @media (pointer: coarse) {

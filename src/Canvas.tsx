@@ -73,6 +73,7 @@ type Gesture = {
 };
 export default function Canvas({
   plan,
+  ghost,
   rooms,
   setPreview,
   commit,
@@ -93,8 +94,9 @@ export default function Canvas({
   cancelToken,
 }: {
   plan: Plan;
+  ghost?: Plan;
   rooms: Room[];
-  setPreview: (p: Plan) => void;
+  setPreview: (p: Plan | null) => void;
   commit: (p: Plan, base?: Plan) => void;
   selection: string[];
   setSelection: (s: string[]) => void;
@@ -136,10 +138,11 @@ export default function Canvas({
     setAnchor(null);
     setMarquee(null);
     setSnapKind("");
-    if (gesture.current) {
-      setPreview(gesture.current.base);
-      gesture.current = null;
-    }
+    if (gesture.current) setPreview(null);
+    gesture.current = null;
+    pointers.current.clear();
+    pinch.current = null;
+    wasPinch.current = false;
   }, [tool, cancelToken]);
   useEffect(() => {
     const el = svgRef.current;
@@ -210,7 +213,7 @@ export default function Canvas({
     pointers.current.set(e.pointerId, s);
     e.currentTarget.setPointerCapture(e.pointerId);
     if (pointers.current.size === 2) {
-      if (gesture.current) setPreview(gesture.current.base);
+      if (gesture.current) setPreview(null);
       gesture.current = null;
       setMarquee(null);
       const [a, b] = [...pointers.current.values()];
@@ -369,7 +372,7 @@ export default function Canvas({
     return g.base;
   }
   function up(e: ReactPointerEvent<SVGSVGElement>) {
-    pointers.current.delete(e.pointerId);
+    if (!pointers.current.delete(e.pointerId)) return;
     if (wasPinch.current) {
       if (!pointers.current.size) {
         wasPinch.current = false;
@@ -602,7 +605,7 @@ export default function Canvas({
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={() => {
-          if (gesture.current) setPreview(gesture.current.base);
+          if (gesture.current) setPreview(null);
           gesture.current = null;
           pointers.current.clear();
           pinch.current = null;
@@ -632,6 +635,18 @@ export default function Canvas({
             fill="url(#grid)"
             pointerEvents="none"
           />
+          {ghost && (
+            <g className="plan-overlay" pointerEvents="none" aria-hidden="true">
+              {ghost.items.map((item) => (
+                <DrawItem
+                  key={item.id}
+                  item={item}
+                  plan={ghost}
+                  interactive={false}
+                />
+              ))}
+            </g>
+          )}
           <g data-drawing="true">
             {plan.items.map((i) => (
               <DrawItem key={i.id} item={i} plan={plan} />
@@ -779,7 +794,7 @@ export default function Canvas({
           </button>
         )}
       </div>
-      {!plan.items.length && tool === "select" && (
+      {!plan.items.length && !ghost?.items.length && tool === "select" && (
         <div className="empty-canvas">
           <span className="empty-symbol">
             ⌜<span>⌟</span>
