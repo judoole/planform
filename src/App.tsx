@@ -133,16 +133,16 @@ function currentShareHash() {
 
 export default function App() {
   const hash = useSyncExternalStore(subscribeToHash, currentShareHash);
-  return hash ? <SharedPlan key={hash} hash={hash} /> : <Editor />;
+  return hash ? <SharedProject key={hash} hash={hash} /> : <Editor />;
 }
 
-function SharedPlan({ hash }: { hash: string }) {
-  const [result, setResult] = useState<Plan | "invalid" | null>(null);
+function SharedProject({ hash }: { hash: string }) {
+  const [result, setResult] = useState<Project | "invalid" | null>(null);
   useEffect(() => {
     let active = true;
     readShareHash(hash).then(
-      (plan) => {
-        if (active) setResult(plan);
+      (project) => {
+        if (active) setResult(project);
       },
       () => {
         if (active) setResult("invalid");
@@ -153,7 +153,7 @@ function SharedPlan({ hash }: { hash: string }) {
     };
   }, [hash]);
 
-  if (result && result !== "invalid") return <Editor sharedPlan={result} />;
+  if (result && result !== "invalid") return <Editor sharedProject={result} />;
   return (
     <main className="modal-backdrop">
       <section className="modal share-load">
@@ -174,9 +174,9 @@ function SharedPlan({ hash }: { hash: string }) {
   );
 }
 
-function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
+function Editor({ sharedProject }: { sharedProject?: Project }) {
   const [project, setProject] = useState<Project>(
-      () => sharedPlan ?? startup(),
+      () => sharedProject ?? startup(),
     ),
     [preview, setPreview] = useState<Plan | null>(null),
     [overlay, setOverlay] = useState(false),
@@ -297,7 +297,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     return "Saved locally";
   }, []);
   useEffect(() => {
-    if (sharedPlan) return;
+    if (sharedProject) return;
     const flush = () => {
       saveRecovery();
     };
@@ -306,9 +306,9 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       window.removeEventListener("pagehide", flush);
       flush();
     };
-  }, [sharedPlan, saveRecovery]);
+  }, [sharedProject, saveRecovery]);
   useEffect(() => {
-    if (sharedPlan) return;
+    if (sharedProject) return;
     if (project === lastSaved.current) {
       setAutosave("Saved locally");
       return;
@@ -316,7 +316,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     setAutosave("Saving…");
     const timer = setTimeout(() => setAutosave(saveRecovery()), 900);
     return () => clearTimeout(timer);
-  }, [project, sharedPlan, saveRecovery]);
+  }, [project, sharedProject, saveRecovery]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 7000);
@@ -646,7 +646,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           />
           <span>
             <span className="save-dot" />
-            {sharedPlan ? "Shared copy" : autosave}
+            {sharedProject ? "Shared copy" : autosave}
           </span>
         </div>
         <div className="header-actions">
@@ -704,7 +704,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           </button>
         </div>
       </header>
-      {sharedPlan && (
+      {sharedProject && (
         <div className="share-banner">
           <span>
             Editing a shared copy. Download the project to keep your changes.
@@ -896,7 +896,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
               </b>
             </span>
             <span className="private-badge">
-              {sharedPlan ? "SHARED COPY" : "LOCAL & PRIVATE"}
+              {sharedProject ? "SHARED COPY" : "LOCAL & PRIVATE"}
             </span>
           </div>
           {!plan.calibration.calibrated && (
@@ -1185,10 +1185,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       )}
       {shareOpen && (
         <ShareDialog
-          plan={drawing}
-          versionName={
-            project.version === 3 ? versionNames[version] : undefined
-          }
+          project={project}
           onClose={() => setShareOpen(false)}
           onDownload={downloadProject}
         />
