@@ -1,6 +1,8 @@
+import { readProject } from "./validation";
 export type Point = { x: number; y: number };
 export type Box = Point & { w: number; h: number };
-type Base = { id: string; name: string; locked?: boolean };
+export type Evidence = { basis: "measured" | "estimated"; note: string };
+type Base = { id: string; name: string; locked?: boolean; evidence?: Evidence };
 export type Wall = Base & {
   type: "wall";
   a: Point;
@@ -26,17 +28,13 @@ export type FurnitureKind =
   | "shower";
 export type RectItem = Base &
   Box & {
-    type: "furniture" | "stairs" | "text" | "vector" | "group";
+    type: "furniture" | "stairs" | "text" | "group";
     rotation: number;
     kind?: FurnitureKind;
     steps?: number;
     text?: string;
     fontSize?: number;
-    svg?: string;
     sourceBox?: Box;
-    nodes?: Point[];
-    closed?: boolean;
-    nodeMatrix?: number[];
     children?: Item[];
   };
 export type Dimension = Base & {
@@ -48,29 +46,26 @@ export type Dimension = Base & {
 export type Item = Wall | Opening | RectItem | Dimension;
 export type Plan = {
   format: "planform";
-  version: 1;
+  version: 2;
   name: string;
   units: "cm";
   items: Item[];
-  defs: string;
-  papers?: Box[];
   calibration: {
     calibrated: boolean;
     imported: boolean;
     factor: number;
     source?: string;
   };
+  source?: { file: string; page?: number; notes: string[] };
   grid: number;
 };
 export const uid = () => crypto.randomUUID();
 export const emptyPlan = (): Plan => ({
   format: "planform",
-  version: 1,
+  version: 2,
   name: "Untitled plan",
   units: "cm",
   items: [],
-  defs: "",
-  papers: [],
   calibration: { calibrated: true, imported: false, factor: 1 },
   grid: 10,
 });
@@ -232,16 +227,17 @@ export function unionBoxes(boxes: Box[]): Box {
   );
 }
 export const planBounds = (p: Plan) =>
-  unionBoxes([...p.items.map((i) => bounds(i, p.items)), ...(p.papers || [])]);
+  unionBoxes(p.items.map((i) => bounds(i, p.items)));
 export function setCorner(
   plan: Plan,
   wallId: string,
   which: "a" | "b",
   p: Point,
+  normalize = true,
 ): Plan {
   const wall = plan.items.find((i) => i.id === wallId) as Wall;
   const old = wall[which];
-  return normalizeOpenings({
+  const next = {
     ...plan,
     items: plan.items.map((i) => {
       if (i.type !== "wall" || (!same(i.a, old) && !same(i.b, old))) return i;
@@ -251,7 +247,8 @@ export function setCorner(
         b: same(i.b, old) ? { ...p } : i.b,
       };
     }),
-  });
+  };
+  return normalize ? normalizeOpenings(next) : next;
 }
 export function translate(plan: Plan, ids: string[], delta: Point): Plan {
   const corners: Point[] = [];
@@ -351,12 +348,6 @@ export function calibrate(plan: Plan, measured: number, real: number): Plan {
       else i.offset *= s;
     } else i.width *= s;
   }
-  p.papers = p.papers?.map((b) => ({
-    x: b.x * s,
-    y: b.y * s,
-    w: b.w * s,
-    h: b.h * s,
-  }));
   p.calibration.calibrated = true;
   p.calibration.factor *= s;
   return normalizeOpenings(p);
@@ -403,7 +394,7 @@ export function groupItems(plan: Plan, ids: string[]): Plan {
     children = p.items.filter((i) => ids.includes(i.id));
   if (children.length < 2 || children.some((i) => !isRect(i)))
     throw Error(
-      "Group two or more vectors, symbols, labels or groups. Walls retain shared corners and host relationships.",
+      "Group two or more symbols, labels or groups. Walls retain shared corners and host relationships.",
     );
   const box = unionBoxes(children.map((i) => bounds(i, p.items)));
   const group: RectItem = {
@@ -454,133 +445,7 @@ export function serialize(plan: Plan) {
   return JSON.stringify(plan, null, 2);
 }
 export function parseProject(text: string): Plan {
-  const p = JSON.parse(text);
-  if (
-    p?.format !== "planform" ||
-    p.version !== 1 ||
-    p.units !== "cm" ||
-    !Array.isArray(p.items) ||
-    p.items.length > 50000
-  )
-    throw Error("This is not a supported Planform v1 project.");
-  if (
-    typeof p.name !== "string" ||
-    typeof p.defs !== "string" ||
-    !p.calibration ||
-    typeof p.calibration.calibrated !== "boolean" ||
-    typeof p.calibration.imported !== "boolean" ||
-    typeof p.grid !== "number" ||
-    !(p.grid >= 1 && p.grid <= 1000) ||
-    typeof p.calibration.factor !== "number" ||
-    !Number.isFinite(p.calibration.factor) ||
-    !(p.calibration.factor > 0)
-  )
-    throw Error("Invalid project metadata.");
-  if (
-    p.papers !== undefined &&
-    (!Array.isArray(p.papers) ||
-      p.papers.length > 100 ||
-      p.papers.some(
-        (b: Box) =>
-          !b ||
-          ![b.x, b.y, b.w, b.h].every(
-            (n) =>
-              typeof n === "number" && Number.isFinite(n) && Math.abs(n) < 1e9,
-          ) ||
-          b.w <= 0 ||
-          b.h <= 0,
-      ))
-  )
-    throw Error("Invalid paper bounds.");
-  const ids = new Set<string>();
-  let count = 0;
-  function check(items: Item[], depth = 0) {
-    if (depth > 15) throw Error("Groups are nested too deeply.");
-    for (const i of items) {
-      if (
-        ++count > 50000 ||
-        !i ||
-        typeof i.id !== "string" ||
-        ids.has(i.id) ||
-        typeof i.name !== "string"
-      )
-        throw Error("Invalid or duplicate object ID.");
-      if (i.locked !== undefined && typeof i.locked !== "boolean")
-        throw Error("Invalid reference lock.");
-      ids.add(i.id);
-      const nums = (...n: unknown[]) =>
-        n.every(
-          (x) =>
-            typeof x === "number" && Number.isFinite(x) && Math.abs(x) < 1e9,
-        );
-      if (i.type === "wall" || i.type === "dimension") {
-        if (
-          !i.a ||
-          !i.b ||
-          !nums(i.a.x, i.a.y, i.b.x, i.b.y) ||
-          (i.type === "wall"
-            ? !(i.thickness > 0 && nums(i.thickness))
-            : !nums(i.offset))
-        )
-          throw Error("Invalid line geometry.");
-      } else if (i.type === "door" || i.type === "window") {
-        if (
-          typeof i.hostId !== "string" ||
-          !nums(i.t, i.width, i.hinge, i.swing) ||
-          i.width <= 0
-        )
-          throw Error("Invalid opening.");
-      } else if (
-        ["vector", "furniture", "stairs", "text", "group"].includes(i.type) &&
-        isRect(i)
-      ) {
-        if (!nums(i.x, i.y, i.w, i.h, i.rotation) || i.w < 0 || i.h < 0)
-          throw Error("Invalid object dimensions.");
-        if (
-          i.type === "vector" &&
-          (typeof i.svg !== "string" ||
-            !i.sourceBox ||
-            !nums(i.sourceBox.x, i.sourceBox.y, i.sourceBox.w, i.sourceBox.h))
-        )
-          throw Error("Invalid vector.");
-        if (
-          i.nodes !== undefined &&
-          (!Array.isArray(i.nodes) ||
-            i.nodes.length > 100000 ||
-            i.nodes.some((p) => !p || !nums(p.x, p.y)))
-        )
-          throw Error("Invalid vector nodes.");
-        if (
-          i.nodeMatrix !== undefined &&
-          (!Array.isArray(i.nodeMatrix) ||
-            i.nodeMatrix.length !== 6 ||
-            !nums(...i.nodeMatrix))
-        )
-          throw Error("Invalid node transform.");
-        if (
-          i.type === "text" &&
-          (typeof i.text !== "string" || !nums(i.fontSize || 18))
-        )
-          throw Error("Invalid label.");
-        if (
-          i.type === "stairs" &&
-          (!nums(i.steps) || i.steps! < 2 || i.steps! > 100)
-        )
-          throw Error("Invalid step count.");
-        if (i.type === "group") {
-          if (
-            !Array.isArray(i.children) ||
-            !i.sourceBox ||
-            !nums(i.sourceBox.x, i.sourceBox.y, i.sourceBox.w, i.sourceBox.h)
-          )
-            throw Error("Invalid group.");
-          check(i.children, depth + 1);
-        }
-      } else throw Error("Unknown object type.");
-    }
-  }
-  check(p.items);
-  return normalizeOpenings(p);
+  return readProject(text);
 }
 export class History {
   past: Plan[] = [];

@@ -9,7 +9,6 @@ import {
   Layers,
   Ungroup,
   Group,
-  Spline,
 } from "lucide-react";
 import {
   type Plan,
@@ -98,7 +97,6 @@ export default function Properties({
   selection,
   commit,
   setSelection,
-  tool,
   setTool,
   onDuplicate,
   onDelete,
@@ -108,7 +106,6 @@ export default function Properties({
   selection: string[];
   commit: (p: Plan) => void;
   setSelection: (s: string[]) => void;
-  tool: Tool;
   setTool: (t: Tool) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -254,6 +251,16 @@ export default function Properties({
           </>
         )}
       </div>
+      {item?.evidence && (
+        <div className="panel-section">
+          <h3>
+            {item.evidence.basis === "estimated"
+              ? "Estimated geometry"
+              : "Measured geometry"}
+          </h3>
+          <p className="notice">{item.evidence.note}</p>
+        </div>
+      )}
       {item && !item.locked && (
         <>
           {item.type === "wall" && (
@@ -453,32 +460,6 @@ export default function Properties({
                   />
                 </div>
               )}
-              {item.type === "vector" && (
-                <div className="panel-section">
-                  <h3>Imported vector</h3>
-                  <p className="muted">
-                    Original fills, strokes and curves are retained.
-                  </p>
-                  {item.nodes ? (
-                    <button
-                      className={tool === "node" ? "active" : ""}
-                      onClick={() =>
-                        setTool(tool === "node" ? "select" : "node")
-                      }
-                    >
-                      <Spline size={16} />
-                      {tool === "node"
-                        ? "Finish node editing"
-                        : "Edit straight nodes"}
-                    </button>
-                  ) : (
-                    <p className="notice">
-                      This element has curved or compound geometry. Move, rotate
-                      or resize it as a vector.
-                    </p>
-                  )}
-                </div>
-              )}
             </>
           )}
           {item.type === "dimension" && (
@@ -517,6 +498,19 @@ export default function Properties({
         <>
           <div className="panel-section">
             <h3>Drawing settings</h3>
+            {plan.source && (
+              <>
+                <p className="muted">
+                  Source: {plan.source.file}
+                  {plan.source.page ? ` · page ${plan.source.page}` : ""}
+                </p>
+                {plan.source.notes.map((note, n) => (
+                  <p className="notice" key={n}>
+                    {note}
+                  </p>
+                ))}
+              </>
+            )}
             <NumberField
               label="Grid spacing"
               value={plan.grid}

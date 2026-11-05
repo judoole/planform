@@ -22,7 +22,6 @@ import {
   type Opening,
   type RectItem,
 } from "../src/model";
-import { sanitizeSvg, straightNodes, safeOpenProject } from "../src/svg";
 const wall: Wall = {
   id: "wall",
   name: "Wall",
@@ -130,20 +129,18 @@ describe("calibration, persistence and history", () => {
       calibrated: false,
       imported: true,
       factor: 1,
-      source: "sample.svg",
+      source: "sample.pdf",
     };
-    p.defs = '<clipPath id="safe"><rect width="20" height="20"/></clipPath>';
     p.items.push({
-      id: "vector",
-      name: "Curve",
-      type: "vector",
+      id: "sofa",
+      name: "Sofa",
+      type: "furniture",
+      kind: "sofa",
       x: 20,
       y: 30,
-      w: 10,
-      h: 10,
+      w: 200,
+      h: 90,
       rotation: 45,
-      sourceBox: { x: 0, y: 0, w: 10, h: 10 },
-      svg: '<path d="M0 0 C0 5 5 10 10 10"/>',
     });
     const c = calibrate(p, 100, 333.3333333333);
     expect(dist((c.items[0] as Wall).a, (c.items[0] as Wall).b)).toBeCloseTo(
@@ -152,14 +149,14 @@ describe("calibration, persistence and history", () => {
     expect((c.items[1] as Opening).width).toBeCloseTo(300);
     expect(c.calibration.calibrated).toBe(true);
     expect(parseProject(serialize(c))).toEqual(c);
-    expect(safeOpenProject(serialize(c)).plan.items).toHaveLength(4);
+    expect(parseProject(serialize(c)).items).toHaveLength(4);
   });
   it("rejects invalid calibration, corrupt files, versions and duplicate IDs", () => {
     expect(() => calibrate(plan(), 0, 500)).toThrow();
     expect(() => calibrate(plan(), 100, -2)).toThrow();
     expect(() => parseProject("{}")).toThrow();
     expect(() =>
-      parseProject(JSON.stringify({ ...plan(), version: 2 })),
+      parseProject(JSON.stringify({ ...plan(), version: 99 })),
     ).toThrow();
     const p = plan();
     p.items.push(wall);
@@ -181,64 +178,23 @@ describe("calibration, persistence and history", () => {
     h.push(p);
     expect(h.future).toHaveLength(0);
   });
-  it("groups and ungroups transformed vectors without losing their curves", () => {
+  it("groups and ungroups furniture without losing geometry", () => {
     const v: RectItem = {
       id: "v",
-      name: "v",
-      type: "vector",
+      name: "Sofa",
+      type: "furniture",
+      kind: "sofa",
       x: 10,
       y: 20,
       w: 100,
       h: 80,
       rotation: 0,
-      sourceBox: { x: 0, y: 0, w: 100, h: 80 },
-      svg: '<path d="M0 0 C10 10 80 50 100 80"/>',
     };
     const p = { ...emptyPlan(), items: [v, { ...v, id: "v2", x: 200 }] };
     const g = groupItems(p, ["v", "v2"]);
     expect(g.items).toHaveLength(1);
-    const reopened = safeOpenProject(serialize(g)).plan;
+    const reopened = parseProject(serialize(g));
     const u = ungroupItems(reopened, g.items[0].id);
-    expect({ ...u.items[0], svg: v.svg }).toEqual(v);
-    expect((u.items[0] as RectItem).svg).toContain("M0 0 C10 10 80 50 100 80");
-  });
-});
-describe("untrusted SVG", () => {
-  it("blocks scripts, event handlers, foreign objects and external resources", () => {
-    const r = sanitizeSvg(
-      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><foreignObject/><image href="https://evil/x"/><path onload="alert(1)" d="M0 0 L1 1" style="fill:url(https://evil);stroke:red"/><use href="https://evil/x"/></svg>',
-    );
-    expect(r.root.querySelector("script,foreignObject,image")).toBeNull();
-    expect(r.root.querySelector("[onload]")).toBeNull();
-    expect(r.root.innerHTML).not.toContain("https://");
-    expect(r.warnings.length).toBeGreaterThan(0);
-  });
-  it("retains white cover geometry, curves, clipping and order", () => {
-    const r = sanitizeSvg(
-      '<svg xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="c"><rect width="10" height="10"/></clipPath></defs><g transform="translate(10 20)" clip-path="url(#c)"><path d="M0 0 C1 2 3 4 5 6" fill="black"/><path d="M0 0 L1 1" fill="white"/></g></svg>',
-      "prefix_",
-    );
-    expect(r.warnings).toEqual([]);
-    expect(r.root.querySelector("g")?.getAttribute("clip-path")).toBe(
-      "url(#prefix_c)",
-    );
-    expect(r.root.querySelectorAll("path")[1].getAttribute("fill")).toBe(
-      "white",
-    );
-  });
-  it("parses relative straight nodes and leaves curves untouched", () => {
-    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    p.setAttribute("d", "M10 20 h30 v40 l-30 0 z");
-    expect(straightNodes(p)).toEqual({
-      nodes: [
-        { x: 10, y: 20 },
-        { x: 40, y: 20 },
-        { x: 40, y: 60 },
-        { x: 10, y: 60 },
-      ],
-      closed: true,
-    });
-    p.setAttribute("d", "M0 0 C1 2 3 4 5 6");
-    expect(straightNodes(p)).toBeNull();
+    expect(u.items).toEqual(p.items);
   });
 });
