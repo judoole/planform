@@ -36,6 +36,12 @@ Tested in Chrome against the local Vite development build using actual controls.
 
 Earlier browser verification in repository history covered manual drawing, numeric editing, export, responsive layouts and touch emulation. Those observations are historical; they are not claimed as new full regression passes. Physical touch devices and every responsive breakpoint were not re-tested for this change.
 
+## Share link verification
+
+- All 52 tests pass, including snapshot round trips with source notes and Unicode, relationship validation, truncated and unsupported links, and size limits. The production build and formatting checks pass.
+- In the in-app browser, shared the bundled 29-object example, copied the URL and pasted it back to confirm it matched. The URL opened the full example and its source notes in another tab. Edited the shared copy, then returned to the local editor and confirmed its separate draft was intact.
+- Navigated to a truncated link in the same tab. Planform showed an error and offered to return to the local editor, which still had its draft.
+
 ## Local PDF reconstruction trial
 
 Used the original local reference PDF from `~/Desktop/Plantegning-venstre/`. Rendered its single page using Poppler and inspected it alongside extracted text. The private source PDF and derived house layout are not included in the public example or shipped production assets.

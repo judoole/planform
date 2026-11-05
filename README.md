@@ -16,6 +16,13 @@ npm run preview
 
 Open the printed localhost URL, normally `http://127.0.0.1:5173`. A local server is required; opening `index.html` directly is not supported. Serve `dist/` on any ordinary static host. There are no server-side routes or secrets.
 
+## Save and share a plan
+
+- Planform automatically keeps the current local draft in this browser. Use **Save project** to download an editable `.planform.json` backup, and **Open** to continue from a saved file.
+- Use **Share → Copy link** to send a snapshot. Anyone with the link can open and edit their own copy. Later changes require a new link. Opening a shared copy leaves the recipient’s local draft intact; they can download their copy to keep changes.
+- The link contains the compressed project, including source notes, after `#`. Planform does not upload it to a server. Share it only with people you want to see the drawing. The address before `#` must point to Planform on a host recipients can access; a localhost link only works locally.
+- Links support up to 8,000 URL characters and 64 KiB of uncompressed project data. Use the editable project file for larger drawings.
+
 ## Create a drawing with an agent
 
 1. Open **AI drawings** (on narrow screens, use the project menu).
