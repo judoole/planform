@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   MousePointer2,
   SquareDashedMousePointer,
@@ -60,6 +60,7 @@ import AgentPanel from "./AgentPanel";
 import { parseProject } from "./model";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { NumberField } from "./Properties";
+import { findRooms } from "./rooms";
 const RECOVERY = "planform-recovery-v2";
 const palette: {
   tool: Tool;
@@ -130,6 +131,19 @@ export default function App() {
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
   planRef.current = plan;
+  const { rooms, roomError } = useMemo(() => {
+    try {
+      return { rooms: findRooms(plan.items), roomError: undefined };
+    } catch {
+      // Automatic analysis must not prevent editing or reopening a document
+      // when polygon clipping cannot resolve unusual wall geometry.
+      return {
+        rooms: [],
+        roomError:
+          "Room areas could not be calculated. Check overlapping or very small walls.",
+      };
+    }
+  }, [plan.items]);
   const showNotice = useCallback((s: string) => {
     setNotice(s);
   }, []);
@@ -678,6 +692,7 @@ export default function App() {
           )}
           <Canvas
             plan={plan}
+            rooms={rooms}
             setPreview={setPlan}
             commit={commit}
             selection={selection}
@@ -785,6 +800,8 @@ export default function App() {
           {tab === "properties" ? (
             <Properties
               plan={plan}
+              rooms={rooms}
+              roomError={roomError}
               selection={selection}
               commit={commit}
               setSelection={setSelection}

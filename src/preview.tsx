@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { DrawItem } from "./Drawing";
+import { DrawItem, RoomLabels } from "./Drawing";
+import { findRooms } from "./rooms";
 import { planBounds, type Plan } from "./model";
 import { validateProject } from "./validation";
 
@@ -27,6 +28,10 @@ export function renderPlanSvg(input: Plan): string {
       {plan.items.map((item) => (
         <DrawItem key={item.id} item={item} plan={plan} interactive={false} />
       ))}
+      <RoomLabels
+        rooms={findRooms(plan.items)}
+        calibrated={plan.calibration.calibrated}
+      />
     </svg>,
   );
 }

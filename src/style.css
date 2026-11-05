@@ -665,6 +665,17 @@ button svg {
   font-weight: 500;
   color: #66785b;
 }
+.room-areas .stat-row {
+  gap: 12px;
+}
+.room-areas strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.room-area-total {
+  border-top: 1px solid #e8ece3;
+  padding-top: 14px;
+}
 .tip-card {
   margin: 22px 18px;
   border: 1px solid #e0e7d5;

@@ -25,6 +25,7 @@ import {
   ungroupItems,
 } from "./model";
 import type { Tool } from "./Canvas";
+import { type Room, formatRoomArea } from "./rooms";
 export function NumberField({
   label,
   value,
@@ -94,6 +95,8 @@ export function NumberField({
 }
 export default function Properties({
   plan,
+  rooms,
+  roomError,
   selection,
   commit,
   setSelection,
@@ -103,6 +106,8 @@ export default function Properties({
   onError,
 }: {
   plan: Plan;
+  rooms: Room[];
+  roomError?: string;
   selection: string[];
   commit: (p: Plan) => void;
   setSelection: (s: string[]) => void;
@@ -261,6 +266,42 @@ export default function Properties({
           <p className="notice">{item.evidence.note}</p>
         </div>
       )}
+      <section className="panel-section room-areas" aria-label="Room areas">
+        <h3>Room areas</h3>
+        {roomError ? (
+          <p className="notice">{roomError}</p>
+        ) : !rooms.length ? (
+          <p className="muted">
+            Close a space with walls to calculate its area automatically.
+          </p>
+        ) : !plan.calibration.calibrated ? (
+          <p className="notice">
+            {rooms.length} enclosed {rooms.length === 1 ? "room" : "rooms"}.
+            Calibrate scale to display areas in m².
+          </p>
+        ) : (
+          <>
+            {rooms.map((room, n) => (
+              <div className="stat-row" key={n}>
+                <span>Room {n + 1}</span>
+                <strong>{formatRoomArea(room.areaCm2)}</strong>
+              </div>
+            ))}
+            <div className="stat-row room-area-total">
+              <span>Total room area</span>
+              <strong>
+                {formatRoomArea(
+                  rooms.reduce((sum, room) => sum + room.areaCm2, 0),
+                )}
+              </strong>
+            </div>
+            <p className="muted">
+              Inside wall faces, excluding wall thickness. Updates as walls
+              change.
+            </p>
+          </>
+        )}
+      </section>
       {item && !item.locked && (
         <>
           {item.type === "wall" && (

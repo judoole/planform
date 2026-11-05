@@ -1,4 +1,5 @@
 import { Fragment, memo } from "react";
+import { type Room, formatRoomArea } from "./rooms";
 import {
   type Item,
   type Plan,
@@ -11,6 +12,52 @@ import {
 } from "./model";
 const ink = "#34443f",
   light = "#e5ebe5";
+
+export function RoomLabels({
+  rooms,
+  calibrated,
+}: {
+  rooms: Room[];
+  calibrated: boolean;
+}) {
+  return (
+    <g
+      data-room-labels="true"
+      pointerEvents="none"
+      fontFamily="Arial, sans-serif"
+    >
+      {rooms.map((room, n) => {
+        const name = `Room ${n + 1}`;
+        const area = calibrated ? formatRoomArea(room.areaCm2) : "Set scale";
+        const size = Math.min(18, room.clearance / 3);
+        return (
+          <g
+            key={n}
+            transform={`translate(${room.label.x} ${room.label.y})`}
+            aria-label={`${name}: ${area}`}
+          >
+            <title>{`${name}: ${area}`}</title>
+            <text
+              textAnchor="middle"
+              fill="#52685d"
+              stroke="white"
+              strokeWidth={size / 4}
+              strokeLinejoin="round"
+              paintOrder="stroke"
+            >
+              <tspan x={0} y={-size * 0.35} fontSize={size * 0.72}>
+                {name}
+              </tspan>
+              <tspan x={0} y={size * 0.85} fontSize={size} fontWeight={600}>
+                {area}
+              </tspan>
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 const rect = (
   x: number,
   y: number,
