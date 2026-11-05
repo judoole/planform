@@ -1,4 +1,11 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import {
   MousePointer2,
   SquareDashedMousePointer,
@@ -36,6 +43,7 @@ import {
   HelpCircle,
   Search,
   PanelRightClose,
+  Link2,
 } from "lucide-react";
 import {
   type Plan,
@@ -57,6 +65,8 @@ import {
 } from "./model";
 import { download, exportSvg, exportPng } from "./exports";
 import AgentPanel from "./AgentPanel";
+import ShareDialog from "./ShareDialog";
+import { isShareHash, readShareHash } from "./share";
 import { parseProject } from "./model";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { NumberField } from "./Properties";
@@ -95,8 +105,65 @@ function startup() {
   } catch {}
   return emptyPlan();
 }
+function localAddress() {
+  const url = new URL(window.location.href);
+  url.hash = "";
+  return url.href;
+}
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+function currentShareHash() {
+  const { hash } = window.location;
+  return isShareHash(hash) ? hash : null;
+}
+
 export default function App() {
-  const [plan, setPlan] = useState<Plan>(startup),
+  const hash = useSyncExternalStore(subscribeToHash, currentShareHash);
+  return hash ? <SharedPlan key={hash} hash={hash} /> : <Editor />;
+}
+
+function SharedPlan({ hash }: { hash: string }) {
+  const [result, setResult] = useState<Plan | "invalid" | null>(null);
+  useEffect(() => {
+    let active = true;
+    readShareHash(hash).then(
+      (plan) => {
+        if (active) setResult(plan);
+      },
+      () => {
+        if (active) setResult("invalid");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [hash]);
+
+  if (result && result !== "invalid") return <Editor sharedPlan={result} />;
+  return (
+    <main className="modal-backdrop">
+      <section className="modal share-load">
+        {result === "invalid" ? (
+          <>
+            <h2>Couldn’t open this share link</h2>
+            <p role="alert">
+              Check that you have the full link, or ask the sender for the
+              project file.
+            </p>
+            <a href={localAddress()}>Open local editor</a>
+          </>
+        ) : (
+          <p role="status">Opening shared plan…</p>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
+  const [plan, setPlan] = useState<Plan>(() => sharedPlan ?? startup()),
     [selection, setSelection] = useState<string[]>([]),
     [tool, setTool] = useState<Tool>("select"),
     [snap, setSnap] = useState(true),
@@ -113,6 +180,7 @@ export default function App() {
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
     [agentOpen, setAgentOpen] = useState(false),
+    [shareOpen, setShareOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [autosave, setAutosave] = useState("Saved locally"),
     [coords, setCoords] = useState("0.0, 0.0"),
@@ -128,6 +196,7 @@ export default function App() {
     fileRef = useRef<HTMLInputElement>(null),
     history = useRef(new History()),
     planRef = useRef(plan),
+    lastSaved = useRef(plan),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
   planRef.current = plan;
@@ -179,18 +248,39 @@ export default function App() {
   useEffect(() => {
     if (planRef.current.items.length) fit();
   }, []);
-  useEffect(() => {
-    setAutosave("Saving…");
-    const timer = setTimeout(() => {
+  const saveRecovery = useCallback(() => {
+    const current = planRef.current;
+    if (lastSaved.current !== current) {
       try {
-        localStorage.setItem(RECOVERY, serialize(plan));
-        setAutosave("Saved locally");
+        localStorage.setItem(RECOVERY, serialize(current));
+        lastSaved.current = current;
       } catch {
-        setAutosave("Recovery unavailable · download to save");
+        return "Recovery unavailable · download to save";
       }
-    }, 900);
+    }
+    return "Saved locally";
+  }, []);
+  useEffect(() => {
+    if (sharedPlan) return;
+    const flush = () => {
+      saveRecovery();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [sharedPlan, saveRecovery]);
+  useEffect(() => {
+    if (sharedPlan) return;
+    if (plan === lastSaved.current) {
+      setAutosave("Saved locally");
+      return;
+    }
+    setAutosave("Saving…");
+    const timer = setTimeout(() => setAutosave(saveRecovery()), 900);
     return () => clearTimeout(timer);
-  }, [plan]);
+  }, [plan, sharedPlan, saveRecovery]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 7000);
@@ -265,11 +355,14 @@ export default function App() {
     commit({ ...plan, items: [...plan.items, ...newItems] });
     setSelection(r.ids);
   }
-  function save() {
+  function downloadProject() {
     download(
       new Blob([serialize(plan)], { type: "application/json" }),
       `${plan.name || "Untitled"}.planform.json`,
     );
+  }
+  function save() {
+    downloadProject();
     showNotice(
       "Project downloaded. Open the JSON file to continue editing later.",
     );
@@ -316,6 +409,7 @@ export default function App() {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
+      if (shareOpen) return;
       const el = e.target as HTMLElement;
       if (el.closest('input,textarea,select,[contenteditable="true"]')) return;
       const mod = e.metaKey || e.ctrlKey,
@@ -431,7 +525,7 @@ export default function App() {
           />
           <span>
             <span className="save-dot" />
-            {autosave}
+            {sharedPlan ? "Shared copy" : autosave}
           </span>
         </div>
         <div className="header-actions">
@@ -466,6 +560,14 @@ export default function App() {
             <Download size={16} />
             <span>Save project</span>
           </button>
+          <button
+            aria-label="Share plan"
+            title="Share plan"
+            onClick={() => setShareOpen(true)}
+          >
+            <Link2 size={16} />
+            <span>Share</span>
+          </button>
           <div className="dropdown-anchor">
             <button
               className="primary"
@@ -489,6 +591,14 @@ export default function App() {
           </button>
         </div>
       </header>
+      {sharedPlan && (
+        <div className="share-banner">
+          <span>
+            Editing a shared copy. Download the project to keep your changes.
+          </span>
+          <a href={localAddress()}>Open local editor</a>
+        </div>
+      )}
       {menu && (
         <div className="mobile-project-menu">
           <button
@@ -630,7 +740,9 @@ export default function App() {
               <span className="tiny-square" /> FLOOR PLAN{" "}
               <span className="muted">/</span> <b>DESIGN MODE</b>
             </span>
-            <span className="private-badge">LOCAL & PRIVATE</span>
+            <span className="private-badge">
+              {sharedPlan ? "SHARED COPY" : "LOCAL & PRIVATE"}
+            </span>
           </div>
           {!plan.calibration.calibrated && (
             <div className="calibration-banner">
@@ -913,6 +1025,13 @@ export default function App() {
             openPlan(next);
             setAgentOpen(false);
           }}
+        />
+      )}
+      {shareOpen && (
+        <ShareDialog
+          plan={plan}
+          onClose={() => setShareOpen(false)}
+          onDownload={downloadProject}
         />
       )}
       {measure && (

@@ -1515,3 +1515,32 @@ button svg {
   background: white;
   color: #34443f;
 }
+
+.share-dialog {
+  position: fixed;
+  width: min(490px, calc(100% - 32px));
+  color: inherit;
+}
+.share-dialog::backdrop {
+  background: #1e342c60;
+  backdrop-filter: blur(5px);
+}
+.share-dialog .share-error {
+  color: #8b3e2d;
+  overflow-wrap: anywhere;
+}
+.share-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 8px 16px;
+  background: #eaf1df;
+  border-bottom: 1px solid #dbe3d0;
+  font-size: 12px;
+}
+.share-banner a,
+.share-load a {
+  color: #1c5e49;
+}
