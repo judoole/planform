@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Planform comparison project v3",
+  "description": "Two editable architectural drawings of the same floor, each in Planform v2 format.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "name", "active", "plans"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "planform" },
+    "version": { "const": 3 },
+    "name": { "type": "string", "maxLength": 200 },
+    "active": { "enum": ["existing", "proposed"] },
+    "plans": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existing", "proposed"],
+      "properties": {
+        "existing": { "$ref": "planform.schema.json" },
+        "proposed": { "$ref": "planform.schema.json" }
+      }
+    }
+  }
+}

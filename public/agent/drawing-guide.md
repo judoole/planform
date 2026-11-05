@@ -65,4 +65,6 @@ Batches are atomic, apply in order, and validate the final result. Invalid openi
 
 Run: `npm run plan -- apply drawing.planform.json edits.json --out revised.planform.json`. Then render and inspect the revised drawing. In the browser, use **AI drawings → Edits to the current drawing → Validate & preview → Apply edits**. A complete drawing can be pasted or opened as a downloaded project. Each accepted import/batch is one undoable edit.
 
+A two-version comparison project uses `comparison.schema.json` to wrap the Existing and Proposed v2 drawings and record which one is active. Use the main **Open** button for the complete comparison file. The CLI validates both drawings, renders the saved active drawing and applies command batches to it while preserving the other version. In the browser, select the version you want to edit before opening **AI drawings**.
+
 This is a file/command workflow. Live MCP control and automatic PDF conversion inside Planform are not included.

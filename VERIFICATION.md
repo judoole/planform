@@ -4,6 +4,14 @@
 
 Planform now uses architectural project schema v2. SVG import, raw SVG content, reference pages and vector-node editing are removed. SVG is retained for internal rendering and export. Agent interaction is through files and atomic command batches; no live MCP endpoint or in-app model is included.
 
+## Plan comparison
+
+- Chrome verified duplicating the example as Proposed, moving a wall, switching without changing pan or zoom, canceling a drag by switching, and undoing and redoing the move in Proposed alone. Overlay geometry was visible and could not be selected.
+- The browser applied an AI command only to Proposed. The downloaded project and browser recovery restored both drawings and the active version. SVG and PNG exports contained the active drawing, and the share link decoded to its editable snapshot. Existing v2 recovery data remained intact.
+- Toolbar controls fit at viewport widths from 320 to 1320 px. The version buttons also worked with keyboard activation at 320 px.
+- Chrome opened two separate files as Existing and Proposed, preserved the camera when loading Proposed, and verified that replacing Proposed is undoable. A two-plan project selected as Proposed was rejected without changing either drawing.
+- The test suite covers v1 and v2 compatibility, repeated IDs across versions, separate geometry, validation of inactive openings, and active version targeting in the CLI. The bundled example also passed CLI validation, PNG rendering, command application and reopening.
+
 ## Automatic room areas update
 
 - `npm test`: **48 tests passed** in five files, including 17 room geometry/presentation tests. New coverage includes inner wall faces, varying thickness, open/degenerate walls, shared and crossing dividers, disconnected rooms, triangles, concave rooms, nested enclosures and wall islands, duplicate/overlapping walls, arbitrary rotations/translations, calibration, history, reopening, uncalibrated display and export labels.

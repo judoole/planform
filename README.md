@@ -20,8 +20,16 @@ Open the printed localhost URL, normally `http://127.0.0.1:5173`. A local server
 
 - Planform automatically keeps the current local draft in this browser. Use **Save project** to download an editable `.planform.json` backup, and **Open** to continue from a saved file.
 - Use **Share → Copy link** to send a snapshot. Anyone with the link can open and edit their own copy. Later changes require a new link. Opening a shared copy leaves the recipient’s local draft intact; they can download their copy to keep changes.
-- The link contains the compressed project, including source notes, after `#`. Planform does not upload it to a server. Share it only with people you want to see the drawing. The address before `#` must point to Planform on a host recipients can access; a localhost link only works locally.
+- The link contains the compressed drawing, including source notes, after `#`. Planform does not upload it to a server. Share it only with people you want to see the drawing. The address before `#` must point to Planform on a host recipients can access; a localhost link only works locally.
 - Links support up to 8,000 URL characters and 64 KiB of uncompressed project data. Use the editable project file for larger drawings.
+
+## Compare two versions of a floor plan
+
+Open your first file as **Existing**, then use **Load as proposed** to choose a second single-plan file. You can also use **Duplicate as proposed** to start from a copy of Existing. Use **Replace proposed** to load a different file later. Both versions are editable when active, and each has its own undo and redo history.
+
+Switch between versions in the toolbar to compare from the same pan and zoom. Turn on **Overlay** to trace the inactive drawing in blue behind the active one. For separately drawn files, use the same scale and coordinate origin for the overlay to line up.
+
+**Save project** and browser recovery retain both versions and the active version. Open that file with **Open**. Share links, SVG and PNG exports show the active drawing. To share both versions, send the project file.
 
 ## Create a drawing with an agent
 
@@ -58,7 +66,7 @@ Command batches use [public/agent/commands.schema.json](public/agent/commands.sc
 | `update`  | Change object properties while preserving ID, type, endpoints and group structure   |
 | `delete`  | Remove named objects; require explicit cascading to remove a wall's hosted openings |
 
-Batches apply in order and validate the final result atomically. They respect locks and never silently shrink, reposition or discard openings. A failed batch leaves the input unchanged and produces no output project. Successful batches report changed and deleted IDs. Use **AI drawings → Edits to the current drawing** to preview and apply the same batches in the browser as one history entry.
+Batches apply in order and validate the final result atomically. They respect locks and never silently shrink, reposition or discard openings. A failed batch leaves the input unchanged and produces no output project. Successful batches report changed and deleted IDs. Use **AI drawings → Edits to the current drawing** to preview and apply the same batches in the browser as one history entry. For a comparison project, the CLI validates both versions, renders the saved active version and applies batches to it while keeping both drawings in the output file. The browser applies batches to the selected version.
 
 The shared command/validation layer can be exposed through MCP later. This version does not include a live agent connection, an MCP server, an embedded model, or automatic PDF conversion. A local trial reconstructed the original house PDF as architectural objects and exposed stair/terrace limitations. It remains an approximate, uncalibrated trace; no dimensional accuracy claim is made. The private source and trial outputs are kept outside the shipped app in the Git-ignored `work/` directory.
 
@@ -66,11 +74,11 @@ The shared command/validation layer can be exposed through MCP later. This versi
 
 Planform v2 is architectural JSON in centimeters, with X right and Y down. Wall endpoints describe **centerlines**; openings refer to a host wall by ID and store center position as a fraction of its length. Rectangles rotate clockwise about their x/y anchor. The drawing guide specifies full conventions, door orientation and all supported objects.
 
-A single JSON schema is used by the browser and CLI. Additional relationship checks reject duplicate IDs, zero-length walls, orphaned openings, out-of-wall openings and overlaps. Errors identify JSON paths and, for relationship failures, affected object IDs. Imports fill documented metadata defaults but never repair geometry. Schema validity alone does not establish measurement accuracy or building feasibility.
+The browser and CLI share the drawing schema and the [comparison project schema](public/agent/comparison.schema.json). Single drawings use v2. A comparison project uses v3 to store two v2 drawings and the active version. Relationship checks reject duplicate IDs within a drawing, zero-length walls, orphaned openings, out-of-wall openings and overlaps. Errors identify JSON paths and, for relationship failures, affected object IDs. Imports fill documented metadata defaults but never repair geometry. Schema validity alone does not establish measurement accuracy or building feasibility.
 
-Architectural v1 files with no SVG references migrate to v2 on opening. Legacy files containing vectors, definitions or reference pages are rejected with an explanation rather than partially loaded. SVG import, arbitrary embedded markup and vector-node editing have been removed. SVG remains the internal drawing renderer and an export format. Old v1 browser recovery is preserved in its original storage key; v2 uses a separate key.
+Architectural v1 files with no SVG references migrate to v2 on opening. Legacy files containing vectors, definitions or reference pages are rejected with an explanation rather than partially loaded. SVG import, arbitrary embedded markup and vector-node editing have been removed. SVG remains the internal drawing renderer and an export format. The editor writes recovery to a new key and can still read the original v1 and v2 keys.
 
-Projects are limited to 15 MB, 50,000 total objects and 15 group levels. Browser recovery is best effort and does not replace downloaded project files. Camera, selection, active tool, clipboard and the 60-entry undo history are session state.
+Projects are limited to 15 MB per file, 50,000 objects per drawing and 15 group levels. Browser recovery is best effort and does not replace downloaded project files. Camera, overlay visibility, selection, active tool, clipboard and each version's 60-entry undo history are session state.
 
 ## Automatic room areas
 

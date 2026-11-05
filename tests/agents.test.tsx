@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, mkdtempSync, existsSync, rmSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdtempSync,
+  existsSync,
+  rmSync,
+} from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,7 +17,12 @@ import {
   type Wall,
   type Opening,
 } from "../src/model";
-import { validateProject, ProjectError } from "../src/validation";
+import {
+  validateProject,
+  ProjectError,
+  readProjectFile,
+} from "../src/validation";
+import type { ComparisonProject } from "../src/project";
 import { renderPlanSvg } from "../src/preview";
 import example from "../public/agent/example.planform.json";
 
@@ -34,6 +45,13 @@ const door: Opening = {
   swing: 1,
 };
 const plan = () => ({ ...emptyPlan(), items: structuredClone([wall, door]) });
+const comparison = (): ComparisonProject => ({
+  format: "planform",
+  version: 3,
+  name: "Renovation",
+  active: "proposed",
+  plans: { existing: plan(), proposed: plan() },
+});
 const batch = (operations: CommandBatch["operations"]): CommandBatch => ({
   format: "planform-commands",
   version: 1,
@@ -175,6 +193,30 @@ describe("agent project contract", () => {
       ),
     ).toThrow("legacy project contains SVG");
     expect(() => parseProject("{oops")).toThrow("Invalid JSON");
+  });
+});
+
+describe("comparison project files", () => {
+  it("continues to read single plans, including architectural v1 files", () => {
+    const drawing = plan();
+    expect(readProjectFile(serialize(drawing))).toEqual(drawing);
+    expect(readProjectFile(JSON.stringify({ ...drawing, version: 1 }))).toEqual(
+      drawing,
+    );
+  });
+
+  it("round trips two versions with the same object IDs and independent geometry", () => {
+    const project = comparison();
+    (project.plans.proposed.items[0] as Wall).b.x = 750.125;
+    expect(readProjectFile(serialize(project))).toEqual(project);
+  });
+
+  it("checks host relationships within the inactive plan", () => {
+    const project = comparison();
+    project.plans.existing.items = [{ ...door }];
+    expect(() => readProjectFile(serialize(project))).toThrow(
+      "/plans/existing/items/0/hostId (door)",
+    );
   });
 });
 
@@ -389,6 +431,53 @@ describe("agent previews and CLI", () => {
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stderr).ok).toBe(false);
       expect(existsSync(failed)).toBe(false);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }, 20000);
+  it("renders and edits only the active version of a comparison project", () => {
+    const temp = mkdtempSync(join(tmpdir(), "planform-comparison-"));
+    const cli = resolve("node_modules/tsx/dist/cli.mjs");
+    const script = resolve("scripts/planform.ts");
+    const run = (...args: string[]) =>
+      JSON.parse(
+        execFileSync(process.execPath, [cli, script, ...args], {
+          encoding: "utf8",
+        }),
+      );
+    try {
+      const input = join(temp, "comparison.planform.json");
+      const commands = join(temp, "edit.commands.json");
+      const preview = join(temp, "preview.svg");
+      const output = join(temp, "edited.planform.json");
+      const project = comparison();
+      project.plans.proposed.name = "Proposed drawing";
+      writeFileSync(input, serialize(project));
+      writeFileSync(
+        commands,
+        JSON.stringify(batch([{ op: "delete", ids: [door.id] }])),
+      );
+      expect(run("validate", input)).toMatchObject({
+        version: 3,
+        active: "proposed",
+      });
+      expect(run("render", input, "--out", preview).ok).toBe(true);
+      const svg = new DOMParser().parseFromString(
+        readFileSync(preview, "utf8"),
+        "image/svg+xml",
+      );
+      expect(svg.querySelector("title")?.textContent).toBe("Proposed drawing");
+      expect(svg.querySelectorAll("[data-item-id]")).toHaveLength(2);
+      expect(run("apply", input, commands, "--out", output).deletedIds).toEqual(
+        [door.id],
+      );
+      expect(readProjectFile(readFileSync(output, "utf8"))).toEqual({
+        ...project,
+        plans: {
+          ...project.plans,
+          proposed: { ...project.plans.proposed, items: [wall] },
+        },
+      });
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }

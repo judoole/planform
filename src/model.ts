@@ -1,4 +1,5 @@
 import { readProject } from "./validation";
+import type { Project } from "./project";
 import type { FurnitureKind } from "./furniture";
 export type Point = { x: number; y: number };
 export type Box = Point & { w: number; h: number };
@@ -436,8 +437,8 @@ export function ungroupItems(plan: Plan, id: string): Plan {
   p.items.splice(p.items.indexOf(g), 1, ...children);
   return p;
 }
-export function serialize(plan: Plan) {
-  return JSON.stringify(plan, null, 2);
+export function serialize(project: Project) {
+  return JSON.stringify(project, null, 2);
 }
 export function parseProject(text: string): Plan {
   return readProject(text);

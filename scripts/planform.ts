@@ -2,10 +2,17 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import sharp from "sharp";
-import { parseProject, serialize } from "../src/model";
+import { serialize } from "../src/model";
+import { activePlan, planVersions, replaceActivePlan } from "../src/project";
 import { applyCommands } from "../src/commands";
 import { renderPlanSvg } from "../src/preview";
-import { ProjectError, projectWarnings, readJson } from "../src/validation";
+import {
+  checkJsonSize,
+  ProjectError,
+  projectWarnings,
+  readJson,
+  readProjectFile,
+} from "../src/validation";
 
 const args = process.argv.slice(2),
   [action, filename] = args;
@@ -26,15 +33,31 @@ try {
   if (action !== "validate" && !output) throw Error(usage);
   if (output && resolve(output) === resolve(filename))
     throw Error("Use a separate output path to preserve the source project.");
-  const plan = parseProject(await readFile(filename, "utf8"));
+  const project = readProjectFile(await readFile(filename, "utf8"));
+  const plan = activePlan(project);
   if (action === "validate") {
     process.stdout.write(
       JSON.stringify(
         {
           ok: true,
-          version: plan.version,
+          version: project.version,
           objects: plan.items.length,
           warnings: projectWarnings(plan),
+          ...(project.version === 3 && {
+            active: project.active,
+            plans: Object.fromEntries(
+              planVersions.map((version) => {
+                const drawing = project.plans[version];
+                return [
+                  version,
+                  {
+                    objects: drawing.items.length,
+                    warnings: projectWarnings(drawing),
+                  },
+                ];
+              }),
+            ),
+          }),
         },
         null,
         2,
@@ -58,7 +81,9 @@ try {
       plan,
       readJson(await readFile(args[2], "utf8")),
     );
-    await writeFile(output!, serialize(result.plan) + "\n");
+    const contents = serialize(replaceActivePlan(project, result.plan)) + "\n";
+    checkJsonSize(contents);
+    await writeFile(output!, contents);
     process.stdout.write(
       JSON.stringify(
         {
