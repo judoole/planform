@@ -15,6 +15,7 @@ import {
   type Item,
   type RectItem,
   type Wall,
+  type DoorStyle,
   clone,
   dist,
   angle,
@@ -26,6 +27,26 @@ import {
 } from "./model";
 import type { Tool } from "./Canvas";
 import { type Room, formatRoomArea } from "./rooms";
+export function DoorStyleSelect({
+  label = "Door type",
+  value,
+  onChange,
+}: {
+  label?: string;
+  value: DoorStyle;
+  onChange: (style: DoorStyle) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value as DoorStyle)}
+    >
+      <option value="hinged">Hinged door</option>
+      <option value="sliding">Sliding door</option>
+    </select>
+  );
+}
 export function NumberField({
   label,
   value,
@@ -416,14 +437,37 @@ export default function Properties({
                 }}
               />
               {item.type === "door" && (
-                <div className="button-stack">
-                  <button onClick={() => patch({ hinge: -item.hinge })}>
-                    <FlipHorizontal size={16} /> Flip hinge side
-                  </button>
-                  <button onClick={() => patch({ swing: -item.swing })}>
-                    <FlipVertical size={16} /> Flip swing direction
-                  </button>
-                </div>
+                <>
+                  <label className="field">
+                    <span>Door type</span>
+                    <DoorStyleSelect
+                      value={item.style ?? "hinged"}
+                      onChange={(style) => patch({ style })}
+                    />
+                  </label>
+                  <div className="button-stack">
+                    {item.style === "sliding" ? (
+                      <button
+                        onClick={() =>
+                          patch({
+                            slideDirection: item.slideDirection === -1 ? 1 : -1,
+                          })
+                        }
+                      >
+                        <FlipHorizontal size={16} /> Flip slide direction
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={() => patch({ hinge: -item.hinge })}>
+                          <FlipHorizontal size={16} /> Flip hinge side
+                        </button>
+                        <button onClick={() => patch({ swing: -item.swing })}>
+                          <FlipVertical size={16} /> Flip swing direction
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
               )}
               <p className="notice">
                 Openings follow their wall. If space shrinks, openings move or

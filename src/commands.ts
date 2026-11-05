@@ -8,6 +8,7 @@ import {
   setCorner,
   type Evidence,
   type Item,
+  type Opening,
   type Plan,
   type Point,
   type Wall,
@@ -26,6 +27,8 @@ type Operation =
       width: number;
       hinge?: number;
       swing?: number;
+      style?: Opening["style"];
+      slideDirection?: Opening["slideDirection"];
       evidence?: Evidence;
     }
   | { op: "corner"; wallId: string; end: "a" | "b"; point: Point }
@@ -90,6 +93,10 @@ export function applyCommands(
         width: op.width,
         hinge: op.hinge ?? 1,
         swing: op.swing ?? 1,
+        ...(op.style === undefined ? {} : { style: op.style }),
+        ...(op.slideDirection === undefined
+          ? {}
+          : { slideDirection: op.slideDirection }),
         ...(op.evidence ? { evidence: op.evidence } : {}),
       });
       changed.add(op.id);

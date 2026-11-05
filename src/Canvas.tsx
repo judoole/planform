@@ -13,6 +13,7 @@ import {
   type RectItem,
   type Wall,
   type Box,
+  type DoorStyle,
   uid,
   dist,
   angle,
@@ -28,6 +29,7 @@ import {
   rotate,
 } from "./model";
 import { DrawItem, RoomLabels } from "./Drawing";
+import { furniture, type FurnitureKind } from "./furniture";
 import type { Room } from "./rooms";
 export type Tool =
   | "select"
@@ -50,7 +52,7 @@ const toolHelp: Record<Tool, string> = {
   pan: "Drag to pan · pinch or use zoom controls",
   wall: "Click a start point, then connected corners · Finish to stop",
   room: "Drag from one corner to the opposite corner",
-  door: "Click a wall to attach a door",
+  door: "Choose a door type, then click a wall to place it",
   window: "Click a wall to attach a window",
   stairs: "Click to place stairs · edit size and steps in Properties",
   furniture: "Choose a symbol, then click to place it",
@@ -80,6 +82,7 @@ export default function Canvas({
   setTool,
   snap,
   kind,
+  doorStyle,
   wallThickness,
   camera,
   setCamera,
@@ -98,7 +101,8 @@ export default function Canvas({
   tool: Tool;
   setTool: (t: Tool) => void;
   snap: boolean;
-  kind: RectItem["kind"];
+  kind: FurnitureKind;
+  doorStyle: DoorStyle;
   wallThickness: number;
   camera: Camera;
   setCamera: (c: Camera) => void;
@@ -485,34 +489,26 @@ export default function Canvas({
         onStatus("Choose an unlocked wall to attach this opening.");
         return;
       }
+      const sliding = tool === "door" && doorStyle === "sliding";
       const i: Item = {
         id: uid(),
         type: tool,
-        name: tool === "door" ? "Door" : "Window",
+        name: sliding ? "Sliding door" : tool === "door" ? "Door" : "Window",
         hostId: wall.w.id,
         t: wall.t,
-        width: tool === "door" ? 90 : 120,
+        width: tool === "door" && !sliding ? 90 : 120,
         hinge: 1,
         swing: 1,
+        ...(sliding ? { style: "sliding" } : {}),
       };
       commit({ ...plan, items: [...plan.items, i] });
       setSelection([i.id]);
       setTool("select");
       return;
     }
-    const dimensions: Record<string, [number, number]> = {
-      sofa: [210, 90],
-      table: [150, 90],
-      chair: [50, 55],
-      bed: [160, 210],
-      cabinet: [120, 60],
-      counter: [180, 60],
-      toilet: [45, 70],
-      shower: [90, 90],
-    };
     const [w, h] =
       tool === "furniture"
-        ? dimensions[kind || "sofa"]
+        ? furniture[kind].size
         : tool === "stairs"
           ? [100, 300]
           : [160, 28];
@@ -526,7 +522,7 @@ export default function Canvas({
             : "text",
       name:
         tool === "furniture"
-          ? kind || "sofa"
+          ? furniture[kind].label
           : tool === "stairs"
             ? "Staircase"
             : "Label",

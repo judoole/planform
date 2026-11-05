@@ -113,4 +113,31 @@ describe("dense drawing updates and export bounds", () => {
       expect(tip.y).toBeLessThanOrEqual(b.y + b.h + 1e-8);
     }
   });
+  it("keeps sliding door bounds inside the opening on a vertical wall", () => {
+    const wall: Wall = {
+      id: "w",
+      name: "Wall",
+      type: "wall",
+      a: { x: 50, y: 0 },
+      b: { x: 50, y: 500 },
+      thickness: 20,
+    };
+    const door: Opening = {
+      id: "slider",
+      name: "Sliding door",
+      type: "door",
+      style: "sliding",
+      hostId: wall.id,
+      width: 120,
+      t: 0.5,
+      hinge: 1,
+      swing: -1,
+    };
+    expect(bounds(door, [wall, door])).toEqual({
+      x: 40,
+      y: 190,
+      w: 20,
+      h: 120,
+    });
+  });
 });
