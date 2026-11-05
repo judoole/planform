@@ -1,52 +1,1159 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { MousePointer2, SquareDashedMousePointer, Hand, BrickWall, DoorOpen, PanelsTopLeft, Armchair, Ruler, Type, ScanLine, Plus, Minus, Maximize, Undo2, Redo2, Magnet, Download, Upload, FolderOpen, FilePlus2, ChevronDown, X, Menu, SlidersHorizontal, Layers, LockKeyhole, ChevronRight, Check, Copy, ClipboardPaste, Trash2, MoveUpRight, Square, HelpCircle, Search, PanelRightClose } from 'lucide-react';
-import { type Plan, type Point, type RectItem, type Item, emptyPlan, clone, normalizeOpenings, removeItems, duplicateItems, History, planBounds, calibrate, dist, serialize, isRect, uid } from './model';
-import { importSvg, freshImportedPlan, safeOpenProject, download, exportSvg, exportPng } from './svg';
-import Canvas, { type Tool, type Camera } from './Canvas';
-import Properties, { NumberField } from './Properties';
-const RECOVERY='planform-recovery-v1';
-const palette:{tool:Tool;label:string;icon:typeof MousePointer2;key?:string}[]=[{tool:'select',label:'Select',icon:MousePointer2,key:'V'},{tool:'box',label:'Box select',icon:SquareDashedMousePointer,key:'B'},{tool:'pan',label:'Pan',icon:Hand,key:'H'},{tool:'wall',label:'Wall',icon:BrickWall,key:'W'},{tool:'room',label:'Room',icon:Square},{tool:'door',label:'Door',icon:DoorOpen,key:'D'},{tool:'window',label:'Window',icon:PanelsTopLeft},{tool:'stairs',label:'Stairs',icon:MoveUpRight},{tool:'furniture',label:'Furniture',icon:Armchair,key:'F'},{tool:'dimension',label:'Dimension',icon:Ruler},{tool:'measure',label:'Measure',icon:ScanLine,key:'M'},{tool:'text',label:'Label',icon:Type,key:'T'}];
-function startup(){try{const s=localStorage.getItem(RECOVERY);if(s)return safeOpenProject(s).plan;}catch{}return emptyPlan();}
-export default function App(){
-  const [plan,setPlan]=useState<Plan>(startup),[selection,setSelection]=useState<string[]>([]),[tool,setTool]=useState<Tool>('select'),[snap,setSnap]=useState(true),[kind,setKind]=useState<RectItem['kind']>('sofa'),[wallThickness,setWallThickness]=useState(15),[camera,setCamera]=useState<Camera>({x:100,y:100,k:.8}),[panelOpen,setPanelOpen]=useState(false),[tab,setTab]=useState<'properties'|'objects'>('properties'),[query,setQuery]=useState(''),[overlap,setOverlap]=useState<string[]>([]),[overlapOpen,setOverlapOpen]=useState(false),[menu,setMenu]=useState(false),[exportMenu,setExportMenu]=useState(false),[help,setHelp]=useState(false),[notice,setNotice]=useState(''),[report,setReport]=useState<string[]|null>(null),[busy,setBusy]=useState(false),[autosave,setAutosave]=useState('Saved locally'),[coords,setCoords]=useState('0.0, 0.0'),[cancelToken,setCancelToken]=useState(0),[measure,setMeasure]=useState<{a:Point;b:Point;calibrate:boolean}|null>(null),[realDistance,setRealDistance]=useState(''),[historyTick,setHistoryTick]=useState(0);
-  const svgRef=useRef<SVGSVGElement>(null),fileRef=useRef<HTMLInputElement>(null),importRef=useRef<HTMLInputElement>(null),history=useRef(new History()),planRef=useRef(plan),clipboard=useRef<Item[]>([]);planRef.current=plan;
-  const showNotice=useCallback((s:string)=>{setNotice(s);},[]);
-  const commit=useCallback((next:Plan,base?:Plan)=>{const before=base||planRef.current;const clean=normalizeOpenings(next);history.current.push(before);setPlan(clean);setHistoryTick(v=>v+1);},[]);
-  const fit=useCallback((p:Plan=planRef.current)=>{const svg=svgRef.current;if(!svg)return;const box=planBounds(p),b=svg.getBoundingClientRect(),pad=Math.min(90,b.width*.12),k=Math.min(3,Math.max(.02,Math.min((b.width-pad*2)/Math.max(box.w,1),(b.height-pad*2)/Math.max(box.h,1))));setCamera({k,x:(b.width-box.w*k)/2-box.x*k,y:(b.height-box.h*k)/2-box.y*k});},[]);
-  useEffect(()=>{if(planRef.current.items.length)fit();},[]);
-  useEffect(()=>{setAutosave('Saving…');const timer=setTimeout(()=>{try{localStorage.setItem(RECOVERY,serialize(plan));setAutosave('Saved locally');}catch{setAutosave('Recovery unavailable · download to save');}},900);return()=>clearTimeout(timer);},[plan]);
-  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),7000);return()=>clearTimeout(t);},[notice]);
-  function cancel(){setCancelToken(v=>v+1);setTool('select');setOverlapOpen(false);}
-  function undo(){cancel();setPlan(history.current.undo(planRef.current));setSelection([]);setHistoryTick(v=>v+1);}
-  function redo(){cancel();setPlan(history.current.redo(planRef.current));setSelection([]);setHistoryTick(v=>v+1);}
-  function del(){const ids=selection.filter(id=>!plan.items.find(i=>i.id===id)?.locked);if(!ids.length)return;commit(removeItems(plan,ids));setSelection([]);}
-  function duplicate(){const ids=selection.filter(id=>!plan.items.find(i=>i.id===id)?.locked);if(!ids.length)return;const r=duplicateItems(plan,ids);commit(r.plan);setSelection(r.ids);}
-  function copy(){const ids=new Set(selection);clipboard.current=clone(plan.items.filter(i=>ids.has(i.id)||((i.type==='door'||i.type==='window')&&ids.has(i.hostId))));showNotice(`${selection.length} object(s) copied. Use Paste to place a copy.`);}
-  function paste(){if(!clipboard.current.length){showNotice('Select objects and use Copy first.');return;}const temp={...plan,items:[...plan.items.filter(i=>!clipboard.current.some(x=>x.id===i.id)),...clone(clipboard.current)]};const r=duplicateItems(temp,clipboard.current.map(i=>i.id));const newItems=r.plan.items.slice(temp.items.length);commit({...plan,items:[...plan.items,...newItems]});setSelection(r.ids);}
-  function save(){download(new Blob([serialize(plan)],{type:'application/json'}),`${plan.name||'Untitled'}.planform.json`);showNotice('Project downloaded. Open the JSON file to continue editing later.');}
-  async function loadFile(file:File|undefined,svg:boolean){if(!file)return;setBusy(true);cancel();try{if(file.size>15_000_000)throw Error('Files must be smaller than 15 MB.');const text=await file.text();if(svg){const result=await importSvg(text,file.name);let next=plan.items.length?clone(plan):freshImportedPlan(file.name);next.items.push(...result.items);next.defs+=result.defs;next.calibration={calibrated:false,imported:true,factor:1,source:file.name};commit(next);setSelection([]);setReport([`Imported ${result.items.length.toLocaleString()} editable vector objects in original drawing order.`, 'This drawing is uncalibrated. Select two known points and enter their real distance before planning in centimeters.',...(result.warnings.length?result.warnings:['No unsupported SVG features found.'])]);setTimeout(()=>fit(next),50);}else{const result=safeOpenProject(text);commit(result.plan);setSelection([]);if(result.warnings.length)setReport(result.warnings);setTimeout(()=>fit(result.plan),50);showNotice('Project opened. All objects are ready to edit.');}}catch(e){showNotice((e as Error).message);}finally{setBusy(false);if(fileRef.current)fileRef.current.value='';if(importRef.current)importRef.current.value='';}}
-  async function exporting(png:boolean){setExportMenu(false);try{const svg=exportSvg(svgRef.current!,planBounds(plan));if(png)await exportPng(svg,`${plan.name}.png`);else download(new Blob([svg],{type:'image/svg+xml'}),`${plan.name}.svg`);showNotice(`${png?'PNG':'SVG'} exported with a white background, without the editing grid or selection.`);}catch(e){showNotice((e as Error).message);}}
-  useEffect(()=>{function key(e:KeyboardEvent){const el=e.target as HTMLElement;if(el.closest('input,textarea,select,[contenteditable="true"]'))return;const mod=e.metaKey||e.ctrlKey,k=e.key.toLowerCase();if(e.key==='Escape'){cancel();setMeasure(null);setReport(null);setHelp(false);return;}if(mod&&['s','o'].includes(k)){e.preventDefault();if(k==='s')save();else fileRef.current?.click();return;}if(mod&&k==='z'){e.preventDefault();e.shiftKey?redo():undo();return;}if(mod&&k==='y'){e.preventDefault();redo();return;}if(mod&&k==='a'){e.preventDefault();setSelection(plan.items.map(i=>i.id));return;}if(mod&&selection.length&&['c','d','x'].includes(k)){e.preventDefault();if(k==='d')duplicate();else{copy();if(k==='x')del();}return;}if(mod&&k==='v'&&clipboard.current.length){e.preventDefault();paste();return;}if(mod||e.altKey)return;if(['Delete','Backspace'].includes(e.key)&&selection.length){e.preventDefault();del();return;}const t=palette.find(t=>t.key?.toLowerCase()===k);if(t)setTool(t.tool);if(k==='0')fit();}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);});
-  function zoom(mult:number){const b=svgRef.current!.getBoundingClientRect(),x=b.width/2,y=b.height/2,k=Math.max(.02,Math.min(20,camera.k*mult));setCamera({k,x:x-(x-camera.x)*k/camera.k,y:y-(y-camera.y)*k/camera.k});}
-  function chooseTool(t:Tool){setTool(t);if(t==='furniture'&&window.innerWidth<760)setPanelOpen(false);}
-  const selected=plan.items.filter(i=>selection.includes(i.id));const matching=plan.items.filter(i=>!query||`${i.name} ${i.type}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="app-shell"><header className="topbar"><a className="brand" href="#" onClick={e=>e.preventDefault()} aria-label="Planform home"><span className="brand-mark"><span/><span/><span/></span>planform<span className="brand-dot">.</span></a><span className="header-divider"/><div className="project-heading"><input aria-label="Project name" value={plan.name} onChange={e=>setPlan({...plan,name:e.target.value})} onFocus={()=>history.current.push(plan)} onBlur={()=>setHistoryTick(v=>v+1)}/><span><span className="save-dot"/>{autosave}</span></div><div className="header-actions"><button onClick={()=>{commit(emptyPlan());setSelection([]);cancel();setCamera({x:100,y:100,k:.8});}} title="New empty project"><FilePlus2 size={16}/><span>New</span></button><button onClick={()=>fileRef.current?.click()} title="Open Planform project"><FolderOpen size={16}/><span>Open</span></button><button onClick={()=>importRef.current?.click()} title="Import editable SVG" className="import-button"><Upload size={16}/><span>Import SVG</span></button><button onClick={save} title="Download editable project"><Download size={16}/><span>Save project</span></button><div className="dropdown-anchor"><button className="primary" onClick={()=>setExportMenu(!exportMenu)}>Export <ChevronDown size={14}/></button>{exportMenu&&<div className="dropdown"><button onClick={()=>exporting(false)}>SVG · editable vectors</button><button onClick={()=>exporting(true)}>PNG · image</button></div>}</div><button className="mobile-menu" aria-label="Project menu" onClick={()=>setMenu(!menu)}><Menu size={20}/></button></div></header>
-  {menu&&<div className="mobile-project-menu"><button onClick={()=>{commit(emptyPlan());cancel();setSelection([]);setMenu(false);}}>New project</button><button onClick={()=>{fileRef.current?.click();setMenu(false);}}>Open project</button><button onClick={()=>{importRef.current?.click();setMenu(false);}}>Import SVG</button><button onClick={()=>{save();setMenu(false);}}>Save project</button></div>}
-  <input type="file" ref={fileRef} accept=".json,.planform.json" hidden onChange={e=>loadFile(e.target.files?.[0],false)}/><input type="file" ref={importRef} accept=".svg,image/svg+xml" hidden onChange={e=>loadFile(e.target.files?.[0],true)}/>
-  <div className="workspace-toolbar"><div className="floor-badge"><Layers size={15}/><span>Ground floor</span><small>01</small></div><div className="toolbar-separator"/><button aria-label="Undo" title="Undo · ⌘/Ctrl Z" disabled={!history.current.past.length} onClick={undo}><Undo2 size={18}/></button><button aria-label="Redo" title="Redo · ⌘/Ctrl Shift Z" disabled={!history.current.future.length} onClick={redo}><Redo2 size={18}/></button><div className="toolbar-separator"/><button aria-label="Copy" title="Copy" disabled={!selection.length} onClick={copy}><Copy size={17}/></button><button aria-label="Paste" title="Paste" onClick={paste}><ClipboardPaste size={17}/></button><button aria-label="Delete" title="Delete selected" disabled={!selection.length} onClick={del}><Trash2 size={17}/></button><div className="toolbar-spacer"/><button className={snap?'snap-toggle active':'snap-toggle'} aria-pressed={snap} onClick={()=>setSnap(!snap)} title="Snap to grid, endpoints and alignments"><Magnet size={16}/><span>Snap {snap?'on':'off'}</span></button><button className="cancel-button" onClick={cancel}><X size={15}/><span>Cancel</span></button><button className="properties-toggle" aria-label="Toggle properties" aria-expanded={panelOpen} onClick={()=>setPanelOpen(!panelOpen)}><SlidersHorizontal size={18}/></button></div>
-  <main className="workspace"><nav className="tool-palette" aria-label="Drawing tools">{palette.map(({tool:t,label,icon:Icon,key},idx)=><button key={t} className={`${tool===t?'selected ':''}${idx===3||idx===9?'tool-divider':''}`} aria-label={label} aria-pressed={tool===t} title={`${label}${key?' · '+key:''}`} onClick={()=>chooseTool(t)}><Icon size={21} strokeWidth={1.65}/><span>{label}</span></button>)}<button className="help-tool" aria-label="Help and shortcuts" onClick={()=>setHelp(true)}><HelpCircle size={21}/><span>Help</span></button></nav>
-  <section className="drawing-region"><div className="drawing-topline"><span><span className="tiny-square"/> FLOOR PLAN <span className="muted">/</span> <b>DESIGN MODE</b></span><span className="private-badge">LOCAL & PRIVATE</span></div>{!plan.calibration.calibrated&&<div className="calibration-banner"><span>Uncalibrated drawing · distances are drawing units</span><button onClick={()=>setTool('calibrate')}><Ruler size={14}/> Calibrate scale</button></div>}
-  {(tool==='furniture'||tool==='wall'||tool==='room')&&<div className="context-toolbar">{tool==='furniture'?<><span>PLACE</span><select aria-label="Furniture symbol" value={kind} onChange={e=>setKind(e.target.value as RectItem['kind'])}>{['sofa','table','chair','bed','cabinet','counter','toilet','shower'].map(k=><option key={k} value={k}>{k==='counter'?'Kitchen counter':k.charAt(0).toUpperCase()+k.slice(1)}</option>)}</select></>:<><span>WALL THICKNESS</span><input aria-label="New wall thickness" type="number" min={1} max={200} value={wallThickness} onChange={e=>setWallThickness(Math.max(1,Math.min(200,Number(e.target.value))))}/><small>{plan.calibration.calibrated?'cm':'units'}</small></>}</div>}
-  <Canvas plan={plan} setPreview={setPlan} commit={commit} selection={selection} setSelection={setSelection} tool={tool} setTool={setTool} snap={snap} kind={kind} wallThickness={wallThickness} camera={camera} setCamera={setCamera} svgRef={svgRef} onMeasure={(a,b,calibrate)=>{setMeasure({a,b,calibrate});setRealDistance('');}} onStatus={s=>s.length>40?showNotice(s):setCoords(s)} onOverlap={setOverlap} cancelToken={cancelToken}/>
-  <div className="canvas-bottom"><div className="canvas-bottom-left"><span className="floor-chip">01 <span>Ground floor</span></span>{overlap.length>1&&<div className="dropdown-anchor"><button className="overlap-button" onClick={()=>setOverlapOpen(!overlapOpen)}><Layers size={15}/>{overlap.length} overlapping <ChevronDown size={12}/></button>{overlapOpen&&<div className="dropdown overlap-dropdown">{overlap.slice(0,40).map(id=><button key={id} onClick={()=>{setSelection([id]);setOverlapOpen(false);setPanelOpen(true);}}>{plan.items.find(i=>i.id===id)?.name||id}{selection.includes(id)&&<Check size={14}/>}</button>)}</div>}</div>}</div><div className="zoom-controls"><button aria-label="Zoom out" onClick={()=>zoom(1/1.25)}><Minus size={17}/></button><span>{Math.round(camera.k*100)}%</span><button aria-label="Zoom in" onClick={()=>zoom(1.25)}><Plus size={17}/></button><span className="zoom-divider"/><button aria-label="Fit drawing" title="Fit drawing · 0" onClick={()=>fit()}><Maximize size={17}/></button></div></div>
-  </section>
-  {panelOpen&&<button className="drawer-scrim" aria-label="Close properties" onClick={()=>setPanelOpen(false)}/>}
-  <aside className={`inspector ${panelOpen?'open':''}`}><div className="inspector-tabs"><button className={tab==='properties'?'active':''} onClick={()=>setTab('properties')}><SlidersHorizontal size={15}/>Properties</button><button className={tab==='objects'?'active':''} onClick={()=>setTab('objects')}><Layers size={15}/>Objects</button><button className="drawer-close" aria-label="Close properties panel" onClick={()=>setPanelOpen(false)}><X size={17}/></button></div>{tab==='properties'?<Properties plan={plan} selection={selection} commit={commit} setSelection={setSelection} tool={tool} setTool={setTool} onDuplicate={duplicate} onDelete={del} onError={showNotice}/>:<div className="objects-panel"><label className="object-search"><Search size={15}/><input placeholder="Find objects…" aria-label="Find objects" value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="objects-summary">{matching.length.toLocaleString()} objects <button onClick={()=>{setSelection(plan.items.map(i=>i.id));}}>Select all</button></div><div className="object-list">{matching.slice(0,150).map(i=><button className={selection.includes(i.id)?'selected':''} key={i.id} onClick={e=>setSelection(e.shiftKey?[...new Set([...selection,i.id])]:[i.id])}><span className={`object-type ${i.type}`}>{i.type==='wall'?'━':i.type==='vector'?'◇':i.type==='door'?'⌒':'□'}</span><span>{i.name}<small>{i.type}</small></span>{i.locked&&<LockKeyhole size={13}/>}</button>)}</div>{matching.length>150&&<p className="notice">Showing first 150. Search an object name to find any element.</p>}<button onClick={()=>{const p=clone(plan);const lock=!p.items.filter(i=>i.type==='vector').every(i=>i.locked);p.items.forEach(i=>{if(i.type==='vector')i.locked=lock;});commit(p);}}>Toggle reference-vector locks</button></div>}<div className="inspector-footer"><span className="save-dot"/> One floor. Endless possibilities.</div></aside></main>
-  <footer className="statusbar"><span><span className="status-dot"/>{selected.length?`${selected.length} selected`:tool==='select'?'Ready to design':palette.find(p=>p.tool===tool)?.label||'Edit nodes'}</span><span className="navigation-hint">Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch</span><span className="coordinate-readout">{coords} {plan.calibration.calibrated?'cm':'units'}<span className="status-separator"/>Grid {plan.grid} {plan.calibration.calibrated?'cm':'units'}</span></footer>
-  {notice&&<div role="status" className="toast">{notice}<button aria-label="Dismiss notification" onClick={()=>setNotice('')}><X size={15}/></button></div>}
-  {busy&&<div className="modal-backdrop"><div className="modal"><div className="spinner"/><h2>Preparing your drawing…</h2><p>Preserving every vector and its drawing order.</p></div></div>}
-  {report&&<div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-label="Import report"><button className="modal-close" aria-label="Close import report" onClick={()=>setReport(null)}><X size={20}/></button><div className="modal-icon"><Upload size={25}/></div><span className="eyebrow">SVG IMPORT</span><h2>Your drawing, ready to edit.</h2><ul className="report-list">{report.map((r,n)=><li key={n}>{r}</li>)}</ul><div className="modal-actions"><button onClick={()=>setReport(null)}>Continue editing</button><button className="primary" onClick={()=>{setReport(null);setTool('calibrate');}}>Calibrate scale <Ruler size={16}/></button></div></section></div>}
-  {measure&&<div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-label={measure.calibrate?'Calibrate scale':'Measurement'}><button className="modal-close" aria-label="Close measurement" onClick={()=>setMeasure(null)}><X size={20}/></button><div className="modal-icon"><Ruler size={25}/></div><span className="eyebrow">{measure.calibrate?'SET THE SCALE':'POINT TO POINT'}</span><h2>{measure.calibrate?'One known distance.':'A little more precise.'}</h2><p className="measure-value">{dist(measure.a,measure.b).toFixed(2)} <small>{plan.calibration.calibrated?'cm':'drawing units'}</small></p>{measure.calibrate?<><p>Enter the real distance between your two points. This rescales the entire floor plan, including objects and annotations.</p><label className="field"><span>Real distance in centimeters</span><input autoFocus aria-label="Real distance in centimeters" type="number" min="0.001" step="any" placeholder="e.g. 500" value={realDistance} onChange={e=>setRealDistance(e.target.value)}/></label><button className="primary wide" disabled={!(Number(realDistance)>0)} onClick={()=>{try{const next=calibrate(plan,dist(measure.a,measure.b),Number(realDistance));commit(next);setMeasure(null);fit(next);showNotice('Scale calibrated. All distances now use centimeters.');}catch(e){showNotice((e as Error).message);}}}>Apply scale <Check size={17}/></button></>:<div className="modal-actions"><button onClick={()=>{setMeasure({...measure,calibrate:true});}}>Use for calibration</button><button className="primary" onClick={()=>{const i:Item={id:uid(),type:'dimension',name:'Dimension',a:measure.a,b:measure.b,offset:-30};commit({...plan,items:[...plan.items,i]});setMeasure(null);setSelection([i.id]);}}>Add dimension</button></div>}</section></div>}
-  {help&&<div className="modal-backdrop"><section className="modal help-modal" role="dialog" aria-modal="true" aria-label="Planform help"><button className="modal-close" aria-label="Close help" onClick={()=>setHelp(false)}><X size={20}/></button><span className="eyebrow">A QUICK FIELD GUIDE</span><h2>Your next space starts here.</h2><p>Draw walls by clicking connected corners, or drag a Room. Use Finish or Cancel to stop. Doors and windows attach to architectural walls; imported paths remain ordinary vectors.</p><p>Drag selected objects to move them. Circular wall handles edit shared corners. A square handle resizes symbols; the upper circular handle rotates. Properties provides exact numbers.</p><p>Use Box select, Shift-click, Objects search, or the overlapping-object picker for dense drawings. Lock imported reference geometry from Objects. Select two vectors or symbols and use Group in Properties.</p><p>Scroll to pan; Ctrl/⌘ + scroll or pinch to zoom. Pan tool makes navigation explicit. Every tool and edit action also has a visible control.</p><div className="shortcuts"><span>V / H / W / F / M</span><b>Select / Pan / Wall / Furniture / Measure</b><span>⌘/Ctrl Z / Shift Z</span><b>Undo / Redo</b><span>⌘/Ctrl C / V / D</span><b>Copy / Paste / Duplicate</b><span>Escape / 0</span><b>Cancel / Fit drawing</b></div><p className="notice">Import first, then calibrate a known distance. Calibrating scales the entire document. Dimensions measure their own endpoints and do not attach to walls. Project downloads preserve every editable object.</p><button className="primary wide" onClick={()=>setHelp(false)}>Start planning <ChevronRight size={17}/></button></section></div>}
-  </div>;
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  MousePointer2,
+  SquareDashedMousePointer,
+  Hand,
+  BrickWall,
+  DoorOpen,
+  PanelsTopLeft,
+  Armchair,
+  Ruler,
+  Type,
+  ScanLine,
+  Plus,
+  Minus,
+  Maximize,
+  Undo2,
+  Redo2,
+  Magnet,
+  Download,
+  Upload,
+  FolderOpen,
+  FilePlus2,
+  ChevronDown,
+  X,
+  Menu,
+  SlidersHorizontal,
+  Layers,
+  LockKeyhole,
+  ChevronRight,
+  Check,
+  Copy,
+  ClipboardPaste,
+  Trash2,
+  MoveUpRight,
+  Square,
+  HelpCircle,
+  Search,
+  PanelRightClose,
+} from "lucide-react";
+import {
+  type Plan,
+  type Point,
+  type RectItem,
+  type Item,
+  emptyPlan,
+  clone,
+  normalizeOpenings,
+  removeItems,
+  duplicateItems,
+  History,
+  planBounds,
+  calibrate,
+  dist,
+  serialize,
+  isRect,
+  uid,
+} from "./model";
+import {
+  importSvg,
+  freshImportedPlan,
+  safeOpenProject,
+  download,
+  exportSvg,
+  exportPng,
+} from "./svg";
+import Canvas, { type Tool, type Camera } from "./Canvas";
+import Properties, { NumberField } from "./Properties";
+const RECOVERY = "planform-recovery-v1";
+const palette: {
+  tool: Tool;
+  label: string;
+  icon: typeof MousePointer2;
+  key?: string;
+}[] = [
+  { tool: "select", label: "Select", icon: MousePointer2, key: "V" },
+  {
+    tool: "box",
+    label: "Box select",
+    icon: SquareDashedMousePointer,
+    key: "B",
+  },
+  { tool: "pan", label: "Pan", icon: Hand, key: "H" },
+  { tool: "wall", label: "Wall", icon: BrickWall, key: "W" },
+  { tool: "room", label: "Room", icon: Square },
+  { tool: "door", label: "Door", icon: DoorOpen, key: "D" },
+  { tool: "window", label: "Window", icon: PanelsTopLeft },
+  { tool: "stairs", label: "Stairs", icon: MoveUpRight },
+  { tool: "furniture", label: "Furniture", icon: Armchair, key: "F" },
+  { tool: "dimension", label: "Dimension", icon: Ruler },
+  { tool: "measure", label: "Measure", icon: ScanLine, key: "M" },
+  { tool: "text", label: "Label", icon: Type, key: "T" },
+];
+function startup() {
+  try {
+    const s = localStorage.getItem(RECOVERY);
+    if (s) return safeOpenProject(s).plan;
+  } catch {}
+  return emptyPlan();
+}
+export default function App() {
+  const [plan, setPlan] = useState<Plan>(startup),
+    [selection, setSelection] = useState<string[]>([]),
+    [tool, setTool] = useState<Tool>("select"),
+    [snap, setSnap] = useState(true),
+    [kind, setKind] = useState<RectItem["kind"]>("sofa"),
+    [wallThickness, setWallThickness] = useState(15),
+    [camera, setCamera] = useState<Camera>({ x: 100, y: 100, k: 0.8 }),
+    [panelOpen, setPanelOpen] = useState(false),
+    [tab, setTab] = useState<"properties" | "objects">("properties"),
+    [query, setQuery] = useState(""),
+    [overlap, setOverlap] = useState<string[]>([]),
+    [overlapOpen, setOverlapOpen] = useState(false),
+    [menu, setMenu] = useState(false),
+    [exportMenu, setExportMenu] = useState(false),
+    [help, setHelp] = useState(false),
+    [notice, setNotice] = useState(""),
+    [report, setReport] = useState<string[] | null>(null),
+    [busy, setBusy] = useState(false),
+    [autosave, setAutosave] = useState("Saved locally"),
+    [coords, setCoords] = useState("0.0, 0.0"),
+    [cancelToken, setCancelToken] = useState(0),
+    [measure, setMeasure] = useState<{
+      a: Point;
+      b: Point;
+      calibrate: boolean;
+    } | null>(null),
+    [realDistance, setRealDistance] = useState(""),
+    [, setHistoryTick] = useState(0);
+  const svgRef = useRef<SVGSVGElement>(null),
+    fileRef = useRef<HTMLInputElement>(null),
+    importRef = useRef<HTMLInputElement>(null),
+    history = useRef(new History()),
+    planRef = useRef(plan),
+    clipboard = useRef<Item[]>([]),
+    nameBefore = useRef<Plan | null>(null);
+  planRef.current = plan;
+  const showNotice = useCallback((s: string) => {
+    setNotice(s);
+  }, []);
+  const commit = useCallback((next: Plan, base?: Plan) => {
+    const before = base || planRef.current;
+    const clean = normalizeOpenings(next);
+    history.current.push(before);
+    setPlan(clean);
+    setHistoryTick((v) => v + 1);
+  }, []);
+  const fit = useCallback((p: Plan = planRef.current) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const box = planBounds(p),
+      b = svg.getBoundingClientRect(),
+      pad = Math.min(90, b.width * 0.12),
+      k = Math.min(
+        3,
+        Math.max(
+          0.02,
+          Math.min(
+            (b.width - pad * 2) / Math.max(box.w, 1),
+            (b.height - pad * 2) / Math.max(box.h, 1),
+          ),
+        ),
+      );
+    setCamera({
+      k,
+      x: (b.width - box.w * k) / 2 - box.x * k,
+      y: (b.height - box.h * k) / 2 - box.y * k,
+    });
+  }, []);
+  useEffect(() => {
+    if (planRef.current.items.length) fit();
+  }, []);
+  useEffect(() => {
+    setAutosave("Saving…");
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(RECOVERY, serialize(plan));
+        setAutosave("Saved locally");
+      } catch {
+        setAutosave("Recovery unavailable · download to save");
+      }
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [plan]);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(""), 7000);
+    return () => clearTimeout(t);
+  }, [notice]);
+  function cancel() {
+    setCancelToken((v) => v + 1);
+    setTool("select");
+    setOverlapOpen(false);
+  }
+  function undo() {
+    cancel();
+    setPlan(history.current.undo(planRef.current));
+    setSelection([]);
+    setHistoryTick((v) => v + 1);
+  }
+  function redo() {
+    cancel();
+    setPlan(history.current.redo(planRef.current));
+    setSelection([]);
+    setHistoryTick((v) => v + 1);
+  }
+  function del() {
+    const ids = selection.filter(
+      (id) => !plan.items.find((i) => i.id === id)?.locked,
+    );
+    if (!ids.length) return;
+    commit(removeItems(plan, ids));
+    setSelection([]);
+  }
+  function duplicate() {
+    const ids = selection.filter(
+      (id) => !plan.items.find((i) => i.id === id)?.locked,
+    );
+    if (!ids.length) return;
+    const r = duplicateItems(plan, ids);
+    commit(r.plan);
+    setSelection(r.ids);
+  }
+  function copy() {
+    const ids = new Set(selection);
+    clipboard.current = clone(
+      plan.items.filter(
+        (i) =>
+          ids.has(i.id) ||
+          ((i.type === "door" || i.type === "window") && ids.has(i.hostId)),
+      ),
+    );
+    showNotice(
+      `${selection.length} object(s) copied. Use Paste to place a copy.`,
+    );
+  }
+  function paste() {
+    if (!clipboard.current.length) {
+      showNotice("Select objects and use Copy first.");
+      return;
+    }
+    const temp = {
+      ...plan,
+      items: [
+        ...plan.items.filter(
+          (i) => !clipboard.current.some((x) => x.id === i.id),
+        ),
+        ...clone(clipboard.current),
+      ],
+    };
+    const r = duplicateItems(
+      temp,
+      clipboard.current.map((i) => i.id),
+    );
+    const newItems = r.plan.items.slice(temp.items.length);
+    commit({ ...plan, items: [...plan.items, ...newItems] });
+    setSelection(r.ids);
+  }
+  function save() {
+    download(
+      new Blob([serialize(plan)], { type: "application/json" }),
+      `${plan.name || "Untitled"}.planform.json`,
+    );
+    showNotice(
+      "Project downloaded. Open the JSON file to continue editing later.",
+    );
+  }
+  async function loadFile(file: File | undefined, svg: boolean) {
+    if (!file) return;
+    setBusy(true);
+    cancel();
+    try {
+      if (file.size > 15_000_000)
+        throw Error("Files must be smaller than 15 MB.");
+      const text = await file.text();
+      if (svg) {
+        const result = await importSvg(text, file.name);
+        let next = plan.items.length
+          ? clone(plan)
+          : freshImportedPlan(file.name);
+        next.items.push(...result.items);
+        next.defs += result.defs;
+        next.papers = [...(next.papers || []), result.viewBox];
+        next.calibration = {
+          calibrated: false,
+          imported: true,
+          factor: 1,
+          source: file.name,
+        };
+        commit(next);
+        setSelection([]);
+        setReport([
+          `Imported ${result.items.length.toLocaleString()} editable vector objects in original drawing order.`,
+          "This drawing is uncalibrated. Select two known points and enter their real distance before planning in centimeters.",
+          ...(result.warnings.length
+            ? result.warnings
+            : ["No unsupported SVG features found."]),
+        ]);
+        setTimeout(() => fit(next), 50);
+      } else {
+        const result = safeOpenProject(text);
+        commit(result.plan);
+        setSelection([]);
+        if (result.warnings.length) setReport(result.warnings);
+        setTimeout(() => fit(result.plan), 50);
+        showNotice("Project opened. All objects are ready to edit.");
+      }
+    } catch (e) {
+      showNotice((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+      if (importRef.current) importRef.current.value = "";
+    }
+  }
+  async function exporting(png: boolean) {
+    setExportMenu(false);
+    try {
+      const svg = exportSvg(svgRef.current!, planBounds(plan));
+      if (png) await exportPng(svg, `${plan.name}.png`);
+      else
+        download(
+          new Blob([svg], { type: "image/svg+xml" }),
+          `${plan.name}.svg`,
+        );
+      showNotice(
+        `${png ? "PNG" : "SVG"} exported with a white background, without the editing grid or selection.`,
+      );
+    } catch (e) {
+      showNotice((e as Error).message);
+    }
+  }
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      const el = e.target as HTMLElement;
+      if (el.closest('input,textarea,select,[contenteditable="true"]')) return;
+      const mod = e.metaKey || e.ctrlKey,
+        k = e.key.toLowerCase();
+      if (e.key === "Escape") {
+        cancel();
+        setMeasure(null);
+        setReport(null);
+        setHelp(false);
+        return;
+      }
+      if (mod && ["s", "o"].includes(k)) {
+        e.preventDefault();
+        if (k === "s") save();
+        else fileRef.current?.click();
+        return;
+      }
+      if (mod && k === "z") {
+        e.preventDefault();
+        e.shiftKey ? redo() : undo();
+        return;
+      }
+      if (mod && k === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (mod && k === "a") {
+        e.preventDefault();
+        setSelection(plan.items.map((i) => i.id));
+        return;
+      }
+      if (mod && selection.length && ["c", "d", "x"].includes(k)) {
+        e.preventDefault();
+        if (k === "d") duplicate();
+        else {
+          copy();
+          if (k === "x") del();
+        }
+        return;
+      }
+      if (mod && k === "v" && clipboard.current.length) {
+        e.preventDefault();
+        paste();
+        return;
+      }
+      if (mod || e.altKey) return;
+      if (["Delete", "Backspace"].includes(e.key) && selection.length) {
+        e.preventDefault();
+        del();
+        return;
+      }
+      const t = palette.find((t) => t.key?.toLowerCase() === k);
+      if (t) setTool(t.tool);
+      if (k === "0") fit();
+    }
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  });
+  function zoom(mult: number) {
+    const b = svgRef.current!.getBoundingClientRect(),
+      x = b.width / 2,
+      y = b.height / 2,
+      k = Math.max(0.02, Math.min(20, camera.k * mult));
+    setCamera({
+      k,
+      x: x - ((x - camera.x) * k) / camera.k,
+      y: y - ((y - camera.y) * k) / camera.k,
+    });
+  }
+  function chooseTool(t: Tool) {
+    setTool(t);
+    if (t === "furniture" && window.innerWidth < 760) setPanelOpen(false);
+  }
+  const selected = plan.items.filter((i) => selection.includes(i.id));
+  const matching = plan.items.filter(
+    (i) =>
+      !query ||
+      `${i.name} ${i.type}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => e.preventDefault()}
+          aria-label="Planform home"
+        >
+          <span className="brand-mark">
+            <span />
+            <span />
+            <span />
+          </span>
+          planform<span className="brand-dot">.</span>
+        </a>
+        <span className="header-divider" />
+        <div className="project-heading">
+          <input
+            aria-label="Project name"
+            value={plan.name}
+            onChange={(e) => setPlan({ ...plan, name: e.target.value })}
+            onFocus={() => {
+              nameBefore.current = plan;
+            }}
+            onBlur={() => {
+              if (nameBefore.current && nameBefore.current.name !== plan.name) {
+                history.current.push(nameBefore.current);
+                setHistoryTick((v) => v + 1);
+              }
+              nameBefore.current = null;
+            }}
+          />
+          <span>
+            <span className="save-dot" />
+            {autosave}
+          </span>
+        </div>
+        <div className="header-actions">
+          <button
+            onClick={() => {
+              commit(emptyPlan());
+              setSelection([]);
+              cancel();
+              setCamera({ x: 100, y: 100, k: 0.8 });
+            }}
+            title="New empty project"
+          >
+            <FilePlus2 size={16} />
+            <span>New</span>
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            title="Open Planform project"
+          >
+            <FolderOpen size={16} />
+            <span>Open</span>
+          </button>
+          <button
+            onClick={() => importRef.current?.click()}
+            title="Import editable SVG"
+            className="import-button"
+          >
+            <Upload size={16} />
+            <span>Import SVG</span>
+          </button>
+          <button onClick={save} title="Download editable project">
+            <Download size={16} />
+            <span>Save project</span>
+          </button>
+          <div className="dropdown-anchor">
+            <button
+              className="primary"
+              onClick={() => setExportMenu(!exportMenu)}
+            >
+              Export <ChevronDown size={14} />
+            </button>
+            {exportMenu && (
+              <div className="dropdown">
+                <button onClick={() => exporting(false)}>
+                  SVG · editable vectors
+                </button>
+                <button onClick={() => exporting(true)}>PNG · image</button>
+              </div>
+            )}
+          </div>
+          <button
+            className="mobile-menu"
+            aria-label="Project menu"
+            onClick={() => setMenu(!menu)}
+          >
+            <Menu size={20} />
+          </button>
+        </div>
+      </header>
+      {menu && (
+        <div className="mobile-project-menu">
+          <button
+            onClick={() => {
+              commit(emptyPlan());
+              cancel();
+              setSelection([]);
+              setMenu(false);
+            }}
+          >
+            New project
+          </button>
+          <button
+            onClick={() => {
+              fileRef.current?.click();
+              setMenu(false);
+            }}
+          >
+            Open project
+          </button>
+          <button
+            onClick={() => {
+              importRef.current?.click();
+              setMenu(false);
+            }}
+          >
+            Import SVG
+          </button>
+          <button
+            onClick={() => {
+              save();
+              setMenu(false);
+            }}
+          >
+            Save project
+          </button>
+        </div>
+      )}
+      <input
+        type="file"
+        ref={fileRef}
+        accept=".json,.planform.json"
+        hidden
+        onChange={(e) => loadFile(e.target.files?.[0], false)}
+      />
+      <input
+        type="file"
+        ref={importRef}
+        accept=".svg,image/svg+xml"
+        hidden
+        onChange={(e) => loadFile(e.target.files?.[0], true)}
+      />
+      <div className="workspace-toolbar">
+        <div className="floor-badge">
+          <Layers size={15} />
+          <span>Ground floor</span>
+          <small>01</small>
+        </div>
+        <div className="toolbar-separator" />
+        <button
+          aria-label="Undo"
+          title="Undo · ⌘/Ctrl Z"
+          disabled={!history.current.past.length}
+          onClick={undo}
+        >
+          <Undo2 size={18} />
+        </button>
+        <button
+          aria-label="Redo"
+          title="Redo · ⌘/Ctrl Shift Z"
+          disabled={!history.current.future.length}
+          onClick={redo}
+        >
+          <Redo2 size={18} />
+        </button>
+        <div className="toolbar-separator" />
+        <button
+          aria-label="Copy"
+          title="Copy"
+          disabled={!selection.length}
+          onClick={copy}
+        >
+          <Copy size={17} />
+        </button>
+        <button aria-label="Paste" title="Paste" onClick={paste}>
+          <ClipboardPaste size={17} />
+        </button>
+        <button
+          aria-label="Delete"
+          title="Delete selected"
+          disabled={!selection.length}
+          onClick={del}
+        >
+          <Trash2 size={17} />
+        </button>
+        <div className="toolbar-spacer" />
+        <button
+          className={snap ? "snap-toggle active" : "snap-toggle"}
+          aria-pressed={snap}
+          onClick={() => setSnap(!snap)}
+          title="Snap to grid, endpoints and alignments"
+        >
+          <Magnet size={16} />
+          <span>Snap {snap ? "on" : "off"}</span>
+        </button>
+        <button className="cancel-button" onClick={cancel}>
+          <X size={15} />
+          <span>Cancel</span>
+        </button>
+        <button
+          className="properties-toggle"
+          aria-label="Toggle properties"
+          aria-expanded={panelOpen}
+          onClick={() => setPanelOpen(!panelOpen)}
+        >
+          <SlidersHorizontal size={18} />
+        </button>
+      </div>
+      <main className="workspace">
+        <nav className="tool-palette" aria-label="Drawing tools">
+          {palette.map(({ tool: t, label, icon: Icon, key }, idx) => (
+            <button
+              key={t}
+              className={`${tool === t ? "selected " : ""}${idx === 3 || idx === 9 ? "tool-divider" : ""}`}
+              aria-label={label}
+              aria-pressed={tool === t}
+              title={`${label}${key ? " · " + key : ""}`}
+              onClick={() => chooseTool(t)}
+            >
+              <Icon size={21} strokeWidth={1.65} />
+              <span>{label}</span>
+            </button>
+          ))}
+          <button
+            className="help-tool"
+            aria-label="Help and shortcuts"
+            onClick={() => setHelp(true)}
+          >
+            <HelpCircle size={21} />
+            <span>Help</span>
+          </button>
+        </nav>
+        <section className="drawing-region">
+          <div className="drawing-topline">
+            <span>
+              <span className="tiny-square" /> FLOOR PLAN{" "}
+              <span className="muted">/</span> <b>DESIGN MODE</b>
+            </span>
+            <span className="private-badge">LOCAL & PRIVATE</span>
+          </div>
+          {!plan.calibration.calibrated && (
+            <div className="calibration-banner">
+              <span>Uncalibrated drawing · distances are drawing units</span>
+              <button onClick={() => setTool("calibrate")}>
+                <Ruler size={14} /> Calibrate scale
+              </button>
+            </div>
+          )}
+          {(tool === "furniture" || tool === "wall" || tool === "room") && (
+            <div className="context-toolbar">
+              {tool === "furniture" ? (
+                <>
+                  <span>PLACE</span>
+                  <select
+                    aria-label="Furniture symbol"
+                    value={kind}
+                    onChange={(e) =>
+                      setKind(e.target.value as RectItem["kind"])
+                    }
+                  >
+                    {[
+                      "sofa",
+                      "table",
+                      "chair",
+                      "bed",
+                      "cabinet",
+                      "counter",
+                      "toilet",
+                      "shower",
+                    ].map((k) => (
+                      <option key={k} value={k}>
+                        {k === "counter"
+                          ? "Kitchen counter"
+                          : k.charAt(0).toUpperCase() + k.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <span>WALL THICKNESS</span>
+                  <input
+                    aria-label="New wall thickness"
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={wallThickness}
+                    onChange={(e) =>
+                      setWallThickness(
+                        Math.max(1, Math.min(200, Number(e.target.value))),
+                      )
+                    }
+                  />
+                  <small>{plan.calibration.calibrated ? "cm" : "units"}</small>
+                </>
+              )}
+            </div>
+          )}
+          <Canvas
+            plan={plan}
+            setPreview={setPlan}
+            commit={commit}
+            selection={selection}
+            setSelection={setSelection}
+            tool={tool}
+            setTool={setTool}
+            snap={snap}
+            kind={kind}
+            wallThickness={wallThickness}
+            camera={camera}
+            setCamera={setCamera}
+            svgRef={svgRef}
+            onMeasure={(a, b, calibrate) => {
+              setMeasure({ a, b, calibrate });
+              setRealDistance("");
+            }}
+            onStatus={(s) => (s.length > 40 ? showNotice(s) : setCoords(s))}
+            onOverlap={setOverlap}
+            cancelToken={cancelToken}
+          />
+          <div className="canvas-bottom">
+            <div className="canvas-bottom-left">
+              <span className="floor-chip">
+                01 <span>Ground floor</span>
+              </span>
+              {overlap.length > 1 && (
+                <div className="dropdown-anchor">
+                  <button
+                    className="overlap-button"
+                    onClick={() => setOverlapOpen(!overlapOpen)}
+                  >
+                    <Layers size={15} />
+                    {overlap.length} overlapping <ChevronDown size={12} />
+                  </button>
+                  {overlapOpen && (
+                    <div className="dropdown overlap-dropdown">
+                      {overlap.slice(0, 40).map((id) => (
+                        <button
+                          key={id}
+                          onClick={() => {
+                            setSelection([id]);
+                            setOverlapOpen(false);
+                            setPanelOpen(true);
+                          }}
+                        >
+                          {plan.items.find((i) => i.id === id)?.name || id}
+                          {selection.includes(id) && <Check size={14} />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="zoom-controls">
+              <button aria-label="Zoom out" onClick={() => zoom(1 / 1.25)}>
+                <Minus size={17} />
+              </button>
+              <span>{Math.round(camera.k * 100)}%</span>
+              <button aria-label="Zoom in" onClick={() => zoom(1.25)}>
+                <Plus size={17} />
+              </button>
+              <span className="zoom-divider" />
+              <button
+                aria-label="Fit drawing"
+                title="Fit drawing · 0"
+                onClick={() => fit()}
+              >
+                <Maximize size={17} />
+              </button>
+            </div>
+          </div>
+        </section>
+        {panelOpen && (
+          <button
+            className="drawer-scrim"
+            aria-label="Close properties"
+            onClick={() => setPanelOpen(false)}
+          />
+        )}
+        <aside className={`inspector ${panelOpen ? "open" : ""}`}>
+          <div className="inspector-tabs">
+            <button
+              className={tab === "properties" ? "active" : ""}
+              onClick={() => setTab("properties")}
+            >
+              <SlidersHorizontal size={15} />
+              Properties
+            </button>
+            <button
+              className={tab === "objects" ? "active" : ""}
+              onClick={() => setTab("objects")}
+            >
+              <Layers size={15} />
+              Objects
+            </button>
+            <button
+              className="drawer-close"
+              aria-label="Close properties panel"
+              onClick={() => setPanelOpen(false)}
+            >
+              <X size={17} />
+            </button>
+          </div>
+          {tab === "properties" ? (
+            <Properties
+              plan={plan}
+              selection={selection}
+              commit={commit}
+              setSelection={setSelection}
+              tool={tool}
+              setTool={setTool}
+              onDuplicate={duplicate}
+              onDelete={del}
+              onError={showNotice}
+            />
+          ) : (
+            <div className="objects-panel">
+              <label className="object-search">
+                <Search size={15} />
+                <input
+                  placeholder="Find objects…"
+                  aria-label="Find objects"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              <div className="objects-summary">
+                {matching.length.toLocaleString()} objects{" "}
+                <button
+                  onClick={() => {
+                    setSelection(plan.items.map((i) => i.id));
+                  }}
+                >
+                  Select all
+                </button>
+              </div>
+              <div className="object-list">
+                {matching.slice(0, 150).map((i) => (
+                  <button
+                    className={selection.includes(i.id) ? "selected" : ""}
+                    key={i.id}
+                    onClick={(e) =>
+                      setSelection(
+                        e.shiftKey
+                          ? [...new Set([...selection, i.id])]
+                          : [i.id],
+                      )
+                    }
+                  >
+                    <span className={`object-type ${i.type}`}>
+                      {i.type === "wall"
+                        ? "━"
+                        : i.type === "vector"
+                          ? "◇"
+                          : i.type === "door"
+                            ? "⌒"
+                            : "□"}
+                    </span>
+                    <span>
+                      {i.name}
+                      <small>{i.type}</small>
+                    </span>
+                    {i.locked && <LockKeyhole size={13} />}
+                  </button>
+                ))}
+              </div>
+              {matching.length > 150 && (
+                <p className="notice">
+                  Showing first 150. Search an object name to find any element.
+                </p>
+              )}
+              <button
+                onClick={() => {
+                  const p = clone(plan);
+                  const lock = !p.items
+                    .filter((i) => i.type === "vector")
+                    .every((i) => i.locked);
+                  p.items.forEach((i) => {
+                    if (i.type === "vector") i.locked = lock;
+                  });
+                  commit(p);
+                }}
+              >
+                Toggle reference-vector locks
+              </button>
+            </div>
+          )}
+          <div className="inspector-footer">
+            <span className="save-dot" /> One floor. Endless possibilities.
+          </div>
+        </aside>
+      </main>
+      <footer className="statusbar">
+        <span>
+          <span className="status-dot" />
+          {selected.length
+            ? `${selected.length} selected`
+            : tool === "select"
+              ? "Ready to design"
+              : palette.find((p) => p.tool === tool)?.label || "Edit nodes"}
+        </span>
+        <span className="navigation-hint">
+          Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
+        </span>
+        <span className="coordinate-readout">
+          {coords} {plan.calibration.calibrated ? "cm" : "units"}
+          <span className="status-separator" />
+          Grid {plan.grid} {plan.calibration.calibrated ? "cm" : "units"}
+        </span>
+      </footer>
+      {notice && (
+        <div role="status" className="toast">
+          {notice}
+          <button
+            aria-label="Dismiss notification"
+            onClick={() => setNotice("")}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+      {busy && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="spinner" />
+            <h2>Preparing your drawing…</h2>
+            <p>Preserving every vector and its drawing order.</p>
+          </div>
+        </div>
+      )}
+      {report && (
+        <div className="modal-backdrop">
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Import report"
+          >
+            <button
+              className="modal-close"
+              aria-label="Close import report"
+              onClick={() => setReport(null)}
+            >
+              <X size={20} />
+            </button>
+            <div className="modal-icon">
+              <Upload size={25} />
+            </div>
+            <span className="eyebrow">SVG IMPORT</span>
+            <h2>Your drawing, ready to edit.</h2>
+            <ul className="report-list">
+              {report.map((r, n) => (
+                <li key={n}>{r}</li>
+              ))}
+            </ul>
+            <div className="modal-actions">
+              <button onClick={() => setReport(null)}>Continue editing</button>
+              <button
+                className="primary"
+                onClick={() => {
+                  setReport(null);
+                  setTool("calibrate");
+                }}
+              >
+                Calibrate scale <Ruler size={16} />
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {measure && (
+        <div className="modal-backdrop">
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={measure.calibrate ? "Calibrate scale" : "Measurement"}
+          >
+            <button
+              className="modal-close"
+              aria-label="Close measurement"
+              onClick={() => setMeasure(null)}
+            >
+              <X size={20} />
+            </button>
+            <div className="modal-icon">
+              <Ruler size={25} />
+            </div>
+            <span className="eyebrow">
+              {measure.calibrate ? "SET THE SCALE" : "POINT TO POINT"}
+            </span>
+            <h2>
+              {measure.calibrate
+                ? "One known distance."
+                : "A little more precise."}
+            </h2>
+            <p className="measure-value">
+              {dist(measure.a, measure.b).toFixed(2)}{" "}
+              <small>
+                {plan.calibration.calibrated ? "cm" : "drawing units"}
+              </small>
+            </p>
+            {measure.calibrate ? (
+              <>
+                <p>
+                  Enter the real distance between your two points. This rescales
+                  the entire floor plan, including objects and annotations.
+                </p>
+                <label className="field">
+                  <span>Real distance in centimeters</span>
+                  <input
+                    autoFocus
+                    aria-label="Real distance in centimeters"
+                    type="number"
+                    min="0.001"
+                    step="any"
+                    placeholder="e.g. 500"
+                    value={realDistance}
+                    onChange={(e) => setRealDistance(e.target.value)}
+                  />
+                </label>
+                <button
+                  className="primary wide"
+                  disabled={!(Number(realDistance) > 0)}
+                  onClick={() => {
+                    try {
+                      const next = calibrate(
+                        plan,
+                        dist(measure.a, measure.b),
+                        Number(realDistance),
+                      );
+                      commit(next);
+                      setMeasure(null);
+                      fit(next);
+                      showNotice(
+                        "Scale calibrated. All distances now use centimeters.",
+                      );
+                    } catch (e) {
+                      showNotice((e as Error).message);
+                    }
+                  }}
+                >
+                  Apply scale <Check size={17} />
+                </button>
+              </>
+            ) : (
+              <div className="modal-actions">
+                <button
+                  onClick={() => {
+                    setMeasure({ ...measure, calibrate: true });
+                  }}
+                >
+                  Use for calibration
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    const i: Item = {
+                      id: uid(),
+                      type: "dimension",
+                      name: "Dimension",
+                      a: measure.a,
+                      b: measure.b,
+                      offset: -30,
+                    };
+                    commit({ ...plan, items: [...plan.items, i] });
+                    setMeasure(null);
+                    setSelection([i.id]);
+                  }}
+                >
+                  Add dimension
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      {help && (
+        <div className="modal-backdrop">
+          <section
+            className="modal help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Planform help"
+          >
+            <button
+              className="modal-close"
+              aria-label="Close help"
+              onClick={() => setHelp(false)}
+            >
+              <X size={20} />
+            </button>
+            <span className="eyebrow">A QUICK FIELD GUIDE</span>
+            <h2>Your next space starts here.</h2>
+            <p>
+              Draw walls by clicking connected corners, or drag a Room. Use
+              Finish or Cancel to stop. Doors and windows attach to
+              architectural walls; imported paths remain ordinary vectors.
+            </p>
+            <p>
+              Drag selected objects to move them. Circular wall handles edit
+              shared corners. A square handle resizes symbols; the upper
+              circular handle rotates. Properties provides exact numbers.
+            </p>
+            <p>
+              Use Box select, Shift-click, Objects search, or the
+              overlapping-object picker for dense drawings. Lock imported
+              reference geometry from Objects. Select two vectors or symbols and
+              use Group in Properties.
+            </p>
+            <p>
+              Scroll to pan; Ctrl/⌘ + scroll or pinch to zoom. Pan tool makes
+              navigation explicit. Every tool and edit action also has a visible
+              control.
+            </p>
+            <div className="shortcuts">
+              <span>V / H / W / F / M</span>
+              <b>Select / Pan / Wall / Furniture / Measure</b>
+              <span>⌘/Ctrl Z / Shift Z</span>
+              <b>Undo / Redo</b>
+              <span>⌘/Ctrl C / V / D</span>
+              <b>Copy / Paste / Duplicate</b>
+              <span>Escape / 0</span>
+              <b>Cancel / Fit drawing</b>
+            </div>
+            <p className="notice">
+              Import first, then calibrate a known distance. Calibrating scales
+              the entire document. Dimensions measure their own endpoints and do
+              not attach to walls. Project downloads preserve every editable
+              object.
+            </p>
+            <button className="primary wide" onClick={() => setHelp(false)}>
+              Start planning <ChevronRight size={17} />
+            </button>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
