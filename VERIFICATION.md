@@ -4,10 +4,18 @@
 
 Planform now uses architectural project schema v2. SVG import, raw SVG content, reference pages and vector-node editing are removed. SVG is retained for internal rendering and export. Agent interaction is through files and atomic command batches; no live MCP endpoint or in-app model is included.
 
+## Automatic room areas update
+
+- `npm test`: **48 tests passed** in five files, including 17 room geometry/presentation tests. New coverage includes inner wall faces, varying thickness, open/degenerate walls, shared and crossing dividers, disconnected rooms, triangles, concave rooms, nested enclosures and wall islands, duplicate/overlapping walls, arbitrary rotations/translations, calibration, history, reopening, uncalibrated display and export labels.
+- Browser check before updating the base, on the narrow layout: drawing a 400 × 400 cm room with 20 cm walls displayed **14.44 m²** on the canvas and in the Properties room/total rows. Changing one wall to 40 cm updated both rows to **14.06 m²**; Undo restored **14.44 m²**. The Properties drawer and in-room label remained readable.
+- Reapplied the room-area changes on `origin/main` commit `4337fbb`, preserving schema v2, the AI drawing workflow and legacy recovery. Browser verification on this base showed the recovered 400 × 400 cm room with its **14.44 m²** canvas/Properties area.
+- Room boundaries use architectural wall footprints. Round corner fills use 64-segment circles; areas are displayed to two decimals in m² after calibration.
+- Room geometry is derived and is not added to the saved project schema. Browser exports and agent CLI SVG/PNG previews include the same room labels. The CLI example validated and rendered successfully; its three room labels were visually inspected in the PNG preview. Geometry analysis failures leave the editor usable and show a message in Room areas.
+
 ## Automated checks
 
-- `npm test`: **31 tests passed** in four files.
-- `npm run build`: TypeScript (including the CLI) and production build passed. Approximately 443 kB JavaScript / 138 kB gzip, 20 kB CSS / 5 kB gzip.
+- `npm test`: **48 tests passed** in five files.
+- `npm run build`: TypeScript (including the CLI) and production build passed. Approximately 476 kB JavaScript / 150 kB gzip, 20 kB CSS / 5 kB gzip.
 - Shared contract coverage: metadata defaults without input mutation; full-precision round trips; example project; source/evidence persistence; invalid units/types/fields; non-finite numbers; zero-length walls; duplicate nested IDs; unsupported group contents; group-depth limits; architectural v1 migration; explicit rejection of legacy SVG projects.
 - Relationship/command coverage: orphaned, out-of-wall and overlapping openings; physical opening offsets; atomic failure; shared corners; corrections within one transaction; explicit cascading deletion; locks on openings and connected walls; missing targets; forbidden structural updates.
 - CLI integration: validate JSON, render a PNG, apply the example batch, reopen the result, and verify invalid input produces machine-readable errors with no output file.

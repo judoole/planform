@@ -65,6 +65,14 @@ Architectural v1 files with no SVG references migrate to v2 on opening. Legacy f
 
 Projects are limited to 15 MB, 50,000 total objects and 15 group levels. Browser recovery is best effort and does not replace downloaded project files. Camera, selection, active tool, clipboard and the 60-entry undo history are session state.
 
+## Automatic room areas
+
+Enclosed architectural walls automatically produce numbered room labels with areas in **m²**. **Room areas** in Properties lists each room and the total, including while walls are selected. Draw rooms with **Room** or close a space with **Wall**; shared and intersecting dividers split rooms automatically. Areas update during wall edits and after undo/redo, calibration and reopening a project.
+
+Areas are measured inside wall faces, excluding wall thickness and internal wall footprints. Sloping walls, concave rooms and nested enclosures are supported. Rounded shared corners use a 64-segment approximation. Doors and windows preserve room boundaries; furniture does not define rooms. Uncalibrated plans show **Set scale** until calibration supplies real-world dimensions.
+
+Room labels are included in browser SVG/PNG exports and agent CLI previews. Rooms are derived from walls rather than saved as separate objects, so existing project files need no migration.
+
 ## Manual drawing
 
 - **Wall** creates connected corners; **Room** creates four walls with a drag. Room is a drawing tool, not a persistent room object. Shared corners use equal endpoint coordinates; split T-junctions into wall segments when they need shared endpoint editing.
@@ -86,6 +94,7 @@ Projects are limited to 15 MB, 50,000 total objects and 15 group levels. Browser
 - `src/AgentPanel.tsx`: guide/schema downloads, JSON file/paste import, preview and command application.
 - `src/Drawing.tsx`, `src/Canvas.tsx`: architectural rendering and pointer interactions.
 - `src/Properties.tsx`, `src/App.tsx`: object/source editors and editor shell.
+- `src/rooms.ts`: enclosed floor detection, wall footprint subtraction, room areas and interior label placement.
 - `src/exports.ts`: browser downloads and SVG/PNG exports.
 
 See [VERIFICATION.md](VERIFICATION.md) for checks and remaining limitations.

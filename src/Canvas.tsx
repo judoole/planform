@@ -27,7 +27,8 @@ import {
   planBounds,
   rotate,
 } from "./model";
-import { DrawItem } from "./Drawing";
+import { DrawItem, RoomLabels } from "./Drawing";
+import type { Room } from "./rooms";
 export type Tool =
   | "select"
   | "box"
@@ -70,6 +71,7 @@ type Gesture = {
 };
 export default function Canvas({
   plan,
+  rooms,
   setPreview,
   commit,
   selection,
@@ -88,6 +90,7 @@ export default function Canvas({
   cancelToken,
 }: {
   plan: Plan;
+  rooms: Room[];
   setPreview: (p: Plan) => void;
   commit: (p: Plan, base?: Plan) => void;
   selection: string[];
@@ -637,6 +640,10 @@ export default function Canvas({
             {plan.items.map((i) => (
               <DrawItem key={i.id} item={i} plan={plan} />
             ))}
+            <RoomLabels
+              rooms={rooms}
+              calibrated={plan.calibration.calibrated}
+            />
           </g>
           <g className="selection-overlay">
             {box && (
