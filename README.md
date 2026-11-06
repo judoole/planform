@@ -20,7 +20,7 @@ Open the printed localhost URL, normally `http://127.0.0.1:5173`. A local server
 
 - Planform automatically keeps the current local draft in this browser. Use **Save project** to download an editable `.planform.json` backup, and **Open** to continue from a saved file.
 - Use **Share → Copy link** to send a snapshot. Anyone with the link can open and edit their own copy. Later changes require a new link. Opening a shared copy leaves the recipient’s local draft intact; they can download their copy to keep changes.
-- The link contains the compressed drawing, including source notes, after `#`. Planform does not upload it to a server. Share it only with people you want to see the drawing. The address before `#` must point to Planform on a host recipients can access; a localhost link only works locally.
+- The link contains the compressed drawing or comparison project, including its source notes, after `#`. Planform does not upload it to a server. Share it only with people you want to see the drawing. The address before `#` must point to Planform on a host recipients can access; a localhost link only works locally.
 - Links support up to 8,000 URL characters and 64 KiB of uncompressed project data. Use the editable project file for larger drawings.
 
 ## Compare two versions of a floor plan
@@ -29,7 +29,7 @@ Open your first file as **Existing**, then use **Load as proposed** to choose a 
 
 Switch between versions in the toolbar to compare from the same pan and zoom. Turn on **Overlay** to trace the inactive drawing in blue behind the active one. For separately drawn files, use the same scale and coordinate origin for the overlay to line up.
 
-**Save project** and browser recovery retain both versions and the active version. Open that file with **Open**. Share links, SVG and PNG exports show the active drawing. To share both versions, send the project file.
+**Save project** and browser recovery retain both versions and the active version. Open that file with **Open**. In **Share**, choose **Existing and Proposed** to send both versions in one link. The recipient can switch versions, use the overlay and edit their own copy. For larger projects, use **Download project** to send the file. SVG and PNG exports show the active drawing.
 
 ## Create a drawing with an agent
 

@@ -177,6 +177,12 @@ function validateComparison(input: ComparisonProject): ComparisonProject {
   return project;
 }
 
+export function validateProjectFile(project: Project): Project {
+  return project.version === 3
+    ? validateComparison(project)
+    : validateProject(project);
+}
+
 export function checkJsonSize(text: string) {
   if (new TextEncoder().encode(text).length > 15_000_000)
     throw new ProjectError([

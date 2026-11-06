@@ -1,24 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy, Download, Link2, X } from "lucide-react";
-import type { Plan } from "./model";
+import { activePlan, versionNames, type Project } from "./project";
 import { createShareUrl } from "./share";
 
+type ShareLink = { snapshot: Project } & ({ url: string } | { error: string });
+
 export default function ShareDialog({
-  plan,
-  versionName,
+  project,
   onClose,
   onDownload,
 }: {
-  plan: Plan;
-  versionName?: string;
+  project: Project;
   onClose: () => void;
   onDownload: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [url, setUrl] = useState("");
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [includeBoth, setIncludeBoth] = useState(false);
+  const [link, setLink] = useState<ShareLink>();
+  const [status, setStatus] = useState<{ message: string; url?: string }>();
+  const snapshot = includeBoth ? project : activePlan(project);
+  const current = link?.snapshot === snapshot ? link : undefined;
+  const url = current && "url" in current ? current.url : "";
+  const error = current && "error" in current ? current.error : "";
   useEffect(() => {
     const modal = dialog.current!;
     modal.showModal();
@@ -26,30 +30,34 @@ export default function ShareDialog({
   }, []);
   useEffect(() => {
     let active = true;
-    createShareUrl(plan, window.location.href).then(
-      (link) => {
-        if (active) setUrl(link);
+    createShareUrl(snapshot, window.location.href).then(
+      (url) => {
+        if (active) setLink({ snapshot, url });
       },
       (e: unknown) => {
         if (!active) return;
-        setError(
-          e instanceof Error ? e.message : "Could not create a share link.",
-        );
+        setLink({
+          snapshot,
+          error:
+            e instanceof Error ? e.message : "Could not create a share link.",
+        });
       },
     );
     return () => {
       active = false;
     };
-  }, [plan]);
+  }, [snapshot]);
 
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(url);
-      setStatus("Link copied.");
+      setStatus({ url, message: "Link copied." });
     } catch {
-      input.current?.focus();
-      input.current?.select();
-      setStatus("Copy the selected link to share it.");
+      if (input.current?.value === url) {
+        input.current.focus();
+        input.current.select();
+      }
+      setStatus({ url, message: "Copy the selected link to share it." });
     }
   }
 
@@ -78,11 +86,24 @@ export default function ShareDialog({
       </span>
       <h2 id="share-title">Share this plan</h2>
       <p>
-        Anyone with the link can open and edit their own copy. The link contains
-        {versionName
-          ? ` the ${versionName} version and its source notes. Download the project to share both versions.`
-          : " the whole project, including any source notes, and captures the plan as it is now."}
+        Anyone with the link can open and edit their own copy. The link includes
+        the source notes for the drawings you share.
       </p>
+      {project.version === 3 && (
+        <label className="field">
+          <span>Include in link</span>
+          <select
+            value={includeBoth ? "both" : "active"}
+            onChange={(e) => {
+              setIncludeBoth(e.target.value === "both");
+              setStatus(undefined);
+            }}
+          >
+            <option value="active">{versionNames[project.active]} only</option>
+            <option value="both">Existing and Proposed</option>
+          </select>
+        </label>
+      )}
       {local && (
         <p>
           This address is local. To share across devices, open Planform at a
@@ -111,9 +132,9 @@ export default function ShareDialog({
           onClick={() => {
             try {
               onDownload();
-              setStatus("Project downloaded.");
+              setStatus({ message: "Project downloaded." });
             } catch (error) {
-              setStatus((error as Error).message);
+              setStatus({ message: (error as Error).message });
             }
           }}
         >
@@ -125,7 +146,9 @@ export default function ShareDialog({
           </button>
         )}
       </div>
-      {status && <p role="status">{status}</p>}
+      {status && (!status.url || status.url === url) && (
+        <p role="status">{status.message}</p>
+      )}
     </dialog>
   );
 }

@@ -1,21 +1,23 @@
-import { parseProject, type Plan } from "./model";
-import { validateProject } from "./validation";
+import type { Project } from "./project";
+import { readProjectFile, validateProjectFile } from "./validation";
 
 const PREFIX = "#plan=";
 const VERSION = "1.";
 const MAX_URL_LENGTH = 8000;
 const MAX_PROJECT_BYTES = 64 * 1024;
 const TOO_LARGE =
-  "This drawing is too large for a share link. Download the project file to share it.";
+  "This selection is too large for a share link. Download the project file to share it.";
 
 export function isShareHash(hash: string) {
   return hash.startsWith(PREFIX);
 }
 
-export async function createShareUrl(plan: Plan, address: string) {
+export async function createShareUrl(project: Project, address: string) {
   const url = new URL(address);
   url.search = "";
-  const bytes = new TextEncoder().encode(JSON.stringify(validateProject(plan)));
+  const bytes = new TextEncoder().encode(
+    JSON.stringify(validateProjectFile(project)),
+  );
   if (bytes.length > MAX_PROJECT_BYTES) throw new Error(TOO_LARGE);
   const stream = new Blob([bytes])
     .stream()
@@ -32,7 +34,7 @@ export async function createShareUrl(plan: Plan, address: string) {
   return url.href;
 }
 
-export async function readShareHash(hash: string): Promise<Plan> {
+export async function readShareHash(hash: string): Promise<Project> {
   if (!isShareHash(hash) || hash.length > MAX_URL_LENGTH)
     throw new Error("This share link is invalid or too long.");
   const versioned = hash.slice(PREFIX.length);
@@ -66,7 +68,7 @@ export async function readShareHash(hash: string): Promise<Plan> {
   } finally {
     reader.releaseLock();
   }
-  return parseProject(
+  return readProjectFile(
     new TextDecoder("utf-8", { fatal: true }).decode(
       output.subarray(0, length),
     ),
