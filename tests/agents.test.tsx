@@ -22,7 +22,7 @@ import {
   ProjectError,
   readProjectFile,
 } from "../src/validation";
-import type { ComparisonProject } from "../src/project";
+import { asMultiProject, type ComparisonProject } from "../src/project";
 import { renderPlanSvg } from "../src/preview";
 import example from "../public/agent/example.planform.json";
 
@@ -208,7 +208,9 @@ describe("comparison project files", () => {
   it("round trips two versions with the same object IDs and independent geometry", () => {
     const project = comparison();
     (project.plans.proposed.items[0] as Wall).b.x = 750.125;
-    expect(readProjectFile(serialize(project))).toEqual(project);
+    expect(readProjectFile(serialize(project))).toEqual(
+      asMultiProject(project),
+    );
   });
 
   it("checks host relationships within the inactive plan", () => {
@@ -458,7 +460,7 @@ describe("agent previews and CLI", () => {
         JSON.stringify(batch([{ op: "delete", ids: [door.id] }])),
       );
       expect(run("validate", input)).toMatchObject({
-        version: 3,
+        version: 4,
         active: "proposed",
       });
       expect(run("render", input, "--out", preview).ok).toBe(true);
@@ -471,13 +473,15 @@ describe("agent previews and CLI", () => {
       expect(run("apply", input, commands, "--out", output).deletedIds).toEqual(
         [door.id],
       );
-      expect(readProjectFile(readFileSync(output, "utf8"))).toEqual({
-        ...project,
-        plans: {
-          ...project.plans,
-          proposed: { ...project.plans.proposed, items: [wall] },
-        },
-      });
+      expect(readProjectFile(readFileSync(output, "utf8"))).toEqual(
+        asMultiProject({
+          ...project,
+          plans: {
+            ...project.plans,
+            proposed: { ...project.plans.proposed, items: [wall] },
+          },
+        }),
+      );
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }

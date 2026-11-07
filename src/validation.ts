@@ -1,8 +1,16 @@
 import Ajv from "ajv";
 import schema from "../public/agent/planform.schema.json";
 import comparisonSchema from "../public/agent/comparison.schema.json";
+import projectSchema from "../public/agent/project.schema.json";
 import type { Item, Plan, RectItem, Wall } from "./model";
-import { planVersions, type ComparisonProject, type Project } from "./project";
+import {
+  asMultiProject,
+  MAX_PROPOSALS,
+  planVersions,
+  type ComparisonProject,
+  type MultiPlanProject,
+  type Project,
+} from "./project";
 
 export type Issue = {
   path: string;
@@ -32,6 +40,7 @@ const ajv = new Ajv({
 }).addSchema(schema, "planform.schema.json");
 const validateSchema = ajv.getSchema("planform.schema.json")!;
 const validateComparisonSchema = ajv.compile(comparisonSchema);
+const validateMultiSchema = ajv.compile(projectSchema);
 const length = (w: Wall) => Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
 
 // Bound recursion before cloning or handing the drawing to the schema validator.
@@ -177,10 +186,61 @@ function validateComparison(input: ComparisonProject): ComparisonProject {
   return project;
 }
 
+function isMultiProject(input: unknown): input is MultiPlanProject {
+  const p = input as Partial<MultiPlanProject> | null;
+  return p?.format === "planform" && p.version === 4;
+}
+
+function validateMultiProject(input: MultiPlanProject): MultiPlanProject {
+  if (Array.isArray(input.drawings)) {
+    if (input.drawings.length > MAX_PROPOSALS + 1)
+      throw new ProjectError([
+        {
+          path: "/drawings",
+          code: "limit",
+          message: `Projects allow one Existing drawing and up to ${MAX_PROPOSALS} proposals.`,
+        },
+      ]);
+    input.drawings.forEach((d, i) =>
+      guardDrawing(d?.plan, `/drawings/${i}/plan`),
+    );
+  }
+  const project = structuredClone(input);
+  validateStructure(project, validateMultiSchema);
+  const issues: Issue[] = [];
+  const ids = new Set<string>();
+  project.drawings.forEach((d, i) => {
+    if (ids.has(d.id))
+      issues.push({
+        path: `/drawings/${i}/id`,
+        code: "duplicate_id",
+        message: "Drawing IDs must be unique.",
+      });
+    ids.add(d.id);
+  });
+  if (project.drawings.filter((d) => d.role === "existing").length !== 1)
+    issues.push({
+      path: "/drawings",
+      code: "existing_count",
+      message: "Projects require exactly one Existing drawing.",
+    });
+  if (!ids.has(project.active))
+    issues.push({
+      path: "/active",
+      code: "missing_drawing",
+      message: "Active must reference a drawing ID.",
+    });
+  if (issues.length) throw new ProjectError(issues);
+  project.drawings.forEach((d, i) =>
+    validateRelationships(d.plan, `/drawings/${i}/plan`),
+  );
+  return project;
+}
+
 export function validateProjectFile(project: Project): Project {
-  return project.version === 3
-    ? validateComparison(project)
-    : validateProject(project);
+  if (isMultiProject(project)) return validateMultiProject(project);
+  if (isComparison(project)) return asMultiProject(validateComparison(project));
+  return validateProject(project);
 }
 
 export function checkJsonSize(text: string) {
@@ -213,13 +273,13 @@ export function readJson(text: string): unknown {
 
 export function readProject(text: string): Plan {
   const input = readJson(text);
-  if (isComparison(input))
+  if (isComparison(input) || isMultiProject(input))
     throw new ProjectError([
       {
         path: "/version",
         code: "comparison_project",
         message:
-          "This file contains two drawings. Use Open project to load both versions.",
+          "This file is a multi-drawing project. Use Open project to load all drawings.",
       },
     ]);
   return readSinglePlan(input);
@@ -227,8 +287,9 @@ export function readProject(text: string): Plan {
 
 export function readProjectFile(text: string): Project {
   const input = readJson(text);
+  if (isMultiProject(input)) return validateMultiProject(input);
   return isComparison(input)
-    ? validateComparison(input)
+    ? asMultiProject(validateComparison(input))
     : readSinglePlan(input);
 }
 

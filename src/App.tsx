@@ -67,21 +67,27 @@ import { furniture, type FurnitureKind } from "./furniture";
 import { download, exportSvg, exportPng } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
+import ProposalManager from "./ProposalManager";
 import { isShareHash, readShareHash } from "./share";
 import {
   activePlan,
-  planVersions,
+  activeDrawingId,
+  projectDrawings,
+  asMultiProject,
+  selectDrawing,
+  addProposal,
+  renameProposal,
+  removeProposal,
+  MAX_PROPOSALS,
   replaceActivePlan,
-  versionNames,
-  type ComparisonProject,
-  type PlanVersion,
+  type ProjectDrawing,
   type Project,
 } from "./project";
 import { checkJsonSize, readProjectFile } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
-const RECOVERY = "planform-recovery-v3";
+const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
   label: string;
@@ -110,6 +116,7 @@ function startup(): Project {
   try {
     const s =
       localStorage.getItem(RECOVERY) ||
+      localStorage.getItem("planform-recovery-v3") ||
       localStorage.getItem("planform-recovery-v2") ||
       localStorage.getItem("planform-recovery-v1");
     if (s) return readProjectFile(s);
@@ -179,6 +186,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     ),
     [preview, setPreview] = useState<Plan | null>(null),
     [overlay, setOverlay] = useState(false),
+    [overlayId, setOverlayId] = useState<string>(),
+    [manageOpen, setManageOpen] = useState(false),
+    [deletedProposals, setDeletedProposals] = useState<
+      { drawing: ProjectDrawing; index: number }[]
+    >([]),
     [selection, setSelection] = useState<string[]>([]),
     [tool, setTool] = useState<Tool>("select"),
     [snap, setSnap] = useState(true),
@@ -211,19 +223,34 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   const svgRef = useRef<SVGSVGElement>(null),
     fileRef = useRef<HTMLInputElement>(null),
     proposedFileRef = useRef<HTMLInputElement>(null),
-    histories = useRef({ existing: new History(), proposed: new History() }),
+    proposalImportTarget = useRef<string | null>(null),
+    histories = useRef(new Map<string, History>()),
     projectRef = useRef(project),
     lastSaved = useRef(project),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
   const saveHandle = useRef<FileSystemFileHandle | null>(null);
-  const version = project.version === 3 ? project.active : "existing";
-  const otherVersion = version === "existing" ? "proposed" : "existing";
+  const version = activeDrawingId(project);
+  const drawings = projectDrawings(project);
+  const activeDrawing = drawings.find((d) => d.id === version)!;
+  const proposals = drawings.filter((d) => d.role === "proposal");
+  const canAddProposal = proposals.length < MAX_PROPOSALS;
+  const reference =
+    drawings.find((d) => d.id === overlayId && d.id !== version) ??
+    drawings.find((d) => d.role === "existing" && d.id !== version) ??
+    drawings.find((d) => d.id !== version);
   const drawing = activePlan(project);
   const plan = preview ?? drawing;
-  const history = histories.current[version];
-  const ghost =
-    overlay && project.version === 3 ? project.plans[otherVersion] : undefined;
+  function drawingHistory(id: string) {
+    let history = histories.current.get(id);
+    if (!history) {
+      history = new History();
+      histories.current.set(id, history);
+    }
+    return history;
+  }
+  const history = drawingHistory(version);
+  const ghost = overlay ? reference?.plan : undefined;
   const { rooms, roomError } = useMemo(() => {
     try {
       return { rooms: findRooms(plan.items), roomError: undefined };
@@ -249,9 +276,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       const current = projectRef.current;
       const before = base || activePlan(current);
       const clean = strict ? next : normalizeOpenings(next);
-      histories.current[
-        current.version === 3 ? current.active : "existing"
-      ].push(before);
+      drawingHistory(activeDrawingId(current)).push(before);
       setPreview(null);
       updateProject(replaceActivePlan(current, clean));
     },
@@ -342,39 +367,88 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     clearDrawingContext();
     updateProject(replaceActivePlan(project, history.redo(drawing)));
   }
-  function switchVersion(next: PlanVersion) {
-    if (project.version !== 3 || next === version) return;
+  function switchVersion(next: string) {
+    if (next === version) return;
     clearDrawingContext();
-    updateProject({ ...project, active: next });
+    updateProject(selectDrawing(projectRef.current, next));
   }
-  function setProposed(proposed: Plan) {
-    const current = projectRef.current;
-    const next: ComparisonProject = {
-      format: "planform",
-      version: 3,
-      name: current.name,
-      active: "proposed",
-      plans: {
-        existing: current.version === 3 ? current.plans.existing : current,
-        proposed,
-      },
-    };
+  function updateProposalProject(next: Project) {
     checkJsonSize(serialize(next));
-    if (current.version === 3)
-      histories.current.proposed.push(current.plans.proposed);
     clearDrawingContext();
     updateProject(next);
   }
-  function duplicateAsProposed() {
-    const existing = projectRef.current;
-    if (existing.version !== 2) return;
+  function createProposal(source: Plan) {
+    updateProposalProject(addProposal(projectRef.current, source));
+    setManageOpen(false);
+  }
+  function duplicateAsProposal(sourceId = version) {
     try {
-      setProposed(clone(existing));
-    } catch {
-      showNotice(
-        "This drawing is too large to duplicate into a 15 MB project.",
-      );
+      const source = projectDrawings(projectRef.current).find(
+        (d) => d.id === sourceId,
+      )!;
+      createProposal(source.plan);
+    } catch (error) {
+      showNotice((error as Error).message);
     }
+  }
+  function renameActiveProposal(name: string) {
+    try {
+      updateProposalProject(renameProposal(projectRef.current, version, name));
+      showNotice("Proposal renamed.");
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
+  function deleteActiveProposal() {
+    const current = projectRef.current;
+    const entries = projectDrawings(current);
+    try {
+      updateProposalProject(removeProposal(current, version));
+      const deleted = [
+        ...deletedProposals,
+        {
+          drawing: activeDrawing,
+          index: entries.findIndex((d) => d.id === version),
+        },
+      ];
+      if (deleted.length > MAX_PROPOSALS) {
+        const expired = deleted.shift()!;
+        histories.current.delete(expired.drawing.id);
+      }
+      setDeletedProposals(deleted);
+      showNotice(
+        `Deleted ${activeDrawing.name}. Use Restore last deleted to undo.`,
+      );
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
+  function restoreProposal() {
+    const deleted = deletedProposals.at(-1);
+    if (!deleted) return;
+    try {
+      const current = asMultiProject(projectRef.current);
+      if (
+        current.drawings.filter((d) => d.role === "proposal").length >=
+        MAX_PROPOSALS
+      )
+        throw Error(`Projects allow up to ${MAX_PROPOSALS} proposals.`);
+      const restored = [...current.drawings];
+      restored.splice(deleted.index, 0, deleted.drawing);
+      updateProposalProject({
+        ...current,
+        active: deleted.drawing.id,
+        drawings: restored,
+      });
+      setDeletedProposals((entries) => entries.slice(0, -1));
+      showNotice("Proposal restored, including its edit history.");
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
+  function chooseProposalFile(replace = false) {
+    proposalImportTarget.current = replace ? version : null;
+    proposedFileRef.current?.click();
   }
   function del() {
     const ids = selection.filter(
@@ -497,7 +571,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     saveHandle.current = null;
     clearDrawingContext();
     setOverlay(false);
-    histories.current = { existing: new History(), proposed: new History() };
+    histories.current = new Map();
+    setDeletedProposals([]);
+    setOverlayId(undefined);
+    setManageOpen(false);
     updateProject(next);
   }
   function newProject() {
@@ -524,8 +601,26 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         throw Error("Files must be smaller than 15 MB.");
       const contents = await file.text();
       if (target === "proposed") {
-        setProposed(parseProject(contents));
-        showNotice("Drawing loaded as Proposed.");
+        const imported = parseProject(contents);
+        const targetId = proposalImportTarget.current;
+        const current = projectRef.current;
+        if (targetId) {
+          const entry = projectDrawings(current).find((d) => d.id === targetId);
+          if (!entry || entry.role !== "proposal")
+            throw Error("Choose a proposal to replace.");
+          const next = replaceActivePlan(
+            selectDrawing(current, targetId),
+            imported,
+          );
+          checkJsonSize(serialize(next));
+          drawingHistory(targetId).push(entry.plan);
+          updateProposalProject(next);
+          setManageOpen(false);
+          showNotice("Proposal replaced. Undo restores its previous drawing.");
+        } else {
+          createProposal(imported);
+          showNotice("Drawing imported as a new proposal.");
+        }
         return;
       }
       const next = readProjectFile(contents);
@@ -548,8 +643,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     try {
       const svg = exportSvg(svgRef.current!, planBounds(plan));
       const name =
-        project.version === 3
-          ? `${project.name} - ${versionNames[version]}`
+        project.version !== 2
+          ? `${project.name} - ${activeDrawing.name}`
           : plan.name;
       if (png) await exportPng(svg, `${name}.png`);
       else download(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
@@ -562,7 +657,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
-      if (shareOpen || busy) return;
+      if (shareOpen || manageOpen || saveOpen || busy) return;
       const el = e.target as HTMLElement;
       if (el.closest('input,textarea,select,[contenteditable="true"]')) return;
       const mod = e.metaKey || e.ctrlKey,
@@ -786,41 +881,70 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <span>Ground floor</span>
             <small>01</small>
           </div>
-          <div className="plan-versions" role="group" aria-label="Plan version">
-            {project.version === 2 ? (
+          <div
+            className="plan-versions"
+            role="group"
+            aria-label="Plan versions"
+          >
+            <select
+              aria-label="Active drawing"
+              value={version}
+              onChange={(e) => switchVersion(e.target.value)}
+            >
+              {drawings.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+            <button
+              disabled={!canAddProposal}
+              title={
+                canAddProposal
+                  ? "Copy the active drawing as a new proposal"
+                  : `Maximum of ${MAX_PROPOSALS} proposals reached`
+              }
+              onClick={() => duplicateAsProposal()}
+            >
+              <Copy size={14} /> New proposal
+            </button>
+            <button
+              onClick={() => {
+                setNotice("");
+                setManageOpen(true);
+              }}
+            >
+              Manage proposals{" "}
+              <span className="proposal-count">
+                {proposals.length}/{MAX_PROPOSALS}
+              </span>
+            </button>
+            {reference && (
               <>
-                <span className="plan-version-name">Existing</span>
-                <button onClick={duplicateAsProposed}>
-                  <Copy size={14} /> Duplicate as proposed
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="plan-switch">
-                  {planVersions.map((option) => (
-                    <button
-                      key={option}
-                      aria-pressed={version === option}
-                      onClick={() => switchVersion(option)}
-                    >
-                      {versionNames[option]}
-                    </button>
-                  ))}
-                </div>
                 <button
                   className="plan-overlay-toggle"
                   aria-pressed={overlay}
-                  title="Show the other version as a reference"
                   onClick={() => setOverlay(!overlay)}
                 >
                   <Layers size={14} /> Overlay
                 </button>
+                {overlay && (
+                  <select
+                    aria-label="Overlay drawing"
+                    value={reference.id}
+                    onChange={(e) => setOverlayId(e.target.value)}
+                  >
+                    {drawings
+                      .filter((entry) => entry.id !== version)
+                      .map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
               </>
             )}
-            <button onClick={() => proposedFileRef.current?.click()}>
-              <FolderOpen size={14} />
-              {project.version === 2 ? "Load as proposed" : "Replace proposed"}
-            </button>
           </div>
         </div>
         <div className="toolbar-separator" />
@@ -913,9 +1037,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <span className="tiny-square" /> FLOOR PLAN{" "}
               <span className="muted">/</span>{" "}
               <b className={ghost ? "plan-overlay-key" : undefined}>
-                {ghost
-                  ? `${versionNames[otherVersion]} overlay`
-                  : "DESIGN MODE"}
+                {ghost ? `${reference!.name} overlay` : "DESIGN MODE"}
               </b>
             </span>
             <span className="private-badge">
@@ -1196,6 +1318,25 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           </div>
         </div>
       )}
+      {manageOpen && (
+        <ProposalManager
+          key={version}
+          drawing={activeDrawing}
+          canAdd={canAddProposal}
+          canRestore={canAddProposal && deletedProposals.length > 0}
+          notice={notice}
+          onClose={() => setManageOpen(false)}
+          onRename={renameActiveProposal}
+          onDuplicate={() => duplicateAsProposal()}
+          onDuplicateExisting={() =>
+            duplicateAsProposal(drawings.find((d) => d.role === "existing")!.id)
+          }
+          onImport={() => chooseProposalFile()}
+          onReplace={() => chooseProposalFile(true)}
+          onDelete={deleteActiveProposal}
+          onRestore={restoreProposal}
+        />
+      )}
       {shareOpen && (
         <ShareDialog
           project={project}
@@ -1364,8 +1505,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <b>Cancel / Fit drawing</b>
             </div>
             <p className="notice">
-              Dimensions measure their own endpoints and do not attach to
-              walls. Project downloads preserve every editable object.
+              Dimensions measure their own endpoints and do not attach to walls.
+              Project downloads preserve every editable object.
             </p>
             <p className="github-help">
               Planform is open source.{" "}

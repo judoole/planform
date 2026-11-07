@@ -25,15 +25,21 @@ The CLI returns machine-readable JSON, exits nonzero on failure, and requires a 
 
 Command batches use [commands.schema.json](../public/agent/commands.schema.json). Supported operations:
 
-| Operation | Purpose |
-| --- | --- |
-| `add` | Add typed architectural items with stable IDs |
-| `opening` | Place a door/window by host wall and center distance in centimeters |
-| `corner` | Move a wall endpoint and every wall sharing that coordinate |
-| `update` | Change object properties while preserving ID, type, endpoints and group structure |
-| `delete` | Remove named objects; require explicit cascading to remove a wall's hosted openings |
+| Operation | Purpose                                                                             |
+| --------- | ----------------------------------------------------------------------------------- |
+| `add`     | Add typed architectural items with stable IDs                                       |
+| `opening` | Place a door/window by host wall and center distance in centimeters                 |
+| `corner`  | Move a wall endpoint and every wall sharing that coordinate                         |
+| `update`  | Change object properties while preserving ID, type, endpoints and group structure   |
+| `delete`  | Remove named objects; require explicit cascading to remove a wall's hosted openings |
 
-Batches apply in order and validate the final result atomically. They respect locks and never silently shrink, reposition or discard openings. A failed batch leaves the input unchanged and produces no output project. Successful batches report changed and deleted IDs. Use **AI drawings → Edits to the current drawing** to preview and apply the same batches in the browser as one history entry. For a comparison project, the CLI validates both versions, renders the saved active version and applies batches to it while keeping both drawings in the output file. The browser applies batches to the selected version.
+Batches apply in order and validate the final result atomically. They respect locks and never silently shrink, reposition or discard openings. A failed batch leaves the input unchanged and produces no output project. Successful batches report changed and deleted IDs. Use **AI drawings → Edits to the current drawing** to preview and apply the same batches in the browser as one history entry. For multi-drawing projects, the CLI validates all drawings, renders the saved active drawing and applies batches to it while keeping every drawing in the output file. Add `--plan <id>` to render or edit a particular drawing, including an inactive proposal. Targeted edits preserve the saved active ID; unknown IDs fail without producing output. `validate` reports every drawing ID, name, role, object count and warnings. The browser applies batches to the selected drawing.
+
+```sh
+npm run plan -- validate project.planform.json
+npm run plan -- render project.planform.json --plan proposal-id --out preview.png
+npm run plan -- apply project.planform.json edits.json --plan proposal-id --out revised.planform.json
+```
 
 The shared command/validation layer can be exposed through MCP later. This version does not include a live agent connection, an MCP server, an embedded model, or automatic PDF conversion.
 
@@ -51,4 +57,4 @@ The shared command/validation layer can be exposed through MCP later. This versi
 
 ## Schemas and examples
 
-The drawing schema v2 is [planform.schema.json](../public/agent/planform.schema.json), the two-drawing comparison schema v3 is [comparison.schema.json](../public/agent/comparison.schema.json), and command schema v1 is [commands.schema.json](../public/agent/commands.schema.json). The bundled example drawing is [example.planform.json](../public/agent/example.planform.json).
+The drawing schema v2 is [planform.schema.json](../public/agent/planform.schema.json), the multi-drawing project schema v4 is [project.schema.json](../public/agent/project.schema.json), the legacy two-drawing comparison schema v3 is [comparison.schema.json](../public/agent/comparison.schema.json), and command schema v1 is [commands.schema.json](../public/agent/commands.schema.json). The bundled example drawing is [example.planform.json](../public/agent/example.planform.json).

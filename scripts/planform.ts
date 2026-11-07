@@ -3,7 +3,12 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import sharp from "sharp";
 import { serialize } from "../src/model";
-import { activePlan, planVersions, replaceActivePlan } from "../src/project";
+import {
+  activeDrawingId,
+  activePlan,
+  projectDrawings,
+  replaceDrawingPlan,
+} from "../src/project";
 import { applyCommands } from "../src/commands";
 import { renderPlanSvg } from "../src/preview";
 import {
@@ -17,24 +22,36 @@ import {
 const args = process.argv.slice(2),
   [action, filename] = args;
 const usage =
-  "Usage: npm run plan -- validate <project.json> | render <project.json> --out <preview.png|preview.svg> | apply <project.json> <commands.json> --out <result.planform.json>";
+  "Usage: npm run plan -- validate <project.json> [--plan <id>] | render <project.json> [--plan <id>] --out <preview.png|preview.svg> | apply <project.json> <commands.json> [--plan <id>] --out <result.planform.json>";
 try {
   if (!["validate", "render", "apply"].includes(action) || !filename)
     throw Error(usage);
   const positional = action === "apply" ? 3 : 2;
-  if (
-    args.slice(positional).length &&
-    !(args.length === positional + 2 && args[positional] === "--out")
-  )
-    throw Error(usage);
-  const output =
-    args[positional] === "--out" ? args[positional + 1] : undefined;
+  const options = new Map<string, string>();
+  for (let i = positional; i < args.length; i += 2) {
+    const flag = args[i],
+      value = args[i + 1];
+    if (
+      !["--out", "--plan"].includes(flag) ||
+      !value ||
+      value.startsWith("--") ||
+      options.has(flag)
+    )
+      throw Error(usage);
+    options.set(flag, value);
+  }
+  const output = options.get("--out");
   if (action === "validate" && output) throw Error(usage);
   if (action !== "validate" && !output) throw Error(usage);
   if (output && resolve(output) === resolve(filename))
     throw Error("Use a separate output path to preserve the source project.");
   const project = readProjectFile(await readFile(filename, "utf8"));
-  const plan = activePlan(project);
+  const targetId = options.get("--plan") ?? activeDrawingId(project);
+  const target = projectDrawings(project).find(
+    (drawing) => drawing.id === targetId,
+  );
+  if (!target) throw Error(`Unknown drawing ID "${targetId}".`);
+  const plan = options.has("--plan") ? target.plan : activePlan(project);
   if (action === "validate") {
     process.stdout.write(
       JSON.stringify(
@@ -43,16 +60,17 @@ try {
           version: project.version,
           objects: plan.items.length,
           warnings: projectWarnings(plan),
-          ...(project.version === 3 && {
+          ...(project.version !== 2 && {
             active: project.active,
             plans: Object.fromEntries(
-              planVersions.map((version) => {
-                const drawing = project.plans[version];
+              projectDrawings(project).map((drawing) => {
                 return [
-                  version,
+                  drawing.id,
                   {
-                    objects: drawing.items.length,
-                    warnings: projectWarnings(drawing),
+                    name: drawing.name,
+                    role: drawing.role,
+                    objects: drawing.plan.items.length,
+                    warnings: projectWarnings(drawing.plan),
                   },
                 ];
               }),
@@ -81,7 +99,8 @@ try {
       plan,
       readJson(await readFile(args[2], "utf8")),
     );
-    const contents = serialize(replaceActivePlan(project, result.plan)) + "\n";
+    const contents =
+      serialize(replaceDrawingPlan(project, targetId, result.plan)) + "\n";
     checkJsonSize(contents);
     await writeFile(output!, contents);
     process.stdout.write(

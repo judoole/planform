@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy, Download, Link2, X } from "lucide-react";
-import { activePlan, versionNames, type Project } from "./project";
+import {
+  activeDrawingId,
+  activePlan,
+  projectDrawings,
+  type Project,
+} from "./project";
 import { createShareUrl } from "./share";
 
 type ShareLink = { snapshot: Project } & ({ url: string } | { error: string });
@@ -16,10 +21,10 @@ export default function ShareDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [includeBoth, setIncludeBoth] = useState(false);
+  const [includeAll, setIncludeAll] = useState(false);
   const [link, setLink] = useState<ShareLink>();
   const [status, setStatus] = useState<{ message: string; url?: string }>();
-  const snapshot = includeBoth ? project : activePlan(project);
+  const snapshot = includeAll ? project : activePlan(project);
   const current = link?.snapshot === snapshot ? link : undefined;
   const url = current && "url" in current ? current.url : "";
   const error = current && "error" in current ? current.error : "";
@@ -89,18 +94,25 @@ export default function ShareDialog({
         Anyone with the link can open and edit their own copy. The link includes
         the source notes for the drawings you share.
       </p>
-      {project.version === 3 && (
+      {project.version !== 2 && (
         <label className="field">
           <span>Include in link</span>
           <select
-            value={includeBoth ? "both" : "active"}
+            value={includeAll ? "all" : "active"}
             onChange={(e) => {
-              setIncludeBoth(e.target.value === "both");
+              setIncludeAll(e.target.value === "all");
               setStatus(undefined);
             }}
           >
-            <option value="active">{versionNames[project.active]} only</option>
-            <option value="both">Existing and Proposed</option>
+            <option value="active">
+              {
+                projectDrawings(project).find(
+                  (d) => d.id === activeDrawingId(project),
+                )!.name
+              }{" "}
+              only
+            </option>
+            <option value="all">Entire project</option>
           </select>
         </label>
       )}

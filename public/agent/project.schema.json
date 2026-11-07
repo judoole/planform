@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Planform project v4",
+  "description": "One existing drawing and up to ten named proposals, each using Planform v2. Drawing IDs must be unique and active must reference a drawing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "name", "active", "drawings"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "planform" },
+    "version": { "const": 4 },
+    "name": { "type": "string", "maxLength": 200 },
+    "active": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "drawings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 11,
+      "contains": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "const": "existing" } }
+      },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "role", "plan"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "role": { "enum": ["existing", "proposal"] },
+          "plan": { "$ref": "planform.schema.json" }
+        }
+      }
+    }
+  }
+}

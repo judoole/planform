@@ -4,7 +4,12 @@ import { deflateSync } from "node:zlib";
 import { expect, it } from "vitest";
 import example from "../public/agent/example.planform.json";
 import { parseProject } from "../src/model";
-import type { ComparisonProject } from "../src/project";
+import {
+  asMultiProject,
+  addProposal,
+  renameProposal,
+  type ComparisonProject,
+} from "../src/project";
 import { createShareUrl, readShareHash } from "../src/share";
 
 const address = "https://example.com/planform/";
@@ -34,7 +39,7 @@ it("round trips the full editable plan, including source evidence and Unicode, a
 
 it("round trips both drawings and the selected version in a comparison link", async () => {
   const url = new URL(await createShareUrl(comparison, address));
-  expect(await readShareHash(url.hash)).toEqual(comparison);
+  expect(await readShareHash(url.hash)).toEqual(asMultiProject(comparison));
 });
 
 it("rejects damaged, truncated or unsupported links", async () => {
@@ -109,4 +114,30 @@ it("limits both link length and decompressed project size", async () => {
   await expect(
     readShareHash(hashFor(JSON.stringify(largeComparison))),
   ).rejects.toThrow(/too large/);
+});
+
+it("round trips ten named proposals and migrates historical v3 links", async () => {
+  let project = asMultiProject(plan);
+  for (let i = 1; i <= 10; i++)
+    project = addProposal(project, plan, `proposal-${i}`);
+  project = renameProposal(project, project.active, "Åpent kjøkken 🏠");
+  const url = new URL(await createShareUrl(project, address));
+  expect(await readShareHash(url.hash)).toEqual(project);
+  expect(await readShareHash(hashFor(JSON.stringify(comparison)))).toEqual(
+    asMultiProject(comparison),
+  );
+});
+
+it("rejects invalid inactive proposals in both directions", async () => {
+  const project = addProposal(plan, plan, "proposal");
+  project.drawings[0].plan = {
+    ...plan,
+    items: plan.items.filter((i) => i.type !== "wall"),
+  };
+  await expect(createShareUrl(project, address)).rejects.toThrow(
+    /drawings\/0\/plan\/items.*hostId/,
+  );
+  await expect(readShareHash(hashFor(JSON.stringify(project)))).rejects.toThrow(
+    /drawings\/0\/plan\/items.*hostId/,
+  );
 });
