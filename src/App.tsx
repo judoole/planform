@@ -24,7 +24,6 @@ import {
   Redo2,
   Magnet,
   Download,
-  Upload,
   FolderOpen,
   FilePlus2,
   ChevronDown,
@@ -66,7 +65,6 @@ import {
 } from "./model";
 import { furniture, type FurnitureKind } from "./furniture";
 import { download, exportSvg, exportPng } from "./exports";
-import AgentPanel from "./AgentPanel";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
 import { isShareHash, readShareHash } from "./share";
@@ -197,7 +195,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [exportMenu, setExportMenu] = useState(false),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
-    [agentOpen, setAgentOpen] = useState(false),
     [shareOpen, setShareOpen] = useState(false),
     [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -573,11 +570,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       if (e.key === "Escape") {
         cancel();
         setMeasure(null);
-        setAgentOpen(false);
         setHelp(false);
         return;
       }
-      if (agentOpen) return;
       if (mod && ["s", "o"].includes(k)) {
         e.preventDefault();
         if (k === "s") save();
@@ -705,14 +700,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <FolderOpen size={16} />
             <span>Open</span>
           </button>
-          <button
-            onClick={() => setAgentOpen(true)}
-            title="Create drawings with an AI agent"
-            className="import-button"
-          >
-            <Upload size={16} />
-            <span>AI drawings</span>
-          </button>
           <button onClick={() => save()} title="Download editable project">
             <Download size={16} />
             <span>Save project</span>
@@ -766,14 +753,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             }}
           >
             Open project
-          </button>
-          <button
-            onClick={() => {
-              setAgentOpen(true);
-              setMenu(false);
-            }}
-          >
-            AI drawings
           </button>
           <button
             onClick={() => {
@@ -1217,16 +1196,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           </div>
         </div>
       )}
-      {agentOpen && (
-        <AgentPanel
-          plan={drawing}
-          onClose={() => setAgentOpen(false)}
-          onApply={(next) => {
-            openDrawing(next);
-            setAgentOpen(false);
-          }}
-        />
-      )}
       {shareOpen && (
         <ShareDialog
           project={project}
@@ -1367,8 +1336,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <h2>Your next space starts here.</h2>
             <p>
               Draw walls by clicking connected corners, or drag a Room. Use
-              Finish or Cancel to stop. Doors and windows attach to walls. AI
-              drawings opens projects created by your agent.
+              Finish or Cancel to stop. Doors and windows attach to walls.
             </p>
             <p>
               Drag selected objects to move them. Circular wall handles edit
@@ -1396,10 +1364,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <b>Cancel / Fit drawing</b>
             </div>
             <p className="notice">
-              Use AI drawings for instructions, an example project, and
-              validated imports. Dimensions measure their own endpoints and do
-              not attach to walls. Project downloads preserve every editable
-              object.
+              Dimensions measure their own endpoints and do not attach to
+              walls. Project downloads preserve every editable object.
             </p>
             <button className="primary wide" onClick={() => setHelp(false)}>
               Start planning <ChevronRight size={17} />
