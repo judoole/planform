@@ -808,9 +808,6 @@ export default function Canvas({
           <button className="primary" onClick={() => setTool("wall")}>
             Draw your first wall <span>↗</span>
           </button>
-          <small>
-            Open a project from your AI agent, or draw a room to start.
-          </small>
         </div>
       )}
     </div>
