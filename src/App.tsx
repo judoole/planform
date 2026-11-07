@@ -87,6 +87,7 @@ import { checkJsonSize, readProjectFile } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
+import AgentHelp from "./AgentHelp";
 const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
@@ -1475,6 +1476,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             </button>
             <span className="eyebrow">A QUICK FIELD GUIDE</span>
             <h2>Your next space starts here.</h2>
+            <AgentHelp
+              plan={drawing}
+              selection={selection}
+              drawing={activeDrawing}
+            />
             <p>
               Draw walls by clicking connected corners, or drag a Room. Use
               Finish or Cancel to stop. Doors and windows attach to walls.
