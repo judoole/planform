@@ -1,0 +1,13 @@
+# File format and limitations
+
+Reference for Planform project structure, compatibility, and supported drawing constraints.
+
+Planform v2 is architectural JSON in centimeters, with X right and Y down. Wall endpoints describe **centerlines**; openings refer to a host wall by ID and store center position as a fraction of its length. Rectangles rotate clockwise about their x/y anchor. The drawing guide specifies full conventions, door orientation and all supported objects.
+
+The browser and CLI share the drawing schema and the [comparison project schema](../public/agent/comparison.schema.json). Single drawings use v2. A comparison project uses v3 to store two v2 drawings and the active version. Relationship checks reject duplicate IDs within a drawing, zero-length walls, orphaned openings, out-of-wall openings and overlaps. Errors identify JSON paths and, for relationship failures, affected object IDs. Imports fill documented metadata defaults but never repair geometry. Schema validity alone does not establish measurement accuracy or building feasibility.
+
+Architectural v1 files with no SVG references migrate to v2 on opening. Legacy files containing vectors, definitions or reference pages are rejected with an explanation rather than partially loaded. SVG import, arbitrary embedded markup and vector-node editing have been removed. SVG remains the internal drawing renderer and an export format. The editor writes recovery to a new key and can still read the original v1 and v2 keys.
+
+Projects are limited to 15 MB per file, 50,000 objects per drawing and 15 group levels. Browser recovery is best effort and does not replace downloaded project files. Camera, overlay visibility, selection, active tool, clipboard and each version's 60-entry undo history are session state.
+
+See [VERIFICATION.md](../VERIFICATION.md) for verification history and remaining implementation limitations.
