@@ -645,6 +645,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   );
   return (
     <div className="app-shell">
+      <a
+        className="github-ribbon"
+        href="https://github.com/judoole/planform"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Fork Planform on GitHub"
+      >
+        Fork me on GitHub
+      </a>
       <header className="topbar">
         <a
           className="brand"
