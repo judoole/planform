@@ -68,6 +68,7 @@ import { furniture, type FurnitureKind } from "./furniture";
 import { download, exportSvg, exportPng } from "./exports";
 import AgentPanel from "./AgentPanel";
 import ShareDialog from "./ShareDialog";
+import SaveDialog from "./SaveDialog";
 import { isShareHash, readShareHash } from "./share";
 import {
   activePlan,
@@ -198,6 +199,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [notice, setNotice] = useState(""),
     [agentOpen, setAgentOpen] = useState(false),
     [shareOpen, setShareOpen] = useState(false),
+    [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [autosave, setAutosave] = useState("Saved locally"),
     [coords, setCoords] = useState("0.0, 0.0"),
@@ -217,6 +219,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     lastSaved = useRef(project),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
+  const saveHandle = useRef<FileSystemFileHandle | null>(null);
   const version = project.version === 3 ? project.active : "existing";
   const otherVersion = version === "existing" ? "proposed" : "existing";
   const drawing = activePlan(project);
@@ -437,14 +440,52 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       `${current.name || "Untitled"}.planform.json`,
     );
   }
-  function save() {
+  async function save(filename?: string) {
     try {
-      downloadProject();
+      if (!filename) {
+        const current = projectRef.current;
+        const contents = serialize(current);
+        checkJsonSize(contents);
+        const fileName = `${current.name || "Untitled"}.planform.json`;
+        const pickerWindow = window as Window & {
+          showSaveFilePicker?: (options: {
+            suggestedName: string;
+            types: { description: string; accept: Record<string, string[]> }[];
+          }) => Promise<FileSystemFileHandle>;
+        };
+        if (saveHandle.current || pickerWindow.showSaveFilePicker) {
+          const handle =
+            saveHandle.current ??
+            (await pickerWindow.showSaveFilePicker!({
+              suggestedName: fileName,
+              types: [
+                {
+                  description: "Planform project",
+                  accept: { "application/json": [".planform.json", ".json"] },
+                },
+              ],
+            }));
+          const writable = await handle.createWritable();
+          await writable.write(contents);
+          await writable.close();
+          saveHandle.current = handle;
+          showNotice("Project saved. Future saves will update this file.");
+          return;
+        }
+        setSaveOpen(true);
+        return;
+      }
+      const current = projectRef.current;
+      const contents = serialize(current);
+      checkJsonSize(contents);
+      download(new Blob([contents], { type: "application/json" }), filename);
+      setSaveOpen(false);
       showNotice(
         "Project downloaded. Open the JSON file to continue editing later.",
       );
     } catch (error) {
-      showNotice((error as Error).message);
+      if ((error as DOMException).name !== "AbortError")
+        showNotice((error as Error).message);
     }
   }
   function openDrawing(next: Plan) {
@@ -456,12 +497,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     );
   }
   function replaceProject(next: Project) {
+    saveHandle.current = null;
     clearDrawingContext();
     setOverlay(false);
     histories.current = { existing: new History(), proposed: new History() };
     updateProject(next);
   }
   function newProject() {
+    saveHandle.current = null;
     if (project.version === 2) {
       clearDrawingContext();
       commit(emptyPlan());
@@ -489,6 +532,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         return;
       }
       const next = readProjectFile(contents);
+      saveHandle.current = null;
       if (next.version === 2 && projectRef.current.version === 2) {
         openDrawing(next);
       } else {
@@ -669,7 +713,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <Upload size={16} />
             <span>AI drawings</span>
           </button>
-          <button onClick={save} title="Download editable project">
+          <button onClick={() => save()} title="Download editable project">
             <Download size={16} />
             <span>Save project</span>
           </button>
@@ -1188,6 +1232,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           project={project}
           onClose={() => setShareOpen(false)}
           onDownload={downloadProject}
+        />
+      )}
+      {saveOpen && (
+        <SaveDialog
+          initialName={projectRef.current.name || "Untitled"}
+          onClose={() => setSaveOpen(false)}
+          onSave={(filename) => void save(filename)}
         />
       )}
       {measure && (
