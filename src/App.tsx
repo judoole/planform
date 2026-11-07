@@ -645,15 +645,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   );
   return (
     <div className="app-shell">
-      <a
-        className="github-ribbon"
-        href="https://github.com/judoole/planform"
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Fork Planform on GitHub"
-      >
-        Fork me on GitHub
-      </a>
       <header className="topbar">
         <a
           className="brand"
@@ -1375,6 +1366,17 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <p className="notice">
               Dimensions measure their own endpoints and do not attach to
               walls. Project downloads preserve every editable object.
+            </p>
+            <p className="github-help">
+              Planform is open source.{" "}
+              <a
+                href="https://github.com/judoole/planform"
+                target="_blank"
+                rel="noreferrer"
+              >
+                View the project on GitHub
+              </a>
+              .
             </p>
             <button className="primary wide" onClick={() => setHelp(false)}>
               Start planning <ChevronRight size={17} />

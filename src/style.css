@@ -80,30 +80,6 @@ button svg {
   overflow: hidden;
   position: relative;
 }
-.github-ribbon {
-  position: absolute;
-  z-index: 20;
-  top: 25px;
-  right: -48px;
-  width: 190px;
-  padding: 7px 0;
-  transform: rotate(45deg);
-  background: #1c5e49;
-  color: #fff;
-  text-align: center;
-  text-decoration: none;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.2px;
-  box-shadow: 0 2px 5px #1d392b33;
-}
-.github-ribbon:hover {
-  background: #174b3b;
-}
-.github-ribbon:focus-visible {
-  outline: 2px solid #318b6d;
-  outline-offset: 3px;
-}
 .topbar {
   height: 78px;
   flex-shrink: 0;
@@ -1075,6 +1051,11 @@ button svg {
   line-height: 1.85;
   font-size: 12px;
   color: #7f8b74;
+}
+.github-help a {
+  color: #1c5e49;
+  font-weight: 600;
+  text-underline-offset: 2px;
 }
 .report-list {
   padding-left: 17px;
