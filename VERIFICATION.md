@@ -1,8 +1,16 @@
-# Verification - 5 November 2026
+# Verification - 7 November 2026
 
 ## Current implementation
 
 Planform now uses architectural project schema v2. SVG import, raw SVG content, reference pages and vector-node editing are removed. SVG is retained for internal rendering and export. Agent interaction is through files and atomic command batches; no live MCP endpoint or in-app model is included.
+
+## Multiple proposals
+
+- Project schema v4 holds exactly one Existing drawing and up to ten named proposals, with stable drawing IDs and an active ID. Every nested drawing uses schema v2. The shared validator checks drawing IDs, the active reference, roles and all inactive geometry. Validated v3 files and historical share links migrate without changing their drawing data; single v1/v2 architectural files remain supported.
+- The editor supports copying the active drawing or Existing, importing a new proposal, renaming, replacing, deleting and restoring proposals. Histories are created per drawing ID; replacements are undoable within the target proposal. The last ten deleted drawings and their histories can be restored within the current session. They are not serialized. Recovery uses `planform-recovery-v4` and preserves older keys.
+- In-app browser checks covered creating ten proposals, disabled creation at the limit, Unicode names, importing the bundled 29-object example as a new proposal, deleting/restoring it, selecting another proposal for overlay, and reopening all drawings with the saved active ID. An Entire project share link opened a separate editable copy with all ten proposals, the active selection and source notes. Narrow and desktop layouts were inspected; physical touch devices were not tested.
+- `npm test`: **77 tests passed** in nine files. Coverage includes 0/1/5/10 proposals, rejection of an eleventh, invalid inactive geometry, duplicate/missing drawing references, independent geometry/source/calibration, v3 migration, historical links, v2/v3 recovery preservation, separate undo/redo, deletion restoration, replacement failures and targeted CLI operations. A targeted CLI edit keeps all other drawings and the saved active ID unchanged; unknown IDs produce no output file.
+- `npm run build` and the required Prettier check passed. The example passed CLI validation, PNG rendering, command application and reopening (29 objects before, 30 after). Project and share size limits remain 15 MB and 64 KiB/8,000 URL characters. New v4 saves require a current Planform client. No deployment or Git push was performed.
 
 ## Plan comparison
 
