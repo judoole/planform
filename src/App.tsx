@@ -68,6 +68,7 @@ import { furniture, type FurnitureKind } from "./furniture";
 import { download, exportSvg, exportPng } from "./exports";
 import AgentPanel from "./AgentPanel";
 import ShareDialog from "./ShareDialog";
+import SaveDialog from "./SaveDialog";
 import { isShareHash, readShareHash } from "./share";
 import {
   activePlan,
@@ -133,16 +134,16 @@ function currentShareHash() {
 
 export default function App() {
   const hash = useSyncExternalStore(subscribeToHash, currentShareHash);
-  return hash ? <SharedPlan key={hash} hash={hash} /> : <Editor />;
+  return hash ? <SharedProject key={hash} hash={hash} /> : <Editor />;
 }
 
-function SharedPlan({ hash }: { hash: string }) {
-  const [result, setResult] = useState<Plan | "invalid" | null>(null);
+function SharedProject({ hash }: { hash: string }) {
+  const [result, setResult] = useState<Project | "invalid" | null>(null);
   useEffect(() => {
     let active = true;
     readShareHash(hash).then(
-      (plan) => {
-        if (active) setResult(plan);
+      (project) => {
+        if (active) setResult(project);
       },
       () => {
         if (active) setResult("invalid");
@@ -153,7 +154,7 @@ function SharedPlan({ hash }: { hash: string }) {
     };
   }, [hash]);
 
-  if (result && result !== "invalid") return <Editor sharedPlan={result} />;
+  if (result && result !== "invalid") return <Editor sharedProject={result} />;
   return (
     <main className="modal-backdrop">
       <section className="modal share-load">
@@ -174,9 +175,9 @@ function SharedPlan({ hash }: { hash: string }) {
   );
 }
 
-function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
+function Editor({ sharedProject }: { sharedProject?: Project }) {
   const [project, setProject] = useState<Project>(
-      () => sharedPlan ?? startup(),
+      () => sharedProject ?? startup(),
     ),
     [preview, setPreview] = useState<Plan | null>(null),
     [overlay, setOverlay] = useState(false),
@@ -198,6 +199,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     [notice, setNotice] = useState(""),
     [agentOpen, setAgentOpen] = useState(false),
     [shareOpen, setShareOpen] = useState(false),
+    [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [autosave, setAutosave] = useState("Saved locally"),
     [coords, setCoords] = useState("0.0, 0.0"),
@@ -217,6 +219,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     lastSaved = useRef(project),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
+  const saveHandle = useRef<FileSystemFileHandle | null>(null);
   const version = project.version === 3 ? project.active : "existing";
   const otherVersion = version === "existing" ? "proposed" : "existing";
   const drawing = activePlan(project);
@@ -297,7 +300,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     return "Saved locally";
   }, []);
   useEffect(() => {
-    if (sharedPlan) return;
+    if (sharedProject) return;
     const flush = () => {
       saveRecovery();
     };
@@ -306,9 +309,9 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       window.removeEventListener("pagehide", flush);
       flush();
     };
-  }, [sharedPlan, saveRecovery]);
+  }, [sharedProject, saveRecovery]);
   useEffect(() => {
-    if (sharedPlan) return;
+    if (sharedProject) return;
     if (project === lastSaved.current) {
       setAutosave("Saved locally");
       return;
@@ -316,7 +319,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     setAutosave("Saving…");
     const timer = setTimeout(() => setAutosave(saveRecovery()), 900);
     return () => clearTimeout(timer);
-  }, [project, sharedPlan, saveRecovery]);
+  }, [project, sharedProject, saveRecovery]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 7000);
@@ -437,14 +440,52 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       `${current.name || "Untitled"}.planform.json`,
     );
   }
-  function save() {
+  async function save(filename?: string) {
     try {
-      downloadProject();
+      if (!filename) {
+        const current = projectRef.current;
+        const contents = serialize(current);
+        checkJsonSize(contents);
+        const fileName = `${current.name || "Untitled"}.planform.json`;
+        const pickerWindow = window as Window & {
+          showSaveFilePicker?: (options: {
+            suggestedName: string;
+            types: { description: string; accept: Record<string, string[]> }[];
+          }) => Promise<FileSystemFileHandle>;
+        };
+        if (saveHandle.current || pickerWindow.showSaveFilePicker) {
+          const handle =
+            saveHandle.current ??
+            (await pickerWindow.showSaveFilePicker!({
+              suggestedName: fileName,
+              types: [
+                {
+                  description: "Planform project",
+                  accept: { "application/json": [".planform.json", ".json"] },
+                },
+              ],
+            }));
+          const writable = await handle.createWritable();
+          await writable.write(contents);
+          await writable.close();
+          saveHandle.current = handle;
+          showNotice("Project saved. Future saves will update this file.");
+          return;
+        }
+        setSaveOpen(true);
+        return;
+      }
+      const current = projectRef.current;
+      const contents = serialize(current);
+      checkJsonSize(contents);
+      download(new Blob([contents], { type: "application/json" }), filename);
+      setSaveOpen(false);
       showNotice(
         "Project downloaded. Open the JSON file to continue editing later.",
       );
     } catch (error) {
-      showNotice((error as Error).message);
+      if ((error as DOMException).name !== "AbortError")
+        showNotice((error as Error).message);
     }
   }
   function openDrawing(next: Plan) {
@@ -456,12 +497,14 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
     );
   }
   function replaceProject(next: Project) {
+    saveHandle.current = null;
     clearDrawingContext();
     setOverlay(false);
     histories.current = { existing: new History(), proposed: new History() };
     updateProject(next);
   }
   function newProject() {
+    saveHandle.current = null;
     if (project.version === 2) {
       clearDrawingContext();
       commit(emptyPlan());
@@ -489,6 +532,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
         return;
       }
       const next = readProjectFile(contents);
+      saveHandle.current = null;
       if (next.version === 2 && projectRef.current.version === 2) {
         openDrawing(next);
       } else {
@@ -646,7 +690,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           />
           <span>
             <span className="save-dot" />
-            {sharedPlan ? "Shared copy" : autosave}
+            {sharedProject ? "Shared copy" : autosave}
           </span>
         </div>
         <div className="header-actions">
@@ -669,7 +713,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
             <Upload size={16} />
             <span>AI drawings</span>
           </button>
-          <button onClick={save} title="Download editable project">
+          <button onClick={() => save()} title="Download editable project">
             <Download size={16} />
             <span>Save project</span>
           </button>
@@ -704,7 +748,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
           </button>
         </div>
       </header>
-      {sharedPlan && (
+      {sharedProject && (
         <div className="share-banner">
           <span>
             Editing a shared copy. Download the project to keep your changes.
@@ -896,7 +940,7 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
               </b>
             </span>
             <span className="private-badge">
-              {sharedPlan ? "SHARED COPY" : "LOCAL & PRIVATE"}
+              {sharedProject ? "SHARED COPY" : "LOCAL & PRIVATE"}
             </span>
           </div>
           {!plan.calibration.calibrated && (
@@ -1185,12 +1229,16 @@ function Editor({ sharedPlan }: { sharedPlan?: Plan }) {
       )}
       {shareOpen && (
         <ShareDialog
-          plan={drawing}
-          versionName={
-            project.version === 3 ? versionNames[version] : undefined
-          }
+          project={project}
           onClose={() => setShareOpen(false)}
           onDownload={downloadProject}
+        />
+      )}
+      {saveOpen && (
+        <SaveDialog
+          initialName={projectRef.current.name || "Untitled"}
+          onClose={() => setSaveOpen(false)}
+          onSave={(filename) => void save(filename)}
         />
       )}
       {measure && (
