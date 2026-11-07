@@ -4,6 +4,12 @@
 
 Planform now uses architectural project schema v2. SVG import, raw SVG content, reference pages and vector-node editing are removed. SVG is retained for internal rendering and export. Agent interaction is through files and atomic command batches; no live MCP endpoint or in-app model is included.
 
+## Browser assistant guide
+
+- Based on `origin/main` commit `6de47e9`. Help contains expandable assistant instructions, three editable prompt starters, active drawing JSON and selected object IDs. The copied handoff includes the request and full drawing guide.
+- In-app browser verification covered expanding Help, changing prompt starters, copying a handoff and pasting it back to inspect its contents, reading a selected sofa's ID and geometry, and refreshing the drawing identity after creating a proposal. The manual copy fallback and the Help layout were inspected.
+- `npm test` passed all **77 tests** in nine files. The production build, required Prettier check and diff whitespace check passed. Browser verification used the built-in browser and local controls. Individual ChatGPT and Claude extensions were not exercised.
+
 ## Multiple proposals
 
 - Project schema v4 holds exactly one Existing drawing and up to ten named proposals, with stable drawing IDs and an active ID. Every nested drawing uses schema v2. The shared validator checks drawing IDs, the active reference, roles and all inactive geometry. Validated v3 files and historical share links migrate without changing their drawing data; single v1/v2 architectural files remain supported.

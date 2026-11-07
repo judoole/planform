@@ -1636,6 +1636,60 @@ button svg {
   color: #34443f;
 }
 
+.help-modal {
+  max-width: 760px;
+  width: min(760px, calc(100vw - 32px));
+  max-height: 90dvh;
+  overflow: auto;
+}
+.agent-help {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #d6dfd7;
+  border-radius: 10px;
+  background: #f6f9f5;
+}
+.agent-help summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.agent-prompt-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agent-help .field {
+  margin-top: 16px;
+}
+.agent-help textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #ccd7ce;
+  border-radius: 8px;
+  font: 12px/1.5 monospace;
+  box-sizing: border-box;
+}
+.agent-help .agent-request {
+  min-height: 120px;
+  font: inherit;
+  line-height: 1.5;
+}
+.agent-reference {
+  margin-top: 16px;
+}
+.agent-guide-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.6;
+}
+.agent-selected-ids {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .share-dialog {
   position: fixed;
   width: min(490px, calc(100% - 32px));
