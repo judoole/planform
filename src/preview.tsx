@@ -5,11 +5,12 @@ import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
 import { annotatedPlanBounds, visibleExteriorContour } from "./exterior";
 import { findRooms } from "./rooms";
 import type { Plan } from "./model";
+import { visiblePlan } from "./layers";
 import { validateProject } from "./validation";
 
 /** Same architectural renderer as the editor, with no grid, selection or hit targets. */
 export function renderPlanSvg(input: Plan): string {
-  const plan = validateProject(input),
+  const plan = visiblePlan(validateProject(input)),
     exterior = visibleExteriorContour(plan),
     b = planArtworkBounds(plan, exterior);
   const pad = Math.max(b.w, b.h) * 0.025 + 30;

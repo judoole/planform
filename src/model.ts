@@ -1,3 +1,4 @@
+import { defaultLayer, itemLayerId, type Layer } from "./layers";
 import { readProject } from "./validation";
 import type { GarageDetails } from "./garage";
 import type { Project } from "./project";
@@ -5,7 +6,13 @@ import type { FurnitureKind } from "./furniture";
 export type Point = { x: number; y: number };
 export type Box = Point & { w: number; h: number };
 export type Evidence = { basis: "measured" | "estimated"; note: string };
-type Base = { id: string; name: string; locked?: boolean; evidence?: Evidence };
+type Base = {
+  id: string;
+  name: string;
+  locked?: boolean;
+  evidence?: Evidence;
+  layerId?: string;
+};
 export type Wall = Base & {
   type: "wall";
   a: Point;
@@ -49,6 +56,8 @@ export type Plan = {
   items: Item[];
   showExteriorDimensions?: boolean;
   garage?: GarageDetails;
+  layers?: Layer[];
+  activeLayerId?: string;
   calibration: {
     calibrated: boolean;
     imported: boolean;
@@ -395,6 +404,9 @@ export function groupItems(plan: Plan, ids: string[]): Plan {
     throw Error(
       "Group two or more symbols, labels or groups. Walls retain shared corners and host relationships.",
     );
+  const layerId = itemLayerId(p, children[0]);
+  if (children.some((child) => itemLayerId(p, child) !== layerId))
+    throw Error("Move symbols onto the same layer before grouping them.");
   const box = unionBoxes(children.map((i) => bounds(i, p.items)));
   const group: RectItem = {
     id: uid(),
@@ -403,7 +415,8 @@ export function groupItems(plan: Plan, ids: string[]): Plan {
     ...box,
     rotation: 0,
     sourceBox: box,
-    children,
+    ...(layerId === defaultLayer.id ? {} : { layerId }),
+    children: children.map(({ layerId: _layerId, ...child }) => child),
   };
   const first = p.items.findIndex((i) => i.id === children[0].id);
   p.items = p.items.filter((i) => !ids.includes(i.id));
@@ -435,6 +448,7 @@ export function ungroupItems(plan: Plan, id: string): Plan {
     i.w *= sx;
     i.h *= sy;
     i.rotation += g.rotation;
+    if (g.layerId !== undefined) i.layerId = g.layerId;
     return i;
   });
   p.items.splice(p.items.indexOf(g), 1, ...children);

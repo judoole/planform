@@ -3,6 +3,7 @@ import schema from "../public/agent/planform.schema.json";
 import comparisonSchema from "../public/agent/comparison.schema.json";
 import projectSchema from "../public/agent/project.schema.json";
 import type { Item, Plan, RectItem, Wall } from "./model";
+import { defaultLayer, drawingLayers } from "./layers";
 import {
   asMultiProject,
   MAX_PROPOSALS,
@@ -95,7 +96,29 @@ export function validateProject(input: unknown): Plan {
 function validateRelationships(plan: Plan, path: string) {
   const issues: Issue[] = [];
   const all = new Map<string, Item>();
-  function walk(items: Item[], path: string) {
+  const layers = new Set<string>();
+  drawingLayers(plan).forEach((layer, i) => {
+    if (layers.has(layer.id))
+      issues.push({
+        path: `${path}/layers/${i}/id`,
+        code: "duplicate_layer",
+        message: "Layer IDs must be unique.",
+      });
+    layers.add(layer.id);
+  });
+  if (!layers.has(defaultLayer.id))
+    issues.push({
+      path: `${path}/layers`,
+      code: "missing_default_layer",
+      message: "Layers must include the Default layer ID.",
+    });
+  if (plan.activeLayerId !== undefined && !layers.has(plan.activeLayerId))
+    issues.push({
+      path: `${path}/activeLayerId`,
+      code: "missing_layer",
+      message: "Active layer must reference an existing layer.",
+    });
+  function walk(items: Item[], path: string, grouped = false) {
     items.forEach((item, n) => {
       const here = `${path}/${n}`;
       const issue = (field: string, code: string, message: string) =>
@@ -107,6 +130,14 @@ function validateRelationships(plan: Plan, path: string) {
           "Object IDs must be unique throughout the document.",
         );
       all.set(item.id, item);
+      if (item.layerId !== undefined && (grouped || !layers.has(item.layerId)))
+        issue(
+          "/layerId",
+          "layer_membership",
+          grouped
+            ? "Grouped objects inherit the enclosing group’s layer."
+            : "Object must reference an existing layer.",
+        );
       if (
         (item.type === "wall" || item.type === "dimension") &&
         length(item as Wall) < 0.001
@@ -116,7 +147,7 @@ function validateRelationships(plan: Plan, path: string) {
           "zero_length",
           "Endpoints must be at least 0.001 cm apart.",
         );
-      if (item.type === "group") walk(item.children!, `${here}/children`);
+      if (item.type === "group") walk(item.children!, `${here}/children`, true);
     });
   }
   walk(plan.items, path + "/items");

@@ -100,6 +100,13 @@
         }
       }
     },
+    "layers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/layer" }
+    },
+    "activeLayerId": { "$ref": "#/$defs/layerId" },
     "grid": {
       "type": "number",
       "minimum": 1,
@@ -179,6 +186,18 @@
       "minItems": 2,
       "maxItems": 150,
       "items": { "$ref": "#/$defs/point" }
+    },
+    "layerId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "visible", "locked"],
+      "properties": {
+        "id": { "$ref": "#/$defs/layerId" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "visible": { "type": "boolean" },
+        "locked": { "type": "boolean" }
+      }
     },
     "point": {
       "type": "object",
@@ -271,6 +290,7 @@
           "type": "string",
           "maxLength": 200
         },
+        "layerId": { "$ref": "#/$defs/layerId" },
         "locked": {
           "type": "boolean"
         },
@@ -423,6 +443,7 @@
           "type": "string",
           "maxLength": 200
         },
+        "layerId": { "$ref": "#/$defs/layerId" },
         "locked": {
           "type": "boolean"
         },
@@ -459,6 +480,7 @@
           "type": "string",
           "maxLength": 200
         },
+        "layerId": { "$ref": "#/$defs/layerId" },
         "locked": {
           "type": "boolean"
         },
@@ -523,6 +545,7 @@
           "type": "string",
           "maxLength": 200
         },
+        "layerId": { "$ref": "#/$defs/layerId" },
         "locked": {
           "type": "boolean"
         },
@@ -588,6 +611,7 @@
           "type": "string",
           "maxLength": 200
         },
+        "layerId": { "$ref": "#/$defs/layerId" },
         "locked": {
           "type": "boolean"
         },
@@ -658,6 +682,7 @@
           "type": "string",
           "maxLength": 200
         },
+        "layerId": { "$ref": "#/$defs/layerId" },
         "locked": {
           "type": "boolean"
         },

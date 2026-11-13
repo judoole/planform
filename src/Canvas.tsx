@@ -32,6 +32,12 @@ import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
 import type { ExteriorContour } from "./exterior";
 import { furniture, type FurnitureKind } from "./furniture";
 import type { Room } from "./rooms";
+import {
+  activeLayer,
+  isEditProtected,
+  isItemLocked,
+  placeOnActiveLayer,
+} from "./layers";
 export type Tool =
   | "select"
   | "box"
@@ -74,6 +80,7 @@ type Gesture = {
 };
 export default function Canvas({
   plan,
+  shown = plan,
   ghost,
   rooms,
   exterior,
@@ -96,6 +103,7 @@ export default function Canvas({
   cancelToken,
 }: {
   plan: Plan;
+  shown?: Plan;
   ghost?: Plan;
   rooms: Room[];
   exterior?: ExteriorContour;
@@ -182,7 +190,7 @@ export default function Canvas({
   const snapped = (p: Point, exclude: string[] = []) => {
     const r = snapPoint(
       p,
-      plan,
+      shown,
       snap,
       8 / camera.k,
       exclude,
@@ -245,7 +253,7 @@ export default function Canvas({
     if (tool === "pan" || e.button === 1) g = { ...base, kind: "pan" };
     else if (handle && selection.length === 1) {
       const selected = plan.items.find((i) => i.id === selection[0]);
-      if (selected?.locked) return;
+      if (selected && isEditProtected(plan, selected)) return;
       g = {
         ...base,
         kind:
@@ -273,11 +281,11 @@ export default function Canvas({
             ? selection
             : [hit];
         setSelection(ids);
-        if (object && !object.locked)
+        if (object && !isEditProtected(plan, object))
           g = {
             ...base,
-            ids: ids.filter(
-              (id) => !plan.items.find((i) => i.id === id)?.locked,
+            ids: ids.filter((id) =>
+              shown.items.some((i) => i.id === id && !isEditProtected(plan, i)),
             ),
             kind: "move",
           };
@@ -404,7 +412,7 @@ export default function Canvas({
           h: Math.abs(p.y - g.start.y),
         };
         if (dist(s, g.screen) > 3) {
-          const selected = plan.items
+          const selected = shown.items
             .filter((i) => {
               const b = bounds(i, plan.items);
               return (
@@ -421,20 +429,26 @@ export default function Canvas({
         return;
       }
       if (g.kind === "room") {
+        if (!canPlace()) {
+          setMarquee(null);
+          return;
+        }
         const q = snapped(p);
         if (Math.abs(q.x - g.start.x) > 1 && Math.abs(q.y - g.start.y) > 1) {
           const a = g.start,
             b = { x: q.x, y: a.y },
             c = q,
             d = { x: a.x, y: q.y };
-          const items = [a, b, c, d].map((pt, n) => ({
-            id: uid(),
-            type: "wall" as const,
-            name: `Wall ${plan.items.filter((i) => i.type === "wall").length + n + 1}`,
-            a: pt,
-            b: [b, c, d, a][n],
-            thickness: wallThickness,
-          }));
+          const items = [a, b, c, d].map((pt, n) =>
+            placeOnActiveLayer(plan, {
+              id: uid(),
+              type: "wall" as const,
+              name: `Wall ${plan.items.filter((i) => i.type === "wall").length + n + 1}`,
+              a: pt,
+              b: [b, c, d, a][n],
+              thickness: wallThickness,
+            }),
+          );
           commit({ ...plan, items: [...plan.items, ...items] });
           setSelection(items.map((i) => i.id));
           setTool("select");
@@ -446,6 +460,14 @@ export default function Canvas({
       return;
     }
     if (tool === "pan" || tool === "select" || tool === "box") return;
+    if (
+      tool !== "measure" &&
+      tool !== "calibrate" &&
+      tool !== "door" &&
+      tool !== "window" &&
+      !canPlace()
+    )
+      return;
     const q = snapped(p);
     if (["wall", "dimension", "measure", "calibrate"].includes(tool)) {
       if (!anchor) {
@@ -462,7 +484,10 @@ export default function Canvas({
           b: q,
           thickness: wallThickness,
         };
-        commit({ ...plan, items: [...plan.items, i] });
+        commit({
+          ...plan,
+          items: [...plan.items, placeOnActiveLayer(plan, i)],
+        });
         setSelection([i.id]);
         setAnchor(q);
       } else {
@@ -475,7 +500,10 @@ export default function Canvas({
             b: q,
             offset: -30,
           };
-          commit({ ...plan, items: [...plan.items, i] });
+          commit({
+            ...plan,
+            items: [...plan.items, placeOnActiveLayer(plan, i)],
+          });
           setSelection([i.id]);
         } else onMeasure(anchor, q, tool === "calibrate");
         setAnchor(null);
@@ -484,8 +512,8 @@ export default function Canvas({
       return;
     }
     if (tool === "door" || tool === "window") {
-      const wall = plan.items
-        .filter((i) => i.type === "wall" && !i.locked)
+      const wall = shown.items
+        .filter((i) => i.type === "wall" && !isEditProtected(plan, i))
         .map((w) => ({ w: w as Wall, ...project(p, w as Wall) }))
         .sort((a, b) => a.distance - b.distance)[0];
       if (
@@ -543,11 +571,17 @@ export default function Canvas({
           ? { steps: 12 }
           : { text: "Room label", fontSize: 18 }),
     };
-    commit({ ...plan, items: [...plan.items, i] });
+    commit({ ...plan, items: [...plan.items, placeOnActiveLayer(plan, i)] });
     setSelection([i.id]);
     setTool("select");
   }
-  const selected = plan.items.filter((i) => selection.includes(i.id)),
+  function canPlace() {
+    const layer = activeLayer(plan);
+    if (layer.visible && !layer.locked) return true;
+    onStatus("Choose a visible, unlocked layer to place objects.");
+    return false;
+  }
+  const selected = shown.items.filter((i) => selection.includes(i.id)),
     box = selected.length
       ? unionBoxes(selected.map((i) => bounds(i, plan.items)))
       : null,
@@ -651,8 +685,8 @@ export default function Canvas({
             </g>
           )}
           <g data-drawing="true">
-            {plan.items.map((i) => (
-              <DrawItem key={i.id} item={i} plan={plan} />
+            {shown.items.map((i) => (
+              <DrawItem key={i.id} item={i} plan={shown} />
             ))}
             <RoomLabels
               rooms={rooms}
@@ -672,13 +706,15 @@ export default function Canvas({
                 stroke="#27846b"
                 strokeWidth={1.3 / camera.k}
                 strokeDasharray={
-                  single?.locked ? `${5 / camera.k} ${4 / camera.k}` : undefined
+                  single && isItemLocked(plan, single)
+                    ? `${5 / camera.k} ${4 / camera.k}`
+                    : undefined
                 }
                 pointerEvents="none"
               />
             )}
             {single &&
-              !single.locked &&
+              !isEditProtected(plan, single) &&
               (single.type === "wall" ? (
                 <>
                   {handle(single.a, "a")}

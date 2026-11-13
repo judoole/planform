@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { visiblePlan } from "./layers";
 import type { Plan } from "./model";
 import { PlanArtwork, planArtworkBounds } from "./preview";
 import type { SheetDrawing } from "./sheets";
 
-export function floorPlanSheet(plan: Plan): SheetDrawing {
+export function floorPlanSheet(input: Plan): SheetDrawing {
+  const plan = visiblePlan(input);
   if (!plan.calibration.calibrated)
     throw Error(
       "Calibrate a known distance before exporting a scaled floor plan.",

@@ -28,3 +28,9 @@ Room labels are included in browser SVG/PNG exports and agent CLI previews. Room
 In **Properties**, turn on **Show exterior wall lengths** for a calibrated drawing containing one convex loop of connected straight walls. Angled corners are supported. Each side is measured between the intersections of adjoining outside faces. A rectangular garage with 580 × 680 cm centerline spans and 20 cm walls shows two sides of 6.00 m and two sides of 7.00 m. Openings and rounded corner fills do not affect the measurement.
 
 The setting is saved per drawing. Turning the labels on or off preserves the drawing's undo and redo history. The editor and SVG/PNG exports recalculate the marks from the current walls, including after undo and reopening. Properties explains when the drawing needs calibration, when the loop is open, and when the wall layout is unsupported. Unsupported layouts include inward corners, crossing walls, partitions, stubs and consecutive segments along the same straight line. Free-point dimensions remain editable with the **Dimension** tool and Properties.
+
+### Layers
+
+In the inspector's Layers tab, create and name layers, reorder them from back to front, and choose the active layer for new objects. Hide a layer to remove its objects from the canvas, selection, snapping and drawing exports. A locked layer stays visible. Unlock it to edit its objects. A connected edit that would move a hidden or locked object is blocked. Calibration rescales the entire floor plan, including hidden and locked objects.
+
+Version 1 and earlier version 2 architectural drawings open with a single Default layer and unchanged geometry. Doors and windows inherit the host wall's layer, and grouped symbols share their group's layer. Move symbols onto the same layer before grouping them. Deleting a layer moves its objects to the Default layer. Layer edits are undoable and remain independent across proposals.

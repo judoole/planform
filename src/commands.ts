@@ -13,6 +13,7 @@ import {
   type Point,
   type Wall,
 } from "./model";
+import { isItemLocked, isLayerLocked } from "./layers";
 import { ProjectError, validateProject } from "./validation";
 
 type Operation =
@@ -72,12 +73,14 @@ export function applyCommands(
       fail(`Object "${id}" does not exist at the top level.`);
     const editable = (id: string) => {
       const item = find(id);
-      if (item.locked)
+      if (isItemLocked(plan, item))
         fail(`Object "${id}" is locked. Unlock it explicitly first.`);
       return item;
     };
     if (op.op === "add") {
       plan.items.push(...op.items);
+      const locked = op.items.find((item) => isLayerLocked(plan, item));
+      if (locked) fail(`Object "${locked.id}" belongs to a locked layer.`);
       op.items.forEach((i) => changed.add(i.id));
     } else if (op.op === "opening") {
       const host = editable(op.hostId);
@@ -105,11 +108,23 @@ export function applyCommands(
       const wall = editable(op.wallId);
       if (wall.type !== "wall") fail("Corner edits require a wall.");
       const old = (wall as Wall)[op.end];
-      for (const i of plan.items)
-        if (i.type === "wall" && (same(i.a, old) || same(i.b, old))) {
-          if (i.locked) fail(`Connected wall "${i.id}" is locked.`);
-          changed.add(i.id);
-        }
+      const connected = plan.items.filter(
+        (item) =>
+          item.type === "wall" && (same(item.a, old) || same(item.b, old)),
+      );
+      const connectedIds = new Set(connected.map((item) => item.id));
+      for (const item of connected) {
+        if (isItemLocked(plan, item))
+          fail(`Connected wall "${item.id}" is locked.`);
+        changed.add(item.id);
+      }
+      plan.items.forEach((item) => {
+        if (
+          (item.type === "door" || item.type === "window") &&
+          connectedIds.has(item.hostId)
+        )
+          editable(item.id);
+      });
       plan = setCorner(plan, wall.id, op.end, op.point, false);
     } else if (op.op === "update") {
       const item = find(op.id),
@@ -122,11 +137,27 @@ export function applyCommands(
         fail(
           "Update preserves IDs, types and group structure. Use corner for shared wall endpoints; replace groups explicitly.",
         );
-      if (item.locked && !(keys.length === 1 && op.changes.locked === false))
+      if (
+        isItemLocked(plan, item) &&
+        !(
+          item.locked &&
+          !isLayerLocked(plan, item) &&
+          keys.length === 1 &&
+          op.changes.locked === false
+        )
+      )
         fail(`Object "${item.id}" is locked. Unlock it explicitly first.`);
-      plan.items = plan.items.map((i) =>
-        i.id === item.id ? ({ ...i, ...op.changes } as Item) : i,
-      );
+      const updated = { ...item, ...op.changes } as Item;
+      if (isLayerLocked(plan, updated)) fail(`Destination layer is locked.`);
+      if (item.type === "wall" && keys.includes("thickness"))
+        plan.items.forEach((dependent) => {
+          if (
+            (dependent.type === "door" || dependent.type === "window") &&
+            dependent.hostId === item.id
+          )
+            editable(dependent.id);
+        });
+      plan.items = plan.items.map((i) => (i.id === item.id ? updated : i));
       changed.add(item.id);
     } else if (op.op === "setExteriorDimensions") {
       plan.showExteriorDimensions = op.show;

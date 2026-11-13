@@ -26,6 +26,7 @@ import {
   ungroupItems,
 } from "./model";
 import type { Tool } from "./Canvas";
+import { isEditProtected, isLayerLocked } from "./layers";
 import { type Room, formatRoomArea } from "./rooms";
 import type { ExteriorContour } from "./exterior";
 
@@ -152,9 +153,17 @@ export default function Properties({
 }) {
   const items = plan.items.filter((i) => selection.includes(i.id)),
     item = items.length === 1 ? items[0] : null;
+  const itemProtected = !!item && isEditProtected(plan, item);
+  const lockableItems = items.filter(
+    (item) =>
+      !isLayerLocked(plan, item) &&
+      (!isEditProtected(plan, item) || item.locked),
+  );
+  const allLocked = lockableItems.every((item) => item.locked);
+  const groupProtected = items.some((item) => isEditProtected(plan, item));
   const units = plan.calibration.calibrated ? "cm" : "units";
   function patch(changes: Partial<Item>) {
-    if (!item || item.locked) return;
+    if (!item || itemProtected) return;
     commit(
       normalizeOpenings({
         ...plan,
@@ -205,25 +214,27 @@ export default function Properties({
               </button>
               <button
                 title={
-                  items.every((i) => i.locked)
+                  allLocked
                     ? "Unlock selected objects"
                     : "Lock selected objects"
                 }
                 aria-label={
-                  items.every((i) => i.locked)
+                  allLocked
                     ? "Unlock selected objects"
                     : "Lock selected objects"
                 }
+                disabled={!lockableItems.length}
                 onClick={() => {
                   const p = clone(plan),
-                    lock = !items.every((i) => i.locked);
+                    lock = !allLocked;
                   p.items.forEach((i) => {
-                    if (selection.includes(i.id)) i.locked = lock;
+                    if (lockableItems.some((selected) => selected.id === i.id))
+                      i.locked = lock;
                   });
                   commit(p);
                 }}
               >
-                {items.every((i) => i.locked) ? (
+                {allLocked ? (
                   <UnlockKeyhole size={17} />
                 ) : (
                   <LockKeyhole size={17} />
@@ -233,6 +244,7 @@ export default function Properties({
                 <button
                   title="Group selection"
                   aria-label="Group selection"
+                  disabled={groupProtected}
                   onClick={() =>
                     action(() => {
                       const p = groupItems(plan, selection),
@@ -253,6 +265,7 @@ export default function Properties({
                 <button
                   title="Ungroup"
                   aria-label="Ungroup"
+                  disabled={itemProtected}
                   onClick={() =>
                     action(() => {
                       const p = ungroupItems(plan, item.id);
@@ -271,7 +284,7 @@ export default function Properties({
                 <input
                   key={item.id + item.name}
                   defaultValue={item.name}
-                  disabled={item.locked}
+                  disabled={itemProtected}
                   onBlur={(e) => {
                     if (e.target.value !== item.name)
                       patch({ name: e.target.value });
@@ -282,9 +295,9 @@ export default function Properties({
                 />
               </label>
             )}
-            {item?.locked && (
+            {itemProtected && (
               <p className="notice">
-                Reference locked. Unlock to edit this object.
+                Object or layer is locked. Unlock it to edit this object.
               </p>
             )}
           </>
@@ -351,7 +364,7 @@ export default function Properties({
           </>
         )}
       </section>
-      {item && !item.locked && (
+      {item && !itemProtected && (
         <>
           {item.type === "wall" && (
             <>

@@ -1757,3 +1757,27 @@ button svg {
   padding: 6px 8px;
   min-width: 170px;
 }
+
+.layer-panel {
+  display: grid;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+.layer-add,
+.layer-row {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.layer-add input,
+.layer-row input {
+  width: 0;
+  flex: 1;
+}
+
+.layer-row button {
+  flex: 0 0 auto;
+  padding: 0.25rem;
+}

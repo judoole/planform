@@ -79,6 +79,15 @@ import {
   saveRecovery as saveLocalRevision,
   type RecoveryRevision,
 } from "./recovery";
+import LayerPanel from "./LayerPanel";
+import {
+  activeLayer,
+  blockedDrawingEdit,
+  isEditProtected,
+  isItemLocked,
+  placeOnActiveLayer,
+  visiblePlan,
+} from "./layers";
 import { isShareHash, readShareHash } from "./share";
 import {
   activePlan,
@@ -216,7 +225,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [wallThickness, setWallThickness] = useState(15),
     [camera, setCamera] = useState<Camera>({ x: 100, y: 100, k: 0.8 }),
     [panelOpen, setPanelOpen] = useState(false),
-    [tab, setTab] = useState<"properties" | "objects">("properties"),
+    [tab, setTab] = useState<"properties" | "objects" | "layers">("properties"),
     [query, setQuery] = useState(""),
     [overlap, setOverlap] = useState<string[]>([]),
     [overlapOpen, setOverlapOpen] = useState(false),
@@ -274,6 +283,24 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     drawings.find((d) => d.id !== version);
   const drawing = activePlan(project);
   const plan = preview ?? drawing;
+  const shown = useMemo(() => visiblePlan(plan), [plan]);
+  const shownIds = useMemo(
+    () => new Set(shown.items.map((item) => item.id)),
+    [shown.items],
+  );
+  const visibleSelection = selection.filter((id) => shownIds.has(id));
+  useEffect(() => {
+    setSelection((ids) =>
+      ids.every((id) => shownIds.has(id))
+        ? ids
+        : ids.filter((id) => shownIds.has(id)),
+    );
+    setOverlap((ids) =>
+      ids.every((id) => shownIds.has(id))
+        ? ids
+        : ids.filter((id) => shownIds.has(id)),
+    );
+  }, [shownIds]);
   function drawingHistory(id: string) {
     let history = histories.current.get(id);
     if (!history) {
@@ -283,13 +310,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     return history;
   }
   const history = drawingHistory(version);
-  const ghost = overlay ? reference?.plan : undefined;
+  const ghostPlan = overlay ? reference?.plan : undefined;
+  const ghost = useMemo(() => ghostPlan && visiblePlan(ghostPlan), [ghostPlan]);
   const [readExterior] = useState(createExteriorContourReader);
   const exterior = readExterior(plan);
-  const visibleExterior = visibleExteriorContour(plan, readExterior);
+  const visibleExterior = visibleExteriorContour(shown, readExterior);
   const { rooms, roomError } = useMemo(() => {
     try {
-      return { rooms: findRooms(plan.items), roomError: undefined };
+      return { rooms: findRooms(shown.items), roomError: undefined };
     } catch {
       // Automatic analysis must not prevent editing or reopening a document
       // when polygon clipping cannot resolve unusual wall geometry.
@@ -299,7 +327,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           "Room areas could not be calculated. Check overlapping or very small walls.",
       };
     }
-  }, [plan.items]);
+  }, [shown.items]);
   const showNotice = useCallback((s: string) => {
     setNotice(s);
   }, []);
@@ -312,17 +340,43 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       const current = projectRef.current;
       const before = base || activePlan(current);
       const clean = strict ? next : normalizeOpenings(next);
+      if (!strict) {
+        const blocked = blockedDrawingEdit(before, clean);
+        if (blocked) {
+          setPreview(null);
+          showNotice(
+            `“${blocked.name}” is hidden or locked. Show and unlock it to make this edit.`,
+          );
+          return;
+        }
+      }
       drawingHistory(activeDrawingId(current)).push(before);
       setPreview(null);
       updateProject(replaceActivePlan(current, clean));
     },
-    [updateProject],
+    [showNotice, updateProject],
   );
+  function previewEdit(next: Plan | null) {
+    if (next && blockedDrawingEdit(drawing, next)) {
+      setPreview(null);
+      return;
+    }
+    setPreview(next);
+  }
+  function changeLayers(next: Plan) {
+    setOverlapOpen(false);
+    setCancelToken((id) => id + 1);
+    commit(next, undefined, true);
+  }
   const fit = useCallback(
     (p: Plan = activePlan(projectRef.current)) => {
       const svg = svgRef.current;
       if (!svg) return;
-      const box = planArtworkBounds(p, visibleExteriorContour(p, readExterior)),
+      const visible = visiblePlan(p);
+      const box = planArtworkBounds(
+          visible,
+          visibleExteriorContour(visible, readExterior),
+        ),
         b = svg.getBoundingClientRect(),
         pad = Math.min(90, b.width * 0.12),
         k = Math.min(
@@ -490,34 +544,48 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     proposalImportTarget.current = replace ? version : null;
     proposedFileRef.current?.click();
   }
+  function editableSelection() {
+    return shown.items
+      .filter(
+        (item) => selection.includes(item.id) && !isEditProtected(plan, item),
+      )
+      .map((item) => item.id);
+  }
   function del() {
-    const ids = selection.filter(
-      (id) => !plan.items.find((i) => i.id === id)?.locked,
-    );
+    const ids = editableSelection();
     if (!ids.length) return;
     commit(removeItems(plan, ids));
     setSelection([]);
   }
   function duplicate() {
-    const ids = selection.filter(
-      (id) => !plan.items.find((i) => i.id === id)?.locked,
-    );
+    const ids = editableSelection();
     if (!ids.length) return;
+    const wallIds = new Set(ids);
+    const blocked = plan.items.find(
+      (item) =>
+        (item.type === "door" || item.type === "window") &&
+        wallIds.has(item.hostId) &&
+        isEditProtected(plan, item),
+    );
+    if (blocked) {
+      showNotice(`Unlock “${blocked.name}” before duplicating its wall.`);
+      return;
+    }
     const r = duplicateItems(plan, ids);
     commit(r.plan);
     setSelection(r.ids);
   }
   function copy() {
-    const ids = new Set(selection);
+    const ids = new Set(visibleSelection);
     clipboard.current = clone(
-      plan.items.filter(
+      shown.items.filter(
         (i) =>
           ids.has(i.id) ||
           ((i.type === "door" || i.type === "window") && ids.has(i.hostId)),
       ),
     );
     showNotice(
-      `${selection.length} object(s) copied. Use Paste to place a copy.`,
+      `${visibleSelection.length} object(s) copied. Use Paste to place a copy.`,
     );
   }
   function paste() {
@@ -525,18 +593,47 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       showNotice("Select objects and use Copy first.");
       return;
     }
+    if (activeLayer(plan).locked || !activeLayer(plan).visible) {
+      showNotice("Choose a visible, unlocked layer to paste objects.");
+      return;
+    }
+    const copiedWalls = new Set(
+      clipboard.current
+        .filter((item) => item.type === "wall")
+        .map((item) => item.id),
+    );
+    const visibleWalls = new Set(
+      shown.items
+        .filter((item) => item.type === "wall" && !isItemLocked(plan, item))
+        .map((item) => item.id),
+    );
+    const items = clone(clipboard.current)
+      .filter(
+        (item) =>
+          (item.type !== "door" && item.type !== "window") ||
+          copiedWalls.has(item.hostId) ||
+          visibleWalls.has(item.hostId),
+      )
+      .map((item) => {
+        const { layerId: _sourceLayer, ...copy } = item;
+        return placeOnActiveLayer(plan, copy);
+      });
+    if (!items.length) {
+      showNotice(
+        "Paste openings with their host walls or into a drawing with the same visible, unlocked host.",
+      );
+      return;
+    }
     const temp = {
       ...plan,
       items: [
-        ...plan.items.filter(
-          (i) => !clipboard.current.some((x) => x.id === i.id),
-        ),
-        ...clone(clipboard.current),
+        ...plan.items.filter((i) => !items.some((x) => x.id === i.id)),
+        ...items,
       ],
     };
     const r = duplicateItems(
       temp,
-      clipboard.current.map((i) => i.id),
+      items.map((i) => i.id),
     );
     const newItems = r.plan.items.slice(temp.items.length);
     commit({ ...plan, items: [...plan.items, ...newItems] });
@@ -605,9 +702,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     clearDrawingContext();
     commit(next, undefined, true);
     fit(next);
-    showNotice(
-      "Drawing opened. All objects are editable; Undo restores the previous drawing.",
-    );
+    showNotice("Drawing opened. Undo restores the previous drawing.");
   }
   function replaceProject(next: Project) {
     clearDrawingContext();
@@ -736,7 +831,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     try {
       const svg = exportSvg(
         svgRef.current!,
-        planArtworkBounds(plan, visibleExterior),
+        planArtworkBounds(shown, visibleExterior),
       );
       const name =
         project.version !== 2
@@ -792,7 +887,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       }
       if (mod && k === "a") {
         e.preventDefault();
-        setSelection(plan.items.map((i) => i.id));
+        setSelection(shown.items.map((i) => i.id));
         return;
       }
       if (mod && selection.length && ["c", "d", "x"].includes(k)) {
@@ -838,8 +933,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     if ((t === "furniture" || t === "door") && window.innerWidth < 760)
       setPanelOpen(false);
   }
-  const selected = plan.items.filter((i) => selection.includes(i.id));
-  const matching = plan.items.filter(
+  const selected = shown.items.filter((i) => selection.includes(i.id));
+  const matching = shown.items.filter(
     (i) =>
       !query ||
       `${i.name} ${i.type}`.toLowerCase().includes(query.toLowerCase()),
@@ -1233,12 +1328,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           )}
           <Canvas
             plan={plan}
+            shown={shown}
             ghost={ghost}
             rooms={rooms}
             exterior={visibleExterior}
-            setPreview={setPreview}
+            setPreview={previewEdit}
             commit={commit}
-            selection={selection}
+            selection={visibleSelection}
             setSelection={setSelection}
             tool={tool}
             setTool={setTool}
@@ -1334,6 +1430,12 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               Objects
             </button>
             <button
+              className={tab === "layers" ? "active" : ""}
+              onClick={() => setTab("layers")}
+            >
+              Layers
+            </button>
+            <button
               className="drawer-close"
               aria-label="Close properties panel"
               onClick={() => setPanelOpen(false)}
@@ -1347,7 +1449,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               rooms={rooms}
               roomError={roomError}
               exterior={exterior}
-              selection={selection}
+              selection={visibleSelection}
               commit={commit}
               setSelection={setSelection}
               setTool={setTool}
@@ -1355,6 +1457,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onDelete={del}
               onError={showNotice}
               onShowExteriorDimensions={setExteriorDimensions}
+            />
+          ) : tab === "layers" ? (
+            <LayerPanel
+              plan={plan}
+              selection={visibleSelection}
+              onLayerChange={changeLayers}
+              onMove={commit}
+              onError={showNotice}
             />
           ) : (
             <div className="objects-panel">
@@ -1371,7 +1481,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 {matching.length.toLocaleString()} objects{" "}
                 <button
                   onClick={() => {
-                    setSelection(plan.items.map((i) => i.id));
+                    setSelection(shown.items.map((i) => i.id));
                   }}
                 >
                   Select all
@@ -1397,7 +1507,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       {i.name}
                       <small>{i.type}</small>
                     </span>
-                    {i.locked && <LockKeyhole size={13} />}
+                    {isItemLocked(plan, i) && <LockKeyhole size={13} />}
                   </button>
                 ))}
               </div>
@@ -1610,7 +1720,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <>
                 <p>
                   Enter the real distance between your two points. This rescales
-                  the entire floor plan, including objects and annotations.
+                  the entire floor plan, including hidden and locked objects.
                 </p>
                 <label className="field">
                   <span>Real distance in centimeters</span>
@@ -1635,7 +1745,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                         dist(measure.a, measure.b),
                         Number(realDistance),
                       );
-                      commit(next);
+                      commit(next, undefined, true);
                       setMeasure(null);
                       fit(next);
                       showNotice(
@@ -1669,7 +1779,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       b: measure.b,
                       offset: -30,
                     };
-                    commit({ ...plan, items: [...plan.items, i] });
+                    try {
+                      commit({
+                        ...plan,
+                        items: [...plan.items, placeOnActiveLayer(plan, i)],
+                      });
+                    } catch (error) {
+                      showNotice((error as Error).message);
+                      return;
+                    }
                     setMeasure(null);
                     setSelection([i.id]);
                   }}
