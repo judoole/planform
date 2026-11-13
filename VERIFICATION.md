@@ -1,5 +1,26 @@
 # Verification - 13 November 2026
 
+## Garage permit after the 3D pivot
+
+The permit draft reads roof, wall and opening geometry from the same model as 3D. Old permit-only height fields are retained in the source metadata and copied into the shared model when opening an older draft. Terrain and property details stay with the permit workflow.
+
+- Chrome verified the compact Export dialog for PDF, SVG and PNG and the separate Garage permit workflow. Created wall and roof settings in Building, edited door and window heights in Properties, then rendered 3D and generated the matching section and elevations.
+- PyMuPDF measured 60 × 70 mm on the 1:100 plan and 12 × 14 mm on the 1:500 site plan. A 1:50 A3 plan measured 120 × 140 mm. Inspected rendered section and elevation sheets.
+- A changed roof pitch, opening position and wall thickness regenerated the ten-file ZIP. Areas changed from 36.96/42.00 to 36.30/42.70 m², and the west boundary distance changed from 12.50 to 12.45 m. The project reopened with the site map offline.
+- The stacked branch passed 127 tests. Production build, required Prettier and CLI checks passed.
+
+## General building model and 3D
+
+The integration started at `origin/main` commit `80792e43`. The separate permit draft builds on this branch and remains available for review.
+
+| Change                | Worktree branch and integrated commit              | Evidence                                                                                                                                                                                                              |
+| --------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared building model | `feat/building-model-contract`, `f84a688`          | Tests cover inherited and explicit wall heights, hosted opening dimensions, one outer shell with interior partitions, flat, shed and gable roofs, validation and the CLI building operation.                          |
+| Interactive 3D        | `feat/building-3d-viewer`, `81cf788`               | Chrome rendered a house, its roof-off interior, and a detached garage. Viewer checks covered pointer and keyboard orbit, zoom and reset, selection and the WebGL fallback. Mesh tests check the actual opening holes. |
+| Editor controls       | `feat/building-model-3d`, `d3e5302` and follow-ups | Chrome checked a floor-wide height change, undo and redo, retained overrides, a multi-wall edit, reset to the floor default, and new walls inheriting the default. Roof and window edits survived Save and Open.      |
+
+`npm test` passed 101 tests. The production build, required Prettier check, CLI example validation and PNG rendering passed. The synthetic house has interior rooms and an exterior window. The synthetic garage measures 6 × 7 m. These fixtures verify editing and geometry.
+
 ## Garage permit integration
 
 The integration branch starts at `origin/main` commit `80792e43`. The only additional open PR at intake was #32 for browser assistant Help. PR #38 had already delivered exterior dimensions, and PR #31 had delivered named proposals. The outstanding dependency chains were wall junctions → attached dimensions, layers → phase views, and local save recovery plus layers → reference import. The fixed-scale sheet engine and area calculation could start immediately. The site plan consumes the same roof and footprint as the section, and the application ZIP consumes the same sheet builders as standalone export.
