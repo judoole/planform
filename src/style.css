@@ -1743,3 +1743,12 @@ button svg {
 .workspace-toolbar > button[hidden] {
   display: none;
 }
+
+.optional-floor-settings {
+  margin-top: 16px;
+}
+.optional-floor-settings summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #426752;
+}
