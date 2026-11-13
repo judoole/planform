@@ -4,12 +4,12 @@ Planform uses one drawing for editable floor-plan geometry and its 3D view. The 
 
 ## Implementation order
 
-| Work | Depends on | Owner and branch |
-| --- | --- | --- |
-| Shared building settings, file schema and 3D geometry | Current main and the architectural wall model | Model worktree, `feat/building-model-contract` |
-| Browser 3D viewport | Shared geometry interface | Viewer worktree, `feat/building-3d-viewer` |
-| Editor controls and integration | Shared geometry and viewer selection contract | Integration worktree, `feat/building-model-3d` |
-| Compact export and permit integration | Existing PR #39 and the shared geometry interface | Permit worktree, `refactor/permit-building-model`, integrated into #39 |
+| Work                                                  | Depends on                                        | Owner and branch                                                       |
+| ----------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------- |
+| Shared building settings, file schema and 3D geometry | Current main and the architectural wall model     | Model worktree, `feat/building-model-contract`                         |
+| Browser 3D viewport                                   | Shared geometry interface                         | Viewer worktree, `feat/building-3d-viewer`                             |
+| Editor controls and integration                       | Shared geometry and viewer selection contract     | Integration worktree, `feat/building-model-3d`                         |
+| Compact export and permit integration                 | Existing PR #39 and the shared geometry interface | Permit worktree, `refactor/permit-building-model`, integrated into #39 |
 
 ## Shared implementation brief
 
