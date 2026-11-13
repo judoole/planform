@@ -12,6 +12,8 @@ import { garageAreas, garageAreaReport } from "../src/garage";
 import { emptyPlan, type Plan, type Wall } from "../src/model";
 import { floorPlanSheet } from "../src/planSheet";
 import { layoutSheet, defaultSheetOptions } from "../src/sheets";
+import { applyCommands } from "../src/commands";
+import { adoptLegacyGarageMeasurements } from "../src/legacyGarage";
 import { validateProject } from "../src/validation";
 
 function garage() {
@@ -166,6 +168,11 @@ describe("permit deliverables share the edited garage", () => {
         },
       ]),
     );
+    plan.building = {
+      floorLevel: 30,
+      defaultWallHeight: 245,
+      roof: { type: "gable", pitch: 28, thickness: 24, direction: 90 },
+    };
     plan.garage = {
       ...plan.garage,
       permit: {
@@ -176,13 +183,7 @@ describe("permit deliverables share the edited garage", () => {
           dispensation: "notApplicable",
         },
       },
-      structure: {
-        floor: 30,
-        wallHeight: 245,
-        roofPitch: 28,
-        roofThickness: 24,
-        terrain,
-      },
+      structure: { terrain },
       site: {
         map: {
           name: "Municipal map",
@@ -263,11 +264,11 @@ describe("permit deliverables share the edited garage", () => {
       prepared.entries.find(({ title }) => title === "Dispensation request")
         ?.status,
     ).toBe("notApplicable");
-    const structure = plan.garage!.structure!;
+    const building = plan.building!;
     expect(garageViewSheet(plan, "section").markup).toContain("Roof pitch 28");
     const edited = {
       ...plan,
-      garage: { ...plan.garage, structure: { ...structure, roofPitch: 32 } },
+      building: { ...building, roof: { ...building.roof!, pitch: 32 } },
     };
     expect(garageViewSheet(edited, "section").markup).toContain(
       "Roof pitch 32",
@@ -280,4 +281,52 @@ describe("permit deliverables share the edited garage", () => {
       partial.entries.find(({ title }) => title === "Section A-A")?.status,
     ).toBe("missing");
   });
+});
+
+it("adopts earlier permit drafts and keeps an explicitly cleared roof cleared", () => {
+  const plan = garage();
+  const legacy: Plan = {
+    ...plan,
+    garage: {
+      ...plan.garage,
+      structure: {
+        floor: 30,
+        wallHeight: 245,
+        roofPitch: 28,
+        roofThickness: 24,
+        openings: { door: { height: 220 } },
+      },
+    },
+    items: [
+      ...plan.items,
+      {
+        id: "door",
+        name: "Door",
+        type: "door",
+        hostId: "wall-0",
+        width: 250,
+        t: 0.5,
+        hinge: 1,
+        swing: 1,
+      },
+    ],
+  };
+  const migrated = validateProject(legacy);
+  expect(migrated.building).toEqual({
+    floorLevel: 30,
+    defaultWallHeight: 245,
+    roof: { type: "gable", pitch: 28, thickness: 24, direction: 90 },
+  });
+  expect(migrated.items.at(-1)).toMatchObject({ height: 220 });
+  expect(migrated.garage).toEqual(legacy.garage);
+  expect(
+    adoptLegacyGarageMeasurements({ ...migrated, building: {} }).building,
+  ).toEqual({});
+  const cleared = applyCommands(migrated, {
+    format: "planform-commands",
+    version: 1,
+    operations: [{ op: "setBuilding", building: null }],
+  }).plan;
+  expect(validateProject(cleared).building?.roof).toBeUndefined();
+  expect(legacy.building).toBeUndefined();
 });

@@ -411,11 +411,7 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
             <text x={span / 2} y={base - 38} textAnchor="middle">
               Garage
             </text>
-            <text
-              x={span / 2}
-              y={-high + roof.verticalThickness + 35}
-              textAnchor="middle"
-            >
+            <text x={span / 2} y={-high - 17} textAnchor="middle">
               Roof pitch {roof.pitch}° · Roof thickness {roof.thickness} cm
             </text>
             <text x={span / 2} y={base - 16} textAnchor="middle">

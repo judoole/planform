@@ -217,6 +217,7 @@ export function applyCommands(
       plan.showExteriorDimensions = op.show;
     } else if (op.op === "setBuilding") {
       if (op.building) plan.building = op.building;
+      else if (plan.garage?.structure) plan.building = {};
       else delete plan.building;
     } else {
       const requested = new Set(op.ids);
