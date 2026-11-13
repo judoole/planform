@@ -1612,6 +1612,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               navigation explicit. Every tool and edit action also has a visible
               control.
             </p>
+            <p>
+              Open Building to set floor heights and a roof. Switch to 3D to
+              inspect the building and select walls or openings.
+            </p>
             <div className="shortcuts">
               <span>V / H / W / F / M</span>
               <b>Select / Pan / Wall / Furniture / Measure</b>
