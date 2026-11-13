@@ -6,6 +6,12 @@ export type SheetDrawing = {
   /** Architectural SVG children. The coordinate unit is one centimeter. */
   markup: string;
   legend?: string[];
+  legendSwatches?: {
+    index: number;
+    fill: string;
+    stroke: string;
+    dashed?: boolean;
+  }[];
 };
 export type SheetOptions = {
   paper: "A4" | "A3";
@@ -128,11 +134,20 @@ export async function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
   pdf.text(`${page.barMeters} m`, barX + page.barWidth, barY + 5, {
     align: "right",
   });
-  drawing.legend?.forEach((entry, index) =>
-    pdf.text(entry, page.margin, page.footer + 23 + index * 5, {
-      maxWidth: page.width - page.margin * 2,
-    }),
-  );
+  drawing.legend?.forEach((entry, index) => {
+    const swatch = drawing.legendSwatches?.find((row) => row.index === index);
+    const y = page.footer + 23 + index * 5;
+    if (swatch) {
+      pdf.setFillColor(swatch.fill);
+      pdf.setDrawColor(swatch.stroke);
+      if (swatch.dashed) pdf.setLineDashPattern([1.2, 0.7], 0);
+      pdf.rect(page.margin, y - 2.6, 5, 2.5, "FD");
+      pdf.setLineDashPattern([], 0);
+    }
+    pdf.text(entry, page.margin + (swatch ? 7 : 0), y, {
+      maxWidth: page.width - page.margin * 2 - (swatch ? 7 : 0),
+    });
+  });
   return pdf.output("blob");
 }
 
@@ -159,7 +174,20 @@ export function sheetPreview(drawing: SheetDrawing, options: SheetOptions) {
       <text x="${page.width - page.margin}" y="${page.footer + 6}" text-anchor="end">1:${options.scale} · ${options.paper} · Print at 100% actual size</text>
       <text x="${barX}" y="${barY + 5}">0</text>
       <text x="${barX + page.barWidth}" y="${barY + 5}" text-anchor="end">${page.barMeters} m</text>
-      ${drawing.legend?.map((entry, i) => `<text x="${page.margin}" y="${page.footer + 23 + i * 5}">${escapeXml(entry)}</text>`).join("") ?? ""}
+      ${
+        drawing.legend
+          ?.map((entry, i) => {
+            const swatch = drawing.legendSwatches?.find(
+              (row) => row.index === i,
+            );
+            const y = page.footer + 23 + i * 5;
+            const key = swatch
+              ? `<rect x="${page.margin}" y="${y - 2.6}" width="5" height="2.5" fill="${swatch.fill}" stroke="${swatch.stroke}" stroke-width=".25"${swatch.dashed ? ' stroke-dasharray="1.2 .7"' : ""}/>`
+              : "";
+            return `${key}<text x="${page.margin + (swatch ? 7 : 0)}" y="${y}">${escapeXml(entry)}</text>`;
+          })
+          .join("") ?? ""
+      }
     </g>
   </svg>`;
 }

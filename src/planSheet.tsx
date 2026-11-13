@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { traceForExport } from "./reference";
-import { phaseLegend, visiblePlan } from "./layers";
+import { phaseLegend, phaseLegendStyles, visiblePlan } from "./layers";
 import type { Plan } from "./model";
 import { PlanArtwork, planArtworkBounds } from "./preview";
 import type { SheetDrawing } from "./sheets";
@@ -23,6 +23,12 @@ export function floorPlanSheet(input: Plan): SheetDrawing {
     title: "Floor plan - Ground floor",
     bounds: { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad },
     legend: phaseLegend(plan),
+    legendSwatches: phaseLegendStyles(plan)?.entries.map((entry, index) => ({
+      index: index + 1,
+      fill: entry.fill,
+      stroke: entry.line,
+      dashed: "dash" in entry,
+    })),
     markup: renderToStaticMarkup(<PlanArtwork plan={plan} />),
   };
 }
