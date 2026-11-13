@@ -28,6 +28,9 @@
       "type": "boolean",
       "description": "Show live outside-face lengths for a calibrated, closed convex building outline. Omitted means shown."
     },
+    "propertyMap": {
+      "$ref": "#/$defs/propertyMap"
+    },
     "garage": {
       "type": "object",
       "additionalProperties": false,
@@ -238,6 +241,54 @@
   },
   "required": ["format", "version", "name", "units", "items"],
   "$defs": {
+    "mapLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lon", "lat"],
+      "properties": {
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+        "lat": {
+          "type": "number",
+          "minimum": -85.05112878,
+          "maximum": 85.05112878
+        }
+      }
+    },
+    "propertyMap": {
+      "description": "Selected Norwegian property and optional geographically anchored building center. Map imagery and live boundary geometry are fetched independently.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["property"],
+      "properties": {
+        "property": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["number", "label", "location"],
+          "properties": {
+            "number": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{1,9}(/[0-9]{1,9}){1,3}$"
+            },
+            "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "location": { "$ref": "#/$defs/mapLocation" }
+          }
+        },
+        "placement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["center", "rotation"],
+          "properties": {
+            "center": { "$ref": "#/$defs/mapLocation" },
+            "rotation": {
+              "description": "Clockwise degrees from the floor plan's upward axis aligned to true north.",
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 360
+            }
+          }
+        }
+      }
+    },
     "siteAngle": { "type": "number", "minimum": -360, "maximum": 360 },
     "siteFeature": {
       "type": "object",

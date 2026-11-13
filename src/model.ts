@@ -22,6 +22,7 @@ import {
   type WallEnd,
 } from "./junctions";
 import type { Project } from "./project";
+import type { PropertyMap } from "./propertyMap";
 import type { FurnitureKind } from "./furniture";
 import { traceBounds, type TraceReference } from "./reference";
 export type Point = { x: number; y: number };
@@ -84,6 +85,7 @@ export type Plan = {
   items: Item[];
   showExteriorDimensions?: boolean;
   garage?: GarageDetails;
+  propertyMap?: PropertyMap;
   traceReference?: TraceReference;
   layers?: Layer[];
   activeLayerId?: string;

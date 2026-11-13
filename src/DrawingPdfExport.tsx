@@ -6,6 +6,8 @@ import {
 } from "./drawingPdfPages";
 import { download } from "./exports";
 import type { Plan } from "./model";
+import { backgrounds, printBackground, type BackgroundId } from "./mapProvider";
+import type { useParcelMap } from "./useParcelMap";
 import { SheetFields } from "./SheetExport";
 import {
   defaultSheetOptions,
@@ -19,11 +21,18 @@ import {
 export default function DrawingPdfExport({
   plan,
   name,
+  mapBackground,
+  parcels,
 }: {
   plan: Plan;
   name: string;
+  mapBackground: BackgroundId;
+  parcels: ReturnType<typeof useParcelMap>;
 }) {
-  const { pages, canRender3D } = useMemo(() => drawingPdfPages(plan), [plan]);
+  const { pages, canRender3D } = useMemo(
+    () => drawingPdfPages(plan, parcels.data),
+    [plan, parcels.data],
+  );
   const [options, setOptions] = useState<SheetOptions>({
     ...defaultSheetOptions,
     scale: "fit",
@@ -68,6 +77,8 @@ export default function DrawingPdfExport({
       drawing: snapshot,
     });
   const chosen = choices.filter((page) => !hidden.includes(page.id));
+  const includeMap = chosen.some((page) => page.id === "property-map");
+  const waitingForMap = includeMap && parcels.loading;
   const shown = chosen.find((page) => page.id === active) ?? chosen[0];
   function makePage(page: DrawingPdfPage) {
     const settings = drawingPdfOptions(
@@ -156,6 +167,19 @@ export default function DrawingPdfExport({
           src={`data:image/svg+xml,${encodeURIComponent(preview)}`}
         />
       )}
+      {includeMap && !backgrounds[mapBackground].exportable && (
+        <p>
+          PDF background: {printBackground.label} (Kartverket). The{" "}
+          {backgrounds[mapBackground].label.toLowerCase()} background is for
+          on-screen use.
+        </p>
+      )}
+      {waitingForMap && (
+        <p role="status">Loading map boundaries for the PDF…</p>
+      )}
+      {includeMap && !waitingForMap && !parcels.data.selected.length && (
+        <p>The selected parcel boundary is unavailable for this PDF.</p>
+      )}
       {snapshotLoading && <p role="status">Preparing the 3D page…</p>}
       {snapshotError && <p role="status">{snapshotError}</p>}
       {!choices.length && !snapshotLoading && (
@@ -164,7 +188,13 @@ export default function DrawingPdfExport({
       {(previewError || error) && <p role="alert">{previewError || error}</p>}
       <button
         className="primary"
-        disabled={!chosen.length || !!previewError || saving || snapshotLoading}
+        disabled={
+          !chosen.length ||
+          !!previewError ||
+          saving ||
+          snapshotLoading ||
+          waitingForMap
+        }
         onClick={() => void save()}
       >
         {saving ? "Preparing PDF…" : "Download PDF"}

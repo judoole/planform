@@ -73,6 +73,9 @@ import GarageSitePanel from "./GarageSitePanel";
 import GarageViewsPanel from "./GarageViewsPanel";
 import { planArtworkBounds } from "./preview";
 import ExportDrawingDialog from "./ExportDrawingDialog";
+import type { BackgroundId } from "./mapProvider";
+import type { PropertyMap } from "./propertyMap";
+import { useParcelMap } from "./useParcelMap";
 import { mapDimensionAnchors } from "./dimensions";
 import { download } from "./exports";
 import ShareDialog from "./ShareDialog";
@@ -122,6 +125,8 @@ import {
   visibleExteriorContour,
 } from "./exterior";
 const BuildingViewport = lazy(() => import("./BuildingViewport"));
+const MapWorkspace = lazy(() => import("./MapWorkspace"));
+type ViewMode = "plan" | "3d" | "map";
 
 const palette: {
   tool: Tool;
@@ -240,7 +245,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [tab, setTab] = useState<"properties" | "objects" | "layers" | "building">(
       "properties",
     ),
-    [viewMode, setViewMode] = useState<"plan" | "3d">("plan"),
+    [viewMode, setViewMode] = useState<ViewMode>("plan"),
+    [openedMap, setOpenedMap] = useState(false),
+    [mapBackground, setMapBackground] = useState<BackgroundId>("property"),
     [opened3D, setOpened3D] = useState(false),
     [buildingViewReset, setBuildingViewReset] = useState(0),
     [query, setQuery] = useState(""),
@@ -302,6 +309,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     drawings.find((d) => d.role === "existing" && d.id !== version) ??
     drawings.find((d) => d.id !== version);
   const drawing = activePlan(project);
+  const parcels = useParcelMap(
+    viewMode === "map" || exportOpen ? drawing.propertyMap : undefined,
+  );
   const plan = preview ?? drawing;
   const shown = useMemo(() => visiblePlan(plan), [plan]);
   const shownIds = useMemo(
@@ -397,6 +407,16 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     setCancelToken((id) => id + 1);
     commit(next, undefined, true);
   }
+  function updatePropertyMap(propertyMap: PropertyMap) {
+    const current = projectRef.current;
+    const next = { ...activePlan(current), propertyMap };
+    try {
+      checkJsonSize(serialize(replaceActivePlan(current, next)));
+      commit(next, undefined, true);
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
   function updateGarage(garage: Plan["garage"]) {
     const current = projectRef.current;
     const next = { ...activePlan(current), garage };
@@ -465,11 +485,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     const t = setTimeout(() => setNotice(""), 7000);
     return () => clearTimeout(t);
   }, [notice]);
-  function changeViewMode(next: "plan" | "3d") {
+  function changeViewMode(next: ViewMode) {
     if (next === viewMode) return;
     cancel();
     setMeasure(null);
     setViewMode(next);
+    if (next === "map") {
+      setOpenedMap(true);
+      setPanelOpen(false);
+    }
     if (next === "3d") {
       setOpened3D(true);
       if (!selection.length) setTab("building");
@@ -999,6 +1023,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         redo();
         return;
       }
+      if (viewMode === "map") return;
       if (mod && k === "a") {
         e.preventDefault();
         setSelection(shown.items.map((i) => i.id));
@@ -1043,7 +1068,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     });
   }
   function chooseTool(t: Tool) {
-    if (viewMode === "3d") changeViewMode("plan");
+    if (viewMode !== "plan") changeViewMode("plan");
     setTool(t);
     if ((t === "furniture" || t === "door") && window.innerWidth < 760)
       setPanelOpen(false);
@@ -1283,17 +1308,24 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <button
           aria-label="Copy"
           title="Copy"
+          hidden={viewMode === "map"}
           disabled={!selection.length}
           onClick={copy}
         >
           <Copy size={17} />
         </button>
-        <button aria-label="Paste" title="Paste" onClick={paste}>
+        <button
+          hidden={viewMode === "map"}
+          aria-label="Paste"
+          title="Paste"
+          onClick={paste}
+        >
           <ClipboardPaste size={17} />
         </button>
         <button
           aria-label="Delete"
           title="Delete selected"
+          hidden={viewMode === "map"}
           disabled={!selection.length}
           onClick={del}
         >
@@ -1309,7 +1341,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             aria-pressed={viewMode === "plan"}
             onClick={() => changeViewMode("plan")}
           >
-            2D
+            Floor plan
           </button>
           <button
             aria-pressed={viewMode === "3d"}
@@ -1317,9 +1349,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           >
             3D
           </button>
+          <button
+            aria-pressed={viewMode === "map"}
+            onClick={() => changeViewMode("map")}
+          >
+            Map
+          </button>
         </div>
         <button
-          hidden={viewMode === "3d"}
+          hidden={viewMode !== "plan"}
           className={snap ? "snap-toggle active" : "snap-toggle"}
           aria-pressed={snap}
           onClick={() => setSnap(!snap)}
@@ -1328,12 +1366,18 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           <Magnet size={16} />
           <span>Snap {snap ? "on" : "off"}</span>
         </button>
-        <button className="cancel-button" aria-label="Cancel" onClick={cancel}>
+        <button
+          hidden={viewMode === "map"}
+          className="cancel-button"
+          aria-label="Cancel"
+          onClick={cancel}
+        >
           <X size={15} />
           <span>Cancel</span>
         </button>
         <button
           className="properties-toggle"
+          hidden={viewMode === "map"}
           aria-label="Toggle properties"
           aria-expanded={panelOpen}
           onClick={() => setPanelOpen(!panelOpen)}
@@ -1342,7 +1386,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         </button>
       </div>
       <main className="workspace">
-        <nav className="tool-palette" aria-label="Drawing tools">
+        <nav
+          className="tool-palette"
+          aria-label="Drawing tools"
+          hidden={viewMode === "map"}
+        >
           {palette.map(({ tool: t, label, icon: Icon, key }, idx) => (
             <button
               key={t}
@@ -1368,8 +1416,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <section className="drawing-region">
           <div
             className="plan-view"
-            inert={viewMode === "3d"}
-            aria-hidden={viewMode === "3d"}
+            inert={viewMode !== "plan"}
+            aria-hidden={viewMode !== "plan"}
           >
             <div className="drawing-topline">
               <span>
@@ -1556,15 +1604,43 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               </Suspense>
             </div>
           )}
+          {openedMap && (
+            <div className="building-view" hidden={viewMode !== "map"}>
+              <Suspense
+                fallback={
+                  <p className="building-view-loading" role="status">
+                    Loading map…
+                  </p>
+                }
+              >
+                <MapWorkspace
+                  key={`${buildingViewReset}:${version}`}
+                  plan={shown}
+                  active={viewMode === "map"}
+                  background={mapBackground}
+                  onBackground={setMapBackground}
+                  parcels={parcels}
+                  onChange={updatePropertyMap}
+                  onImportedMap={() => {
+                    setDrawingTool("site");
+                    setDrawingToolsOpen(true);
+                  }}
+                />
+              </Suspense>
+            </div>
+          )}
         </section>
-        {panelOpen && (
+        {panelOpen && viewMode !== "map" && (
           <button
             className="drawer-scrim"
             aria-label="Close properties"
             onClick={() => setPanelOpen(false)}
           />
         )}
-        <aside className={`inspector ${panelOpen ? "open" : ""}`}>
+        <aside
+          className={`inspector ${panelOpen ? "open" : ""}`}
+          hidden={viewMode === "map"}
+        >
           <div className="inspector-tabs">
             <button
               className={tab === "properties" ? "active" : ""}
@@ -1691,13 +1767,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       <footer className="statusbar">
         <span>
           <span className="status-dot" />
-          {viewMode === "3d" && !selected.length
-            ? "3D view"
-            : selected.length
-              ? `${selected.length} selected`
-              : tool === "select"
-                ? "Ready to design"
-                : palette.find((p) => p.tool === tool)?.label || "Select"}
+          {viewMode === "map"
+            ? "Map"
+            : viewMode === "3d" && !selected.length
+              ? "3D view"
+              : selected.length
+                ? `${selected.length} selected`
+                : tool === "select"
+                  ? "Ready to design"
+                  : palette.find((p) => p.tool === tool)?.label || "Select"}
         </span>
         {viewMode === "plan" && (
           <>
@@ -1823,6 +1901,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       {exportOpen && (
         <ExportDrawingDialog
           plan={drawing}
+          mapBackground={mapBackground}
+          parcels={parcels}
           name={
             project.version === 2
               ? drawing.name

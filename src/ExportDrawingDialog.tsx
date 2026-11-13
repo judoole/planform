@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { download, exportPng } from "./exports";
 import type { Plan } from "./model";
+import type { BackgroundId } from "./mapProvider";
+import type { useParcelMap } from "./useParcelMap";
 import { renderPlanSvg } from "./preview";
 import DrawingPdfExport from "./DrawingPdfExport";
 
@@ -9,11 +11,15 @@ type Format = "pdf" | "svg" | "png";
 
 export default function ExportDrawingDialog({
   plan,
+  mapBackground,
+  parcels,
   name,
   onClose,
   onAdditionalDrawings,
 }: {
   plan: Plan;
+  mapBackground: BackgroundId;
+  parcels: ReturnType<typeof useParcelMap>;
   name: string;
   onClose: () => void;
   onAdditionalDrawings: () => void;
@@ -87,7 +93,12 @@ export default function ExportDrawingDialog({
         </select>
       </label>
       {format === "pdf" ? (
-        <DrawingPdfExport plan={plan} name={name} />
+        <DrawingPdfExport
+          plan={plan}
+          name={name}
+          mapBackground={mapBackground}
+          parcels={parcels}
+        />
       ) : (
         <>
           {svg && (

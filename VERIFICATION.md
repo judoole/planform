@@ -143,3 +143,16 @@ Used the original local reference PDF from `~/Desktop/Plantegning-venstre/`. Ren
 - Shared corners still use equal coordinates. T-junction splitting is documented but not automated. Rooms have no persistent identity; dimensions remain independent annotations.
 - Manual wall edits retain the existing opening-fit behavior; strict agent imports and batches reject conflicts instead of repairing geometry.
 - No hosted deployment, Git push or external model call was performed. The PDF trial stayed local.
+
+## Live Map workspace
+
+Verified on 13 November 2026 in Chrome against the static production build. See the [provider decision and coverage evidence](docs/property-map.md).
+
+- Searched for Håkon den godes gate 30, Levanger and selected cadastral property `5037-315/204`. Repeated with `315/204 Levanger`. Address, municipality, parcel point, parcel polygon, nearby parcels and topographic WMS requests succeeded directly from Chrome without credentials.
+- Placed a synthetic 6 × 7 m building, dragged its footprint and turned it 37° with the handle. Verified the zoom ratio against the SVG geometry. Switched from Property map to Parcel boundaries and back, with identical footprint coordinates and scale across the switch. Aerial photo appeared disabled because a usable aerial service is pending.
+- Saved the drawing, changed two connected wall corners in Floor plan, and confirmed a 7 × 7 m footprint at the original geographic center and rotation. Downloaded and reopened the edited project in a fresh browser context. The saved JSON contained the property and placement.
+- Previewed and downloaded a three-page combined PDF with Floor plan at 1:100, 3D view and Property map at 1:500. The dialog showed the printable parcel background. Inspected the rendered map page and measured its PDF vectors at 100% actual size. The A4 page was 297 × 210 mm, the four rotated footprint sides measured 12.00, 14.00, 12.00 and 14.00 mm, and the 20 m scale bar measured 40.00 mm. The page showed a north arrow, linked attribution, parcel outlines and the same 2.7 m boundary distance as the workspace. Print size was checked in the digital PDF.
+- Blocked the parcel and topographic requests in Chrome. The saved footprint remained visible, missing map data was identified, and an existing imported map still opened in the site-plan tools. Verified the unavailable-boundary message in PDF export. Checked the Map layout at 390 × 844 with touch emulation.
+- `npm test` passed 134 tests. `npm run build`, the AGENTS.md Prettier check, and `git diff --check` passed. The agent CLI validated, rendered and applied the bundled example commands, and validated and rendered the browser-saved map drawing.
+
+The boundary-label follow-up showed four matching labels in Chrome and the 1:500 PDF for the same Levanger placement (2.7 m, 20.1 m, 21.1 m and 25.6 m). The map and sheet label the closest boundary in each available direction that fits the view. Automated coverage checks that a split parcel edge does not duplicate its direction and that contact with a mapped boundary is flagged. All 135 tests passed.
