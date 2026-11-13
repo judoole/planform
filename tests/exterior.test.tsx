@@ -2,7 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { applyCommands } from "../src/commands";
 import { DrawItem, ExteriorDimensions } from "../src/Drawing";
-import { annotatedPlanBounds, deriveExteriorContour } from "../src/exterior";
+import {
+  annotatedPlanBounds,
+  createExteriorContourReader,
+  deriveExteriorContour,
+  exteriorLabelLayout,
+} from "../src/exterior";
 import { exportSvg } from "../src/exports";
 import {
   History,
@@ -104,6 +109,52 @@ describe("garage exterior contour", () => {
         })),
       }),
     ).toEqual(deriveExteriorContour(plan));
+    expect(
+      deriveExteriorContour({
+        ...plan,
+        items: [...walls]
+          .reverse()
+          .map((wall) => ({ ...wall, a: wall.b, b: wall.a })),
+      }),
+    ).toEqual(deriveExteriorContour(plan));
+  });
+
+  it("starts on the down-right edge when two directions point almost equally right", () => {
+    for (const rotation of [45 - 0.00001, 45 + 0.00001]) {
+      const contour = deriveExteriorContour(garage(rotation).plan);
+      expect(contour.status).toBe("ready");
+      if (contour.status !== "ready") throw Error(contour.status);
+      expect(contour.corners[1].y).toBeGreaterThan(contour.corners[0].y);
+      expect(dist(contour.corners[0], contour.corners[1])).toBeCloseTo(600);
+    }
+  });
+
+  it("matches nearly coincident endpoints without snapping stored coordinates", () => {
+    const { plan, walls } = garage();
+    walls[1].a = { ...walls[1].a, y: walls[1].a.y + 0.0000005 };
+    expect(spans(plan)[0]).toBeCloseTo(600, 6);
+    expect(spans(plan)[1]).toBeCloseTo(700, 6);
+    expect(walls[1].a.y).toBe(10.0000005);
+    walls[1].a = { ...walls[1].a, y: 10.000002 };
+    expect(deriveExteriorContour(plan)).toEqual({ status: "open" });
+  });
+
+  it("reuses the contour for unchanged walls and recalculates wall edits", () => {
+    const { plan, walls } = garage();
+    const read = createExteriorContourReader();
+    const contour = read(plan);
+    expect(read({ ...plan, showExteriorDimensions: true })).toBe(contour);
+    expect(read({ ...plan, items: [...walls, freePoint] })).toBe(contour);
+    expect(
+      read({
+        ...plan,
+        calibration: { ...plan.calibration, calibrated: false },
+      }),
+    ).toEqual({ status: "uncalibrated" });
+    const moved = translate(plan, [walls[1].id], { x: 50, y: 0 });
+    expect(read(moved)).not.toBe(contour);
+    expect(read(moved)).toEqual(deriveExteriorContour(moved));
+    expect(read(plan)).toBe(contour);
   });
 
   it("updates after thickness and connected wall edits and restores both changes on undo", () => {
@@ -177,12 +228,20 @@ describe("garage exterior contour", () => {
     expect(deriveExteriorContour({ ...plan, items: bowTie })).toEqual({
       status: "unsupported",
     });
-    expect(
-      deriveExteriorContour({
-        ...plan,
-        items: [...walls, { ...walls[1], id: "extra" }],
-      }),
-    ).toEqual({ status: "unsupported" });
+    const extraWalls: Wall[] = [
+      { ...walls[1], id: "duplicate" },
+      {
+        ...walls[1],
+        id: "partition",
+        a: { x: 300, y: 10 },
+        b: { x: 300, y: 690 },
+      },
+      { ...walls[1], id: "stub", a: walls[1].a, b: { x: 300, y: 150 } },
+    ];
+    for (const wall of extraWalls)
+      expect(
+        deriveExteriorContour({ ...plan, items: [...walls, wall] }),
+      ).toEqual({ status: "unsupported" });
     const filled = walls.map((wall) => ({ ...wall, thickness: 600 }));
     expect(deriveExteriorContour({ ...plan, items: filled })).toEqual({
       status: "unsupported",
@@ -194,6 +253,19 @@ describe("garage exterior contour", () => {
 });
 
 describe("exterior dimensions in saved drawings and exports", () => {
+  it("reserves the explicit label advance and accounts for upside-down edge rotation", () => {
+    const upright = exteriorLabelLayout(20, 0, "120000.00 m");
+    const flipped = exteriorLabelLayout(20, 180, "120000.00 m");
+    expect(upright.textLength).toBeGreaterThan(80);
+    expect(flipped.textLength).toBe(upright.textLength);
+    expect(flipped.transform).toBe("rotate(180 10 -47)");
+    expect(flipped.bounds.y1).toBe(-94 - upright.bounds.y2);
+    expect(flipped.bounds.y2).toBe(-94 - upright.bounds.y1);
+    expect(upright.bounds.x2 - upright.bounds.x1).toBeCloseTo(
+      upright.textLength + 5,
+    );
+  });
+
   it("round-trips the display setting per drawing and keeps the free-point item independent", () => {
     const { plan, walls } = garage();
     const show = {
@@ -235,7 +307,7 @@ describe("exterior dimensions in saved drawings and exports", () => {
         <ExteriorDimensions contour={deriveExteriorContour(show)} />
       </g>,
     );
-    const bounds = annotatedPlanBounds(show);
+    const bounds = annotatedPlanBounds(show, deriveExteriorContour(show));
     expect(bounds.x).toBeLessThan(-50);
     expect(bounds.y).toBeLessThan(-50);
     expect(bounds.x + bounds.w).toBeGreaterThan(650);

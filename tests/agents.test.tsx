@@ -383,6 +383,32 @@ describe("atomic architectural commands", () => {
 });
 
 describe("agent previews and CLI", () => {
+  it("sets exterior label visibility without reporting item changes", () => {
+    const p = plan();
+    const shown = applyCommands(
+      p,
+      batch([{ op: "setExteriorDimensions", show: true }]),
+    );
+    expect(shown).toEqual({
+      plan: { ...p, showExteriorDimensions: true },
+      changedIds: [],
+      deletedIds: [],
+    });
+    expect(
+      applyCommands(
+        shown.plan,
+        batch([{ op: "setExteriorDimensions", show: false }]),
+      ).plan.showExteriorDimensions,
+    ).toBe(false);
+    expect(() =>
+      applyCommands(p, {
+        ...batch([]),
+        operations: [{ op: "setExteriorDimensions", show: "true" }],
+      }),
+    ).toThrow();
+    expect(p).not.toHaveProperty("showExteriorDimensions");
+  });
+
   it("uses the architectural renderer, escapes labels and omits editing controls", () => {
     const p = validateProject(example);
     p.name = '<script>alert("x")</script>';

@@ -452,6 +452,10 @@ export class History {
     if (this.past.length > 60) this.past.shift();
     this.future = [];
   }
+  updateSnapshots(update: (p: Plan) => Plan) {
+    this.past = this.past.map(update);
+    this.future = this.future.map(update);
+  }
   undo(current: Plan) {
     const p = this.past.pop();
     if (!p) return current;

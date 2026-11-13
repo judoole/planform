@@ -32,7 +32,7 @@ import type { ExteriorContour } from "./exterior";
 const exteriorMessages = {
   open: "Close the wall loop to show exterior dimensions.",
   unsupported:
-    "Use one convex wall loop with distinct corners and room inside the walls.",
+    "Use one convex wall loop with no extra walls, including partitions or stubs. Keep corners distinct and leave space inside the walls.",
   uncalibrated: "Calibrate scale to show exterior dimensions in meters.",
 };
 

@@ -1,9 +1,12 @@
 import { Fragment, memo } from "react";
 import { type Room, formatRoomArea } from "./rooms";
 import {
+  dimensionFontSize,
+  dimensionLabelStroke,
   exteriorDimensionLabel,
   exteriorDimensionOffset,
   exteriorDimensionSegments,
+  exteriorLabelLayout,
   type ExteriorContour,
 } from "./exterior";
 import {
@@ -38,6 +41,9 @@ function DimensionMark({
   const l = dist(a, b);
   const rotation = angle(a, b);
   const end = d + (d < 0 ? -8 : 8);
+  const layout = keepLabelUpright
+    ? exteriorLabelLayout(l, rotation, label)
+    : undefined;
   return (
     <g
       transform={`translate(${a.x} ${a.y}) rotate(${rotation})`}
@@ -50,19 +56,17 @@ function DimensionMark({
       />
       <text
         x={l / 2}
-        y={d - 6}
+        y={layout?.baseline ?? d - 6}
         textAnchor="middle"
-        fontSize={15}
+        textLength={layout?.textLength}
+        lengthAdjust={layout ? "spacingAndGlyphs" : undefined}
+        fontSize={dimensionFontSize}
         fontFamily="Arial, sans-serif"
         fill="#52685d"
         stroke="white"
-        strokeWidth={5}
+        strokeWidth={dimensionLabelStroke}
         paintOrder="stroke"
-        transform={
-          keepLabelUpright && (rotation >= 90 || rotation < -90)
-            ? `rotate(180 ${l / 2} ${d - 11})`
-            : undefined
-        }
+        transform={layout?.transform}
       >
         {label}
       </text>
@@ -78,7 +82,11 @@ function DimensionMark({
   );
 }
 
-export function ExteriorDimensions({ contour }: { contour?: ExteriorContour }) {
+export const ExteriorDimensions = memo(function ExteriorDimensions({
+  contour,
+}: {
+  contour?: ExteriorContour;
+}) {
   if (contour?.status !== "ready") return null;
   return (
     <g
@@ -98,7 +106,7 @@ export function ExteriorDimensions({ contour }: { contour?: ExteriorContour }) {
       ))}
     </g>
   );
-}
+});
 
 export function RoomLabels({
   rooms,

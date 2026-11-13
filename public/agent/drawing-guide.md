@@ -63,6 +63,8 @@ For file-based updates, return the complete project and keep existing IDs. Alter
 
 Operations: `add` with `items`; `opening` with center `offset` in centimeters (not t); `corner` with `wallId`, `end:"a"|"b"`, `point`; `update` with `id` and `changes`; `delete` with `ids` and optional `cascade:true` for hosted openings. Update cannot change IDs, types, endpoints or group structure. Use corner for shared endpoint edits. Object commands target top-level objects. Locked objects require a separate unlock operation (`update` with only `locked:false`) first. Connected locked walls block a corner edit.
 
+Use `{ "op": "setExteriorDimensions", "show": true }` to show exterior wall labels for the drawing, or set `show` to false to hide them.
+
 Batches are atomic, apply in order, and validate the final result. Invalid openings are rejected, never silently moved/shrunk/deleted. A wall resize retains opening t, so center distance changes proportionally; update t as part of the same batch if a fixed distance is needed. Dependent objects may be added later in the same batch. If shrinking a wall, fix its openings in that batch. Deleting a host wall requires explicitly including its openings or `cascade:true`; deleted IDs are reported.
 
 Run: `npm run plan -- apply drawing.planform.json edits.json --out revised.planform.json`. Then render and inspect the revised drawing. In the browser, use **AI drawings → Edits to the current drawing → Validate & preview → Apply edits**. A complete drawing can be pasted or opened as a downloaded project. Each accepted import/batch is one undoable edit.

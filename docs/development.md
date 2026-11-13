@@ -25,13 +25,14 @@ The CLI returns machine-readable JSON, exits nonzero on failure, and requires a 
 
 Command batches use [commands.schema.json](../public/agent/commands.schema.json). Supported operations:
 
-| Operation | Purpose                                                                             |
-| --------- | ----------------------------------------------------------------------------------- |
-| `add`     | Add typed architectural items with stable IDs                                       |
-| `opening` | Place a door/window by host wall and center distance in centimeters                 |
-| `corner`  | Move a wall endpoint and every wall sharing that coordinate                         |
-| `update`  | Change object properties while preserving ID, type, endpoints and group structure   |
-| `delete`  | Remove named objects; require explicit cascading to remove a wall's hosted openings |
+| Operation               | Purpose                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| `add`                   | Add typed architectural items with stable IDs                                       |
+| `opening`               | Place a door/window by host wall and center distance in centimeters                 |
+| `corner`                | Move a wall endpoint and every wall sharing that coordinate                         |
+| `update`                | Change object properties while preserving ID, type, endpoints and group structure   |
+| `delete`                | Remove named objects; require explicit cascading to remove a wall's hosted openings |
+| `setExteriorDimensions` | Set the drawing's exterior wall label visibility with a boolean `show`              |
 
 Batches apply in order and validate the final result atomically. They respect locks and never silently shrink, reposition or discard openings. A failed batch leaves the input unchanged and produces no output project. Successful batches report changed and deleted IDs. Use **AI drawings → Edits to the current drawing** to preview and apply the same batches in the browser as one history entry. For multi-drawing projects, the CLI validates all drawings, renders the saved active drawing and applies batches to it while keeping every drawing in the output file. Add `--plan <id>` to render or edit a particular drawing, including an inactive proposal. Targeted edits preserve the saved active ID; unknown IDs fail without producing output. `validate` reports every drawing ID, name, role, object count and warnings. The browser applies batches to the selected drawing.
 

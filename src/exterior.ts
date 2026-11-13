@@ -104,7 +104,10 @@ function offsetCorners(faces: ReturnType<typeof wallFace>[], side: 1 | -1) {
  */
 export function deriveExteriorContour(plan: Plan): ExteriorContour {
   if (!plan.calibration.calibrated) return { status: "uncalibrated" };
-  const walls = plan.items.filter((item): item is Wall => item.type === "wall");
+  return deriveWallContour(plan.items.filter((item) => item.type === "wall"));
+}
+
+function deriveWallContour(walls: Wall[]): ExteriorContour {
   if (walls.length < 3) return { status: "open" };
   if (walls.some((wall) => same(wall.a, wall.b)))
     return { status: "unsupported" };
@@ -130,14 +133,16 @@ export function deriveExteriorContour(plan: Plan): ExteriorContour {
   if (winding < 0)
     faces = path.loop.reverse().map((wall) => wallFace(reverseWall(wall)));
 
+  const maxRight = faces.reduce(
+    (right, face) => Math.max(right, face.direction.x),
+    -1,
+  );
   const first = faces.indexOf(
-    faces.reduce((best, face) => {
-      const difference = face.direction.x - best.direction.x;
-      return difference > 0 ||
-        (difference === 0 && face.direction.y > best.direction.y)
-        ? face
-        : best;
-    }),
+    faces
+      .filter((face) => maxRight - face.direction.x <= tolerance)
+      .reduce((best, face) =>
+        face.direction.y > best.direction.y ? face : best,
+      ),
   );
   faces = [...faces.slice(first), ...faces.slice(0, first)];
 
@@ -153,37 +158,105 @@ export function deriveExteriorContour(plan: Plan): ExteriorContour {
   return { status: "ready", corners };
 }
 
+export function createExteriorContourReader() {
+  const cache = new WeakMap<
+    Plan["items"],
+    { walls: Wall[]; contour: ExteriorContour }
+  >();
+  // Editor updates replace changed walls and reuse unchanged objects.
+  const uncalibrated: ExteriorContour = { status: "uncalibrated" };
+  let last: { walls: Wall[]; contour: ExteriorContour } | undefined;
+  return (plan: Plan) => {
+    if (!plan.calibration.calibrated) return uncalibrated;
+    const cached = cache.get(plan.items);
+    if (cached) {
+      last = cached;
+      return cached.contour;
+    }
+    const walls = plan.items.filter((item) => item.type === "wall");
+    if (
+      !last ||
+      last.walls.length !== walls.length ||
+      !walls.every((wall, index) => wall === last?.walls[index])
+    )
+      last = { walls, contour: deriveWallContour(walls) };
+    cache.set(plan.items, last);
+    return last.contour;
+  };
+}
+
 export const exteriorDimensionOffset = -36;
+export const dimensionFontSize = 15;
+export const dimensionLabelStroke = 5;
 export const exteriorDimensionSegments = (corners: Point[]): [Point, Point][] =>
   corners.map((point, i) => [point, corners[(i + 1) % corners.length]]);
 export const exteriorDimensionLabel = (a: Point, b: Point) =>
   `${(dist(a, b) / 100).toFixed(2)} m`;
 
-export function visibleExteriorContour(plan: Plan) {
-  if (plan.showExteriorDimensions) return deriveExteriorContour(plan);
+export function visibleExteriorContour(
+  plan: Plan,
+  read = deriveExteriorContour,
+) {
+  if (plan.showExteriorDimensions) return read(plan);
+}
+
+/** Share the label's explicit SVG advance and rotated bounds across renderers.
+ * The bounds include the white stroke and vertical font extents.
+ */
+export function exteriorLabelLayout(
+  length: number,
+  rotation: number,
+  label: string,
+) {
+  const center = length / 2;
+  const textLength = label.length * dimensionFontSize * 0.56;
+  const baseline = exteriorDimensionOffset - 6;
+  const pivot = exteriorDimensionOffset - 11;
+  const flipped = rotation >= 90 || rotation < -90;
+  const padding = dimensionLabelStroke / 2;
+  const x1 = center - textLength / 2 - padding;
+  const x2 = center + textLength / 2 + padding;
+  const top = baseline - dimensionFontSize - padding;
+  const bottom = baseline + dimensionFontSize / 4 + padding;
+  return {
+    textLength,
+    baseline,
+    transform: flipped ? `rotate(180 ${center} ${pivot})` : undefined,
+    bounds: {
+      x1,
+      x2,
+      y1: flipped ? 2 * pivot - bottom : top,
+      y2: flipped ? 2 * pivot - top : bottom,
+    },
+  };
 }
 
 /** Include the dimension marks and their text when fitting or exporting. */
 export function annotatedPlanBounds(
   plan: Plan,
-  exterior = visibleExteriorContour(plan),
+  exterior: ExteriorContour | undefined,
 ) {
   const drawing = planBounds(plan);
   if (exterior?.status !== "ready") return drawing;
   const marks = exteriorDimensionSegments(exterior.corners).map(([a, b]) => {
     const length = dist(a, b);
-    // Allow for the text halo and the rotated tick marks at either end.
-    const textHalfWidth = exteriorDimensionLabel(a, b).length * 7.5;
-    const x1 = Math.min(-5, length / 2 - textHalfWidth);
-    const x2 = Math.max(length + 5, length / 2 + textHalfWidth);
-    const y = exteriorDimensionOffset - 25;
+    const rotation = angle(a, b);
+    const { bounds } = exteriorLabelLayout(
+      length,
+      rotation,
+      exteriorDimensionLabel(a, b),
+    );
+    const x1 = Math.min(-5, bounds.x1);
+    const x2 = Math.max(length + 5, bounds.x2);
+    const y1 = Math.min(exteriorDimensionOffset - 9, bounds.y1);
+    const y2 = Math.max(1, bounds.y2);
     return pointsBox(
       [
-        { x: x1, y },
-        { x: x2, y },
-        { x: x2, y: 1 },
-        { x: x1, y: 1 },
-      ].map((p) => add(a, rotate(p, angle(a, b)))),
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x2, y: y2 },
+        { x: x1, y: y2 },
+      ].map((p) => add(a, rotate(p, rotation))),
     );
   });
   return unionBoxes([drawing, ...marks]);
