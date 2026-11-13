@@ -25,6 +25,7 @@ import {
   groupItems,
   ungroupItems,
 } from "./model";
+import { openingVertical, wallHeight, DEFAULT_WALL_HEIGHT } from "./building";
 import type { Tool } from "./Canvas";
 import {
   isEditProtected,
@@ -182,6 +183,26 @@ export default function Properties({
   const units = plan.calibration.calibrated ? "cm" : "units";
   const endpoints =
     item?.type === "dimension" ? dimensionEndpoints(item, plan.items) : null;
+  const walls = items.filter((i): i is Wall => i.type === "wall");
+  const openingSize =
+    item?.type === "door" || item?.type === "window"
+      ? openingVertical(plan, item)
+      : undefined;
+  function setWallHeight(height: number | undefined) {
+    const selected = new Set(
+      walls
+        .filter((wall) => !isEditProtected(plan, wall))
+        .map((wall) => wall.id),
+    );
+    commit({
+      ...plan,
+      items: plan.items.map((item) =>
+        item.type === "wall" && selected.has(item.id)
+          ? { ...item, height }
+          : item,
+      ),
+    });
+  }
   function patch(changes: Partial<Item>) {
     if (!item || itemProtected) return;
     commit(
@@ -401,6 +422,98 @@ export default function Properties({
           </h3>
           <p className="notice">{item.evidence.note}</p>
         </div>
+      )}
+      {walls.length > 0 && (
+        <section className="panel-section" aria-label="Wall heights">
+          <h3>
+            {walls.length === 1 ? "Wall height" : "Selected wall heights"}
+          </h3>
+          {walls.length === 1 ? (
+            <NumberField
+              label="Wall height"
+              value={wallHeight(plan, walls[0])}
+              onChange={setWallHeight}
+              disabled={isEditProtected(plan, walls[0])}
+              unit="cm"
+              min={1}
+              max={5000}
+            />
+          ) : (
+            <form
+              className="wall-height-batch"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = new FormData(event.currentTarget).get("height");
+                if (value) setWallHeight(Number(value));
+                event.currentTarget.reset();
+              }}
+            >
+              <label className="field">
+                <span>Height for selected walls</span>
+                <div>
+                  <input
+                    key={walls.map((wall) => wall.id).join(",")}
+                    name="height"
+                    type="number"
+                    step="any"
+                    min={1}
+                    max={5000}
+                    required
+                    disabled={walls.every((wall) =>
+                      isEditProtected(plan, wall),
+                    )}
+                  />
+                  <small>cm</small>
+                </div>
+              </label>
+              <button
+                disabled={walls.every((wall) => isEditProtected(plan, wall))}
+                type="submit"
+              >
+                Apply height
+              </button>
+            </form>
+          )}
+          {walls.some(
+            (wall) => !isEditProtected(plan, wall) && wall.height !== undefined,
+          ) ? (
+            <button onClick={() => setWallHeight(undefined)}>
+              Use floor default
+            </button>
+          ) : (
+            <p className="muted">
+              Floor default{" "}
+              {plan.building?.defaultWallHeight ?? DEFAULT_WALL_HEIGHT} cm.
+            </p>
+          )}
+        </section>
+      )}
+      {openingSize && item && (
+        <section className="panel-section" aria-label="Opening height settings">
+          <h3>Opening height</h3>
+          <NumberField
+            label="Opening height"
+            value={openingSize.height}
+            onChange={(height) => patch({ height })}
+            disabled={item.locked}
+            min={1}
+            max={5000}
+          />
+          <NumberField
+            label="Sill above floor"
+            value={openingSize.sill}
+            onChange={(sill) => patch({ sill })}
+            disabled={item.locked}
+            min={0}
+            max={5000}
+          />
+          {!openingSize.fits && (
+            <p className="notice" role="status">
+              The opening extends above its wall. Increase the wall height or
+              lower the opening.
+            </p>
+          )}
+        </section>
       )}
       <section className="panel-section" aria-label="Exterior dimensions">
         <label className="property-checkbox">

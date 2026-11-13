@@ -1,6 +1,6 @@
 # Planform
 
-A simple floor planner that runs on a static web page. Save editable plans as JSON, export scaled drawing PDFs, and assemble a detached-garage permit draft and attachment ZIP in the browser.
+A browser-based floor planner for single-storey buildings. Draw in 2D, set wall heights and a roof, and inspect the same model in 3D. Save editable plans as JSON, export scaled sheets and images, and assemble a detached-garage permit package.
 
 See the fully functional page at [https://judoole.github.io/planform/](https://judoole.github.io/planform/).
 
