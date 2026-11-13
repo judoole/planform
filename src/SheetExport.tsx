@@ -12,10 +12,12 @@ export default function SheetExport({
   build,
   name,
   initialScale = defaultSheetOptions.scale,
+  allowFit = false,
 }: {
-  build: () => SheetDrawing;
+  build: (options: SheetOptions) => SheetDrawing;
   name: string;
   initialScale?: SheetOptions["scale"];
+  allowFit?: boolean;
 }) {
   const [options, setOptions] = useState<SheetOptions>({
     ...defaultSheetOptions,
@@ -27,7 +29,7 @@ export default function SheetExport({
   let preview: string | undefined;
   let error: string | undefined;
   try {
-    preview = sheetPreview(build(), options);
+    preview = sheetPreview(build(options), options);
   } catch (e) {
     error = (e as Error).message;
   }
@@ -36,7 +38,7 @@ export default function SheetExport({
     setExporting(true);
     setExportError("");
     try {
-      const drawing = build();
+      const drawing = build(options);
       download(
         await sheetPdf(drawing, options),
         `${options.name} - ${drawing.title}.pdf`,
@@ -84,14 +86,19 @@ export default function SheetExport({
         <label>
           Scale
           <select
+            aria-label="Scale"
             value={options.scale}
             onChange={(e) =>
               setOptions({
                 ...options,
-                scale: Number(e.target.value) as SheetOptions["scale"],
+                scale:
+                  e.target.value === "fit"
+                    ? "fit"
+                    : (Number(e.target.value) as SheetOptions["scale"]),
               })
             }
           >
+            {allowFit && <option value="fit">Fit to page</option>}
             {[50, 100, 200, 500].map((scale) => (
               <option value={scale} key={scale}>
                 1:{scale}

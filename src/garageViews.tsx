@@ -409,7 +409,7 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
               strokeWidth={4}
             />
             <text x={span / 2} y={base - 38} textAnchor="middle">
-              Garage
+              Ground floor
             </text>
             <text x={span / 2} y={-high - 17} textAnchor="middle">
               Roof pitch {roof.pitch}° · Roof thickness {roof.thickness} cm

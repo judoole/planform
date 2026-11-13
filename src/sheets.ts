@@ -16,7 +16,7 @@ export type SheetDrawing = {
 export type SheetOptions = {
   paper: "A4" | "A3";
   orientation: "portrait" | "landscape";
-  scale: 50 | 100 | 200 | 500;
+  scale: "fit" | 50 | 100 | 200 | 500;
   name: string;
 };
 export const defaultSheetOptions: Omit<SheetOptions, "name"> = {
@@ -32,14 +32,24 @@ export function layoutSheet(drawing: SheetDrawing, options: SheetOptions) {
   const margin = 10;
   const footerHeight = 25 + (drawing.legend?.length ?? 0) * 5;
   const contentHeight = height - margin * 2 - footerHeight;
-  const mmPerCm = 10 / options.scale;
+  const fit = options.scale === "fit";
+  const contentWidth = width - margin * 2;
+  const mmPerCm =
+    options.scale === "fit"
+      ? Math.min(
+          contentWidth / drawing.bounds.w,
+          contentHeight / drawing.bounds.h,
+        )
+      : 10 / options.scale;
   const w = drawing.bounds.w * mmPerCm;
   const h = drawing.bounds.h * mmPerCm;
   if (w <= 0 || h <= 0 || !Number.isFinite(w + h))
     throw Error("The drawing has no printable extent.");
-  if (w > width - margin * 2 || h > contentHeight)
+  if (w > contentWidth + 1e-8 || h > contentHeight + 1e-8)
     throw Error(
-      `The drawing needs ${w.toFixed(1)} × ${h.toFixed(1)} mm at 1:${options.scale}. Choose larger paper, a different orientation, or a higher scale denominator.`,
+      fit
+        ? "There is not enough room on this page. Try larger paper or a different orientation."
+        : `The drawing needs ${w.toFixed(1)} × ${h.toFixed(1)} mm at 1:${options.scale}. Choose larger paper, a different orientation, or a smaller drawing scale.`,
     );
 
   const barMeters =
@@ -60,7 +70,10 @@ export function layoutSheet(drawing: SheetDrawing, options: SheetOptions) {
     h,
     footer: height - margin - footerHeight,
     barMeters,
-    barWidth: barMeters * 100 * mmPerCm,
+    barWidth: fit ? 0 : barMeters * 100 * mmPerCm,
+    scaleLabel: fit
+      ? `Sketch - Not to scale   ${options.paper}`
+      : `1:${options.scale}   ${options.paper}   Print at 100% actual size`,
   };
 }
 
@@ -118,22 +131,21 @@ export async function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
   pdf.text(options.name, page.margin, page.footer + 12, {
     maxWidth: page.width - 98,
   });
-  pdf.text(
-    `1:${options.scale}   ${options.paper}   Print at 100% actual size`,
-    page.width - page.margin,
-    page.footer + 6,
-    { align: "right" },
-  );
-  const barX = page.width - page.margin - page.barWidth;
-  const barY = page.footer + 13;
-  pdf.line(barX, barY, barX + page.barWidth, barY);
-  for (const x of [barX, barX + page.barWidth / 2, barX + page.barWidth]) {
-    pdf.line(x, barY - 1, x, barY + 1);
-  }
-  pdf.text("0", barX, barY + 5);
-  pdf.text(`${page.barMeters} m`, barX + page.barWidth, barY + 5, {
+  pdf.text(page.scaleLabel, page.width - page.margin, page.footer + 6, {
     align: "right",
   });
+  const barX = page.width - page.margin - page.barWidth;
+  const barY = page.footer + 13;
+  if (page.barWidth) {
+    pdf.line(barX, barY, barX + page.barWidth, barY);
+    for (const x of [barX, barX + page.barWidth / 2, barX + page.barWidth]) {
+      pdf.line(x, barY - 1, x, barY + 1);
+    }
+    pdf.text("0", barX, barY + 5);
+    pdf.text(`${page.barMeters} m`, barX + page.barWidth, barY + 5, {
+      align: "right",
+    });
+  }
   drawing.legend?.forEach((entry, index) => {
     const swatch = drawing.legendSwatches?.find((row) => row.index === index);
     const y = page.footer + 23 + index * 5;
@@ -165,15 +177,19 @@ export function sheetPreview(drawing: SheetDrawing, options: SheetOptions) {
     <rect width="100%" height="100%" fill="white"/>
     ${artwork}
     <g fill="none" stroke="#414141" stroke-width=".25">
-      <path d="M ${page.margin} ${page.footer} H ${page.width - page.margin} M ${barX} ${barY} h ${page.barWidth}"/>
-      ${[barX, barX + page.barWidth / 2, barX + page.barWidth].map((x) => `<path d="M ${x} ${barY - 1} v 2"/>`).join("")}
+      <path d="M ${page.margin} ${page.footer} H ${page.width - page.margin}"/>
+      ${page.barWidth ? `<path d="M ${barX} ${barY} h ${page.barWidth}"/>` + [barX, barX + page.barWidth / 2, barX + page.barWidth].map((x) => `<path d="M ${x} ${barY - 1} v 2"/>`).join("") : ""}
     </g>
     <g font-family="Arial, sans-serif" font-size="3.2" fill="#222">
       <text x="${page.margin}" y="${page.footer + 6}" font-size="4.6">${title}</text>
       <text x="${page.margin}" y="${page.footer + 12}">${name}</text>
-      <text x="${page.width - page.margin}" y="${page.footer + 6}" text-anchor="end">1:${options.scale} · ${options.paper} · Print at 100% actual size</text>
-      <text x="${barX}" y="${barY + 5}">0</text>
-      <text x="${barX + page.barWidth}" y="${barY + 5}" text-anchor="end">${page.barMeters} m</text>
+      <text x="${page.width - page.margin}" y="${page.footer + 6}" text-anchor="end">${page.scaleLabel}</text>
+      ${
+        page.barWidth
+          ? `<text x="${barX}" y="${barY + 5}">0</text>
+      <text x="${barX + page.barWidth}" y="${barY + 5}" text-anchor="end">${page.barMeters} m</text>`
+          : ""
+      }
       ${
         drawing.legend
           ?.map((entry, i) => {

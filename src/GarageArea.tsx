@@ -4,8 +4,8 @@ import { pointsBox, type Plan, type Point } from "./model";
 
 const confirmations = [
   ["clearFloor", "Entire ground floor is measurable"],
-  ["loft", "Garage has a loft"],
-  ["overhang", "Garage has a roof overhang"],
+  ["loft", "Building has a loft"],
+  ["overhang", "Building has a roof overhang"],
   ["otherArea", "Other potentially countable area"],
 ] as const;
 
@@ -109,7 +109,7 @@ export default function GarageArea({
             new Blob([garageAreaReport(plan)], {
               type: "text/plain;charset=utf-8",
             }),
-            "Garage area calculation - BRA and BYA.txt",
+            "Building area calculation - BRA and BYA.txt",
           )
         }
       >

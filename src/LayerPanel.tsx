@@ -57,8 +57,13 @@ export default function LayerPanel({
   }
   return (
     <div className="layer-panel panel-section">
+      <p className="muted">
+        Layers let you show, hide or lock parts of your drawing together. For
+        example, keep furniture on its own layer so you can hide it to see the
+        layout. Leave everything on Default for a simple sketch.
+      </p>
       <label className="field">
-        <span>Active layer</span>
+        <span>Add new objects to</span>
         <select
           aria-label="Active layer"
           value={active.id}

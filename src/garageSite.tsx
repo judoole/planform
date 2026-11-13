@@ -142,7 +142,7 @@ export function SiteArtwork({ plan, site }: { plan: Plan; site: GarageSite }) {
 
 export function sitePlanSheet(plan: Plan, propertyId: string): SheetDrawing {
   const site = plan.garage?.site;
-  if (!site) throw Error("Import a local municipal map.");
+  if (!site) throw Error("Import a map from your computer.");
   const problem = siteMapProblem(site);
   if (problem) throw Error(problem);
   const { corners, scale } = siteGarageGeometry(plan, site);
@@ -150,10 +150,8 @@ export function sitePlanSheet(plan: Plan, propertyId: string): SheetDrawing {
   const box = pointsBox(corners);
   if (box.x < 0 || box.y < 0 || box.x + box.w > width || box.y + box.h > height)
     throw Error(
-      "Move the garage footprint fully within the map before exporting.",
+      "Move the building footprint fully within the map before exporting.",
     );
-  if (!propertyId.trim())
-    throw Error("Enter a property identifier in the Application package tab.");
   const distances = new Map(
     siteDistances(corners, site.features, scale).map((d) => [
       d.index,
@@ -169,8 +167,8 @@ export function sitePlanSheet(plan: Plan, propertyId: string): SheetDrawing {
       </g>,
     ),
     legend: [
-      `Property: ${propertyId.trim()}`,
-      "Distances measured horizontally from the garage exterior on the supplied map.",
+      ...(propertyId.trim() ? [`Property: ${propertyId.trim()}`] : []),
+      "Distances measured horizontally from the outside walls on the supplied map.",
       ...site.features.map((feature, i) => {
         const distance = distances.get(i);
         return `${i + 1}. ${feature.name || siteFeatureNames[feature.kind]}${distance !== undefined ? ` - ${distance.toFixed(2)} m` : ""}${feature.correction ? ` - ${feature.correction}` : ""}`;

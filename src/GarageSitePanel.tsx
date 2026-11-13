@@ -21,11 +21,9 @@ const rasterPoints = (points: Point[]) =>
 export default function GarageSitePanel({
   plan,
   onChange,
-  propertyId,
 }: {
   plan: Plan;
   onChange: (details: GarageDetails) => void;
-  propertyId: string;
 }) {
   const [choose, setChoose] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
@@ -36,6 +34,7 @@ export default function GarageSitePanel({
   const [correction, setCorrection] = useState("");
   const [error, setError] = useState("");
   const site = plan.garage?.site;
+  const propertyId = plan.garage?.permit?.propertyId ?? "";
   const scale = site && siteScale(site);
   let geometry: ReturnType<typeof siteGarageGeometry> | undefined;
   let garageProblem = "";
@@ -140,7 +139,7 @@ export default function GarageSitePanel({
     <>
       <h3>Site plan</h3>
       <p>
-        Import a local map, calibrate its scale bar and place the garage. Map
+        Import a local map, calibrate its scale bar and place the building. Map
         calibration uses a separate scale from the floor plan.
       </p>
       <div className="sheet-fields">
@@ -164,7 +163,7 @@ export default function GarageSitePanel({
         )}
         {site && (
           <button disabled={!scale} onClick={() => start("place")}>
-            {site.placement ? "Move garage" : "Place garage"}
+            {site.placement ? "Move building" : "Place building"}
           </button>
         )}
         {site && (
@@ -205,7 +204,9 @@ export default function GarageSitePanel({
               distance.
             </p>
           )}
-          {mode === "place" && <p>Click the centre of the proposed garage.</p>}
+          {mode === "place" && (
+            <p>Click the centre of the proposed building.</p>
+          )}
           {mode === "feature" && (
             <p>
               Click points along the map feature. For parking, mark at least
@@ -351,7 +352,7 @@ export default function GarageSitePanel({
             />
             {site.placement && (
               <AngleField
-                label="Garage rotation (degrees clockwise)"
+                label="Building rotation (degrees clockwise)"
                 angle={site.placement.rotation}
                 onAngle={(rotation) =>
                   update({
@@ -393,6 +394,22 @@ export default function GarageSitePanel({
             supplied map. Record any survey or roof projection corrections with
             the feature.
           </p>
+          <label className="field">
+            <span>Property reference (optional)</span>
+            <input
+              value={propertyId}
+              maxLength={120}
+              onChange={(event) =>
+                onChange({
+                  ...plan.garage,
+                  permit: {
+                    ...plan.garage?.permit,
+                    propertyId: event.target.value,
+                  },
+                })
+              }
+            />
+          </label>
           <SheetExport
             build={() => sitePlanSheet(plan, propertyId)}
             name={plan.name}

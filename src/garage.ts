@@ -1,5 +1,4 @@
 import { wallHeight } from "./building";
-import type { GaragePermitDetails } from "./garagePackage";
 import type { GarageSite } from "./siteMap";
 import type { GarageStructure } from "./garageViews";
 import { deriveExteriorContour, exteriorDimensionSegments } from "./exterior";
@@ -7,7 +6,23 @@ import { dist, type Plan, type Point } from "./model";
 
 export type GarageDetails = {
   structure?: GarageStructure;
-  permit?: GaragePermitDetails;
+  permit?: {
+    propertyId?: string;
+    // Earlier drafts can contain an address, description and checklist.
+    address?: string;
+    description?: string;
+    separate?: Partial<
+      Record<
+        | "applicationForm"
+        | "neighbourNotice"
+        | "dispensation"
+        | "consent"
+        | "authorities"
+        | "siteConsiderations",
+        "supplied" | "missing" | "notApplicable"
+      >
+    >;
+  };
   site?: GarageSite;
   area?: {
     clearFloor?: boolean;
@@ -21,11 +36,9 @@ export type GarageDetails = {
 export function garageFootprint(plan: Plan) {
   const contour = deriveExteriorContour(plan);
   if (contour.status === "uncalibrated")
-    throw Error(
-      "Calibrate the garage floor plan before preparing permit drawings.",
-    );
+    throw Error("Calibrate the floor plan before preparing these drawings.");
   if (contour.status !== "ready" || contour.corners.length !== 4)
-    throw Error("The garage needs one closed rectangular wall loop.");
+    throw Error("This tool needs one closed rectangular outline.");
   const edges = exteriorDimensionSegments(contour.corners);
   const rectangular = edges.every(([a, b], index) => {
     const [, c] = edges[(index + 1) % edges.length];
@@ -33,7 +46,7 @@ export function garageFootprint(plan: Plan) {
     return Math.abs(dot / (dist(a, b) * dist(b, c))) < 1e-6;
   });
   if (!rectangular)
-    throw Error("Permit drawings require a rectangular garage footprint.");
+    throw Error("This tool supports a rectangular building outline.");
   return contour;
 }
 
@@ -71,13 +84,13 @@ export function garageAreas(plan: Plan) {
     braNotes.push(
       area?.loft
         ? "Assess the loft and any measurable floor area."
-        : "Confirm whether the garage includes a loft.",
+        : "Confirm whether the building includes a loft.",
     );
   if (area?.overhang !== false)
     byaNotes.push(
       area?.overhang
         ? "Assess the roof overhang using its projection, clearance and use of the area below."
-        : "Confirm whether the garage includes a roof overhang.",
+        : "Confirm whether the building includes a roof overhang.",
     );
   if (area?.otherArea !== false) {
     braNotes.push("Confirm or assess any additional countable area.");
@@ -99,7 +112,7 @@ export function garageAreaReport(plan: Plan) {
       .map((cm) => `${(cm / 100).toFixed(2)} m`)
       .join(" × ");
   return [
-    "Garage area calculation",
+    "Building area calculation",
     plan.name,
     "",
     `BRA: ${bra.value.toFixed(2)} m²${bra.notes.length ? " (provisional)" : ""}`,

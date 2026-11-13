@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { splitWall } from "../src/junctions";
 import { garageViews, garageViewSheet } from "../src/garageViews";
 import { sitePlanSheet } from "../src/garageSite";
-import { prepareGaragePackage } from "../src/garagePackage";
 import {
   nearestSiteDistance,
   siteDistances,
@@ -11,7 +10,7 @@ import {
 import { garageAreas, garageAreaReport } from "../src/garage";
 import { emptyPlan, type Plan, type Wall } from "../src/model";
 import { floorPlanSheet } from "../src/planSheet";
-import { layoutSheet, defaultSheetOptions } from "../src/sheets";
+import { layoutSheet, defaultSheetOptions, sheetPreview } from "../src/sheets";
 import { applyCommands } from "../src/commands";
 import { adoptLegacyGarageMeasurements } from "../src/legacyGarage";
 import { validateProject } from "../src/validation";
@@ -88,7 +87,7 @@ describe("garage areas", () => {
     expect(garageAreaReport(plan)).not.toContain("BYA: 42.00 m² (provisional)");
     expect(() =>
       garageAreas({ ...plan, items: plan.items.slice(0, -1) }),
-    ).toThrow("closed rectangular wall loop");
+    ).toThrow("closed rectangular outline");
   });
 });
 
@@ -127,6 +126,22 @@ describe("scaled sheets", () => {
       layoutSheet(drawing, { ...defaultSheetOptions, name: "Test", scale: 500 })
         .w,
     ).toBe(10);
+  });
+
+  it("exports an uncalibrated sketch fitted to paper without a scale claim", () => {
+    const plan = garage();
+    plan.calibration.calibrated = false;
+    const drawing = floorPlanSheet(plan, { fit: true });
+    const options = {
+      ...defaultSheetOptions,
+      name: "Sketch",
+      scale: "fit",
+    } as const;
+    const page = layoutSheet(drawing, options);
+    expect(page.h).toBeCloseTo(165);
+    expect(page.barWidth).toBe(0);
+    expect(sheetPreview(drawing, options)).toContain("Sketch - Not to scale");
+    expect(sheetPreview(drawing, options)).not.toContain("Print at 100%");
   });
 
   it("reports calibration or fit problems before export and reuses the renderer", () => {
@@ -249,21 +264,17 @@ describe("permit deliverables share the edited garage", () => {
       "Calibrate the site map",
     );
   });
-  it("prepares every sheet from one snapshot and records incomplete entries", () => {
+  it("updates the additional drawing sheets from the edited building", () => {
     const plan = fittedGarage();
-    const prepared = prepareGaragePackage(plan, sitePlanSheet);
+    expect(garageViews.map((view) => garageViewSheet(plan, view))).toHaveLength(
+      5,
+    );
     expect(
-      prepared.entries.filter((entry) => entry.file && "sheet" in entry.file),
-    ).toHaveLength(7);
-    expect(
-      prepared.entries.find(
-        ({ title }) => title === "Municipal application form",
-      )?.status,
-    ).toBe("supplied");
-    expect(
-      prepared.entries.find(({ title }) => title === "Dispensation request")
-        ?.status,
-    ).toBe("notApplicable");
+      sitePlanSheet(plan, "").legend?.some((item) =>
+        item.startsWith("Property:"),
+      ),
+    ).toBe(false);
+    expect(sitePlanSheet(plan, "12/34").legend).toContain("Property: 12/34");
     const building = plan.building!;
     expect(garageViewSheet(plan, "section").markup).toContain("Roof pitch 28");
     const edited = {
@@ -273,13 +284,6 @@ describe("permit deliverables share the edited garage", () => {
     expect(garageViewSheet(edited, "section").markup).toContain(
       "Roof pitch 32",
     );
-    const partial = prepareGaragePackage(garage(), sitePlanSheet);
-    expect(
-      partial.entries.find(({ title }) => title === "Site plan")?.status,
-    ).toBe("missing");
-    expect(
-      partial.entries.find(({ title }) => title === "Section A-A")?.status,
-    ).toBe("missing");
   });
 });
 

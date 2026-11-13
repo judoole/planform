@@ -46,7 +46,6 @@ import {
   PanelRightClose,
   Link2,
   History as HistoryIcon,
-  ClipboardList,
   Image as ImageIcon,
 } from "lucide-react";
 import {
@@ -70,9 +69,7 @@ import {
 } from "./model";
 import { furniture, type FurnitureKind } from "./furniture";
 import GarageArea from "./GarageArea";
-import GaragePackagePanel from "./GaragePackagePanel";
 import GarageSitePanel from "./GarageSitePanel";
-import { sitePlanSheet } from "./garageSite";
 import GarageViewsPanel from "./GarageViewsPanel";
 import { planArtworkBounds } from "./preview";
 import ExportDrawingDialog from "./ExportDrawingDialog";
@@ -251,9 +248,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [overlapOpen, setOverlapOpen] = useState(false),
     [menu, setMenu] = useState(false),
     [exportOpen, setExportOpen] = useState(false),
-    [garageOpen, setGarageOpen] = useState(false),
-    [garageTab, setGarageTab] = useState<"area" | "views" | "site" | "package">(
-      "area",
+    [drawingToolsOpen, setDrawingToolsOpen] = useState(false),
+    [drawingTool, setDrawingTool] = useState<"area" | "views" | "site">(
+      "views",
     ),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
@@ -958,13 +955,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (e.key === "Escape" && !referencePicker) {
-        if (garageOpen) {
-          setGarageOpen(false);
+        if (drawingToolsOpen) {
+          setDrawingToolsOpen(false);
           return;
         }
       }
       if (
-        garageOpen ||
+        drawingToolsOpen ||
         exportOpen ||
         shareOpen ||
         manageOpen ||
@@ -1137,14 +1134,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <Link2 size={16} />
             <span>Share</span>
           </button>
-          <button
-            title="Garage permit"
-            aria-label="Garage permit"
-            onClick={() => setGarageOpen(true)}
-          >
-            <ClipboardList size={16} />
-            <span>Garage permit</span>
-          </button>
           <div className="drawing-export-action">
             <button className="primary" onClick={() => setExportOpen(true)}>
               Export
@@ -1181,14 +1170,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             }}
           >
             Save project
-          </button>
-          <button
-            onClick={() => {
-              setMenu(false);
-              setGarageOpen(true);
-            }}
-          >
-            Garage permit
           </button>
         </div>
       )}
@@ -1777,72 +1758,62 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           onDownload={downloadProject}
         />
       )}
-      {garageOpen && (
+      {drawingToolsOpen && (
         <div className="modal-backdrop">
           <section
             className="modal sheet-dialog"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="garage-title"
+            aria-labelledby="drawing-tools-title"
           >
             <button
               className="modal-close"
-              aria-label="Close garage permit"
-              onClick={() => setGarageOpen(false)}
+              aria-label="Close more drawings"
+              onClick={() => setDrawingToolsOpen(false)}
             >
               <X size={16} />
             </button>
-            <h2 id="garage-title">Garage permit</h2>
+            <h2 id="drawing-tools-title">More drawings and measurements</h2>
+            <p>
+              Open a side view, mark a site map or estimate building areas for a
+              simple rectangular building.
+            </p>
             <div
-              className="permit-tabs"
+              className="drawing-tools-tabs"
               role="group"
-              aria-label="Garage permit section"
+              aria-label="Drawing tools"
             >
               <button
-                aria-pressed={garageTab === "area"}
-                onClick={() => setGarageTab("area")}
+                aria-pressed={drawingTool === "area"}
+                onClick={() => setDrawingTool("area")}
               >
                 Building areas
               </button>
               <button
-                aria-pressed={garageTab === "views"}
-                onClick={() => setGarageTab("views")}
+                aria-pressed={drawingTool === "views"}
+                onClick={() => setDrawingTool("views")}
               >
                 Section and elevations
               </button>
               <button
-                aria-pressed={garageTab === "site"}
-                onClick={() => setGarageTab("site")}
+                aria-pressed={drawingTool === "site"}
+                onClick={() => setDrawingTool("site")}
               >
                 Site plan
               </button>
-              <button
-                aria-pressed={garageTab === "package"}
-                onClick={() => setGarageTab("package")}
-              >
-                Application package
-              </button>
             </div>
-            {garageTab === "area" ? (
+            {drawingTool === "area" ? (
               <GarageArea plan={drawing} onChange={updateGarage} />
-            ) : garageTab === "views" ? (
+            ) : drawingTool === "views" ? (
               <GarageViewsPanel
                 key={version}
                 plan={drawing}
                 onChange={updateGarage}
               />
-            ) : garageTab === "site" ? (
+            ) : (
               <GarageSitePanel
                 key={version}
                 plan={drawing}
-                propertyId={drawing.garage?.permit?.propertyId ?? ""}
-                onChange={updateGarage}
-              />
-            ) : (
-              <GaragePackagePanel
-                key={version}
-                plan={drawing}
-                makeSiteSheet={sitePlanSheet}
                 onChange={updateGarage}
               />
             )}
@@ -1858,6 +1829,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               : `${project.name} - ${activeDrawing.name}`
           }
           onClose={() => setExportOpen(false)}
+          onAdditionalDrawings={() => {
+            setExportOpen(false);
+            setDrawingToolsOpen(true);
+          }}
         />
       )}
       {revisions && (

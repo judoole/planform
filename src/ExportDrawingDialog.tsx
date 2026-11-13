@@ -12,10 +12,12 @@ export default function ExportDrawingDialog({
   plan,
   name,
   onClose,
+  onAdditionalDrawings,
 }: {
   plan: Plan;
   name: string;
   onClose: () => void;
+  onAdditionalDrawings: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [format, setFormat] = useState<Format>("pdf");
@@ -70,6 +72,9 @@ export default function ExportDrawingDialog({
         <X size={16} />
       </button>
       <h2 id="drawing-export-title">Export drawing</h2>
+      <p>
+        Download a PDF of your floor plan to share or attach to an application.
+      </p>
       <label className="field">
         <span>Format</span>
         <select
@@ -79,13 +84,18 @@ export default function ExportDrawingDialog({
             setFailure("");
           }}
         >
-          <option value="pdf">PDF · scaled sheet</option>
+          <option value="pdf">PDF</option>
           <option value="svg">SVG · vector drawing</option>
           <option value="png">PNG · image</option>
         </select>
       </label>
       {format === "pdf" ? (
-        <SheetExport build={() => floorPlanSheet(plan)} name={name} />
+        <SheetExport
+          build={({ scale }) => floorPlanSheet(plan, { fit: scale === "fit" })}
+          name={name}
+          initialScale="fit"
+          allowFit
+        />
       ) : (
         <>
           {svg && (
@@ -107,6 +117,9 @@ export default function ExportDrawingDialog({
           </button>
         </>
       )}
+      <button className="more-drawings-button" onClick={onAdditionalDrawings}>
+        More drawings and measurements
+      </button>
     </dialog>
   );
 }

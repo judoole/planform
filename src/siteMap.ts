@@ -47,7 +47,7 @@ export function siteScale(site: GarageSite) {
 export function siteGarageGeometry(plan: Plan, site: GarageSite) {
   const scale = siteScale(site);
   if (!scale) throw Error("Calibrate the site map using a known distance.");
-  if (!site.placement) throw Error("Place the garage on the calibrated map.");
+  if (!site.placement) throw Error("Place the building on the calibrated map.");
   const { center, rotation } = site.placement;
   const { corners } = garageFootprint(plan);
   const box = pointsBox(corners);
@@ -159,7 +159,7 @@ export function siteMapProblem(site: GarageSite) {
   )
     return "Calibrate with two different points on the map and a positive distance.";
   if (site.placement && !onMap(site.placement.center))
-    return "Place the garage centre within the map.";
+    return "Place the building centre within the map.";
   if (site.features.some((feature) => feature.points.some((p) => !onMap(p))))
     return "Map annotations must lie within the source map.";
 }

@@ -1739,7 +1739,7 @@ button svg {
   margin: 12px auto;
 }
 
-.permit-tabs {
+.drawing-tools-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -1747,7 +1747,7 @@ button svg {
   margin-bottom: 14px;
   border-bottom: 1px solid #d1dbd5;
 }
-.permit-tabs button[aria-pressed="true"] {
+.drawing-tools-tabs button[aria-pressed="true"] {
   background: #dfece5;
   color: #1c513f;
 }
@@ -1792,28 +1792,6 @@ button svg {
 .reference-settings .property-checkbox {
   display: flex;
   margin: 10px 0;
-}
-
-.garage-package .sheet-fields textarea {
-  min-height: 5.5rem;
-  resize: vertical;
-}
-
-.permit-checklist {
-  list-style: none;
-  padding: 0;
-}
-
-.permit-checklist li {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.25rem 0.75rem;
-  border-bottom: 1px solid #e0e7d9;
-  padding: 0.5rem 0;
-}
-
-.permit-checklist small {
-  grid-column: 1 / -1;
 }
 
 .garage-site-map {
@@ -1900,4 +1878,8 @@ button svg {
 
 .workspace-toolbar > button[hidden] {
   display: none;
+}
+
+.more-drawings-button {
+  margin-top: 14px;
 }

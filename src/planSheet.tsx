@@ -5,13 +5,16 @@ import type { Plan } from "./model";
 import { PlanArtwork, planArtworkBounds } from "./preview";
 import type { SheetDrawing } from "./sheets";
 
-export function floorPlanSheet(input: Plan): SheetDrawing {
+export function floorPlanSheet(
+  input: Plan,
+  { fit = false } = {},
+): SheetDrawing {
   const visible = visiblePlan(input);
   const plan = {
     ...visible,
     traceReference: traceForExport(visible.traceReference),
   };
-  if (!plan.calibration.calibrated)
+  if (!fit && !plan.calibration.calibrated)
     throw Error(
       "Calibrate a known distance before exporting a scaled floor plan.",
     );
