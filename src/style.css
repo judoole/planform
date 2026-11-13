@@ -1335,7 +1335,7 @@ button svg {
     padding: 5px;
     border: 0;
   }
-  .header-actions > .dropdown-anchor > .primary {
+  .drawing-export-action > .primary {
     font-size: 10px;
     padding: 7px 9px;
     min-height: 32px;
@@ -1549,7 +1549,7 @@ button svg {
     overflow: hidden;
     white-space: nowrap;
   }
-  .header-actions > button[aria-label] {
+  .header-actions > button[aria-label]:not(.recovery-button) {
     display: inline-flex;
   }
 }
@@ -1661,7 +1661,8 @@ button svg {
   background: #1e342c60;
   backdrop-filter: blur(5px);
 }
-.save-dialog .field input {
+.save-dialog .field input,
+.save-dialog .field select {
   width: 100%;
   padding: 9px;
   border: 1px solid #ccd7ce;
@@ -1695,6 +1696,131 @@ button svg {
 .share-banner a,
 .share-load a {
   color: #1c5e49;
+}
+
+.sheet-dialog {
+  width: min(960px, 94vw);
+  max-width: none;
+  max-height: 92vh;
+  overflow: auto;
+}
+.sheet-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sheet-fields label {
+  display: grid;
+  gap: 4px;
+}
+.sheet-fields input,
+.sheet-fields select {
+  border: 1px solid #b7c3bb;
+  border-radius: 5px;
+  background: white;
+  padding: 5px 8px;
+  color: #253b33;
+}
+.sheet-preview {
+  display: block;
+  width: 100%;
+  max-height: 61vh;
+  object-fit: contain;
+  margin: 12px 0;
+  background: #e8edea;
+  border: 1px solid #d1dbd5;
+}
+
+.garage-area-diagram {
+  display: block;
+  width: 100%;
+  height: min(240px, 35vh);
+  margin: 12px auto;
+}
+
+.drawing-tools-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #d1dbd5;
+}
+.drawing-tools-tabs button[aria-pressed="true"] {
+  background: #dfece5;
+  color: #1c513f;
+}
+.sheet-fields textarea {
+  border: 1px solid #b7c3bb;
+  border-radius: 5px;
+  padding: 6px 8px;
+  min-width: 170px;
+}
+
+.layer-panel {
+  display: grid;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+.layer-add,
+.layer-row {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.layer-add input,
+.layer-row input {
+  width: 0;
+  flex: 1;
+}
+
+.layer-row button {
+  flex: 0 0 auto;
+  padding: 0.25rem;
+}
+
+.trace-reference-button {
+  pointer-events: auto;
+  font-size: 11px;
+  min-height: 27px;
+  gap: 5px;
+  padding: 4px 8px;
+}
+.reference-settings .property-checkbox {
+  display: flex;
+  margin: 10px 0;
+}
+
+.garage-site-map {
+  display: block;
+  width: 100%;
+  height: min(54vh, 520px);
+  background: #e8edea;
+  border: 1px solid #c6d3cb;
+  margin-bottom: 15px;
+}
+.garage-site-map.marking {
+  cursor: crosshair;
+}
+.site-features button {
+  margin-left: 0.5rem;
+}
+
+.drawing-export-dialog {
+  width: min(530px, calc(100% - 32px));
+  max-width: none;
+  padding: clamp(18px, 4vw, 26px);
+}
+.drawing-export-dialog h2 {
+  margin: 0 28px 16px 0;
+  font-size: 24px;
+}
+.drawing-export-dialog .sheet-preview {
+  height: clamp(140px, 30vh, 260px);
+  object-fit: contain;
 }
 
 .building-view-switch {
@@ -1740,8 +1866,27 @@ button svg {
 .wall-height-batch > button {
   justify-self: start;
 }
+
+.inspector-tabs:has(button:nth-of-type(4)) {
+  gap: 0;
+}
+.inspector-tabs:has(button:nth-of-type(4)) > button:not(.drawer-close) {
+  flex: 1 1 auto;
+  padding-inline: 6px;
+  font-size: 11px;
+}
+
 .workspace-toolbar > button[hidden] {
+  display: none !important;
+}
+
+.tool-palette[hidden],
+.inspector[hidden] {
   display: none;
+}
+
+.more-drawings-button {
+  margin-top: 14px;
 }
 
 .optional-floor-settings {
@@ -1751,4 +1896,25 @@ button svg {
   cursor: pointer;
   font-size: 12px;
   color: #426752;
+}
+
+.pdf-page-choices {
+  margin: 10px 0;
+}
+.pdf-page-choices summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.pdf-page-choices label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+}
+
+@media (max-width: 420px) {
+  .building-view-switch button {
+    padding-inline: 5px;
+    font-size: 11px;
+  }
 }

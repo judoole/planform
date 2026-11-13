@@ -5,7 +5,7 @@ import commandSchema from "../public/agent/commands.schema.json";
 import {
   clone,
   dist,
-  same,
+  deletionIds,
   setCorner,
   type Evidence,
   type Item,
@@ -14,7 +14,14 @@ import {
   type Point,
   type Wall,
 } from "./model";
+import { isItemLocked, isLayerLocked } from "./layers";
 import { ProjectError, validateProject } from "./validation";
+import {
+  connectedEndpoints,
+  joinWalls,
+  splitWall,
+  type WallEnd,
+} from "./junctions";
 
 type Operation =
   | { op: "add"; items: Item[] }
@@ -35,6 +42,22 @@ type Operation =
       evidence?: Evidence;
     }
   | { op: "corner"; wallId: string; end: "a" | "b"; point: Point }
+  | {
+      op: "splitWall";
+      wallId: string;
+      offset: number;
+      segmentId: string;
+      junctionId: string;
+    }
+  | {
+      op: "joinWalls";
+      sourceWallId: string;
+      sourceEnd: WallEnd;
+      targetWallId: string;
+      targetOffset: number;
+      segmentId: string;
+      junctionId: string;
+    }
   | { op: "update"; id: string; changes: Record<string, unknown> }
   | { op: "setExteriorDimensions"; show: boolean }
   | { op: "setBuilding"; building: BuildingSettings | null }
@@ -74,14 +97,17 @@ export function applyCommands(
     const find = (id: string) =>
       plan.items.find((i) => i.id === id) ||
       fail(`Object "${id}" does not exist at the top level.`);
+    const protectedItem = (item: Item) => isItemLocked(plan, item);
     const editable = (id: string) => {
       const item = find(id);
-      if (item.locked)
+      if (isItemLocked(plan, item))
         fail(`Object "${id}" is locked. Unlock it explicitly first.`);
       return item;
     };
     if (op.op === "add") {
       plan.items.push(...op.items);
+      const locked = op.items.find((item) => isLayerLocked(plan, item));
+      if (locked) fail(`Object "${locked.id}" belongs to a locked layer.`);
       op.items.forEach((i) => changed.add(i.id));
     } else if (op.op === "opening") {
       const host = editable(op.hostId);
@@ -111,46 +137,98 @@ export function applyCommands(
       const wall = editable(op.wallId);
       if (wall.type !== "wall") fail("Corner edits require a wall.");
       const old = (wall as Wall)[op.end];
-      for (const i of plan.items)
-        if (i.type === "wall" && (same(i.a, old) || same(i.b, old))) {
-          if (i.locked) fail(`Connected wall "${i.id}" is locked.`);
-          changed.add(i.id);
-        }
-      plan = setCorner(plan, wall.id, op.end, op.point, false);
+      for (const { wall: connected } of connectedEndpoints(plan, old))
+        changed.add(connected.id);
+      try {
+        plan = setCorner(plan, wall.id, op.end, op.point, false, protectedItem);
+      } catch (error) {
+        fail((error as Error).message);
+      }
+    } else if (op.op === "splitWall" || op.op === "joinWalls") {
+      const previous = new Set(plan.items);
+      try {
+        plan =
+          op.op === "splitWall"
+            ? splitWall(
+                plan,
+                op.wallId,
+                op.offset,
+                op.segmentId,
+                op.junctionId,
+                protectedItem,
+              )
+            : joinWalls(
+                plan,
+                op.sourceWallId,
+                op.sourceEnd,
+                op.targetWallId,
+                op.targetOffset,
+                op.segmentId,
+                op.junctionId,
+              );
+      } catch (error) {
+        fail((error as Error).message);
+      }
+      plan.items
+        .filter((item) => !previous.has(item))
+        .forEach((item) => changed.add(item.id));
     } else if (op.op === "update") {
       const item = find(op.id),
         keys = Object.keys(op.changes);
       if (
         keys.some((key) =>
-          ["id", "type", "children", "sourceBox", "a", "b"].includes(key),
+          [
+            "id",
+            "type",
+            "children",
+            "sourceBox",
+            "a",
+            "b",
+            "junctions",
+          ].includes(key),
         )
       )
         fail(
           "Update preserves IDs, types and group structure. Use corner for shared wall endpoints; replace groups explicitly.",
         );
-      if (item.locked && !(keys.length === 1 && op.changes.locked === false))
+      if (
+        isItemLocked(plan, item) &&
+        !(
+          item.locked &&
+          !isLayerLocked(plan, item) &&
+          keys.length === 1 &&
+          op.changes.locked === false
+        )
+      )
         fail(`Object "${item.id}" is locked. Unlock it explicitly first.`);
-      plan.items = plan.items.map((i) =>
-        i.id === item.id ? updateItem(i, op.changes) : i,
-      );
+      const updated = updateItem(item, op.changes);
+      if (isLayerLocked(plan, updated)) fail(`Destination layer is locked.`);
+      if (item.type === "wall" && keys.includes("thickness"))
+        plan.items.forEach((dependent) => {
+          if (
+            (dependent.type === "door" || dependent.type === "window") &&
+            dependent.hostId === item.id
+          )
+            editable(dependent.id);
+        });
+      plan.items = plan.items.map((i) => (i.id === item.id ? updated : i));
       changed.add(item.id);
     } else if (op.op === "setExteriorDimensions") {
       plan.showExteriorDimensions = op.show;
     } else if (op.op === "setBuilding") {
       if (op.building) plan.building = op.building;
+      else if (plan.garage?.structure) plan.building = {};
       else delete plan.building;
     } else {
-      const ids = new Set(op.ids);
+      const requested = new Set(op.ids);
+      const ids = deletionIds(plan, op.ids);
       op.ids.forEach(editable);
       const dependents = plan.items.filter(
-        (i) =>
-          (i.type === "door" || i.type === "window") &&
-          ids.has(i.hostId) &&
-          !ids.has(i.id),
+        (i) => ids.has(i.id) && !requested.has(i.id),
       );
       if (dependents.length && !op.cascade)
         fail(
-          `Deletion would remove attached openings: ${dependents.map((i) => i.id).join(", ")}. Include their IDs or set cascade: true.`,
+          `Deletion would remove attached openings or dimensions: ${dependents.map((i) => i.id).join(", ")}. Include their IDs or set cascade: true.`,
         );
       dependents.forEach((i) => {
         editable(i.id);

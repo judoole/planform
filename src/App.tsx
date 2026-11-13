@@ -45,6 +45,8 @@ import {
   Search,
   PanelRightClose,
   Link2,
+  History as HistoryIcon,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   type Plan,
@@ -55,6 +57,7 @@ import {
   clone,
   normalizeOpenings,
   removeItems,
+  deletionIds,
   duplicateItems,
   History,
   calibrate,
@@ -65,11 +68,39 @@ import {
   uid,
 } from "./model";
 import { furniture, type FurnitureKind } from "./furniture";
-import { download, exportSvg, exportPng } from "./exports";
+import GarageArea from "./GarageArea";
+import GarageSitePanel from "./GarageSitePanel";
+import GarageViewsPanel from "./GarageViewsPanel";
+import { planArtworkBounds } from "./preview";
+import ExportDrawingDialog from "./ExportDrawingDialog";
+import type { BackgroundId } from "./mapProvider";
+import type { PropertyMap } from "./propertyMap";
+import { useParcelMap } from "./useParcelMap";
+import { mapDimensionAnchors } from "./dimensions";
+import { download } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
 import BuildingSettingsPanel from "./BuildingSettingsPanel";
 import ProposalManager from "./ProposalManager";
+import { RecoveryDialog, ReplaceProjectDialog } from "./RecoveryDialogs";
+import {
+  readRecovery,
+  saveRecovery as saveLocalRevision,
+  type RecoveryRevision,
+} from "./recovery";
+import ReferencePicker from "./ReferencePicker";
+import TraceReferenceDialog from "./TraceReferenceDialog";
+import type { EmbeddedRaster, TraceReference } from "./reference";
+import LayerPanel from "./LayerPanel";
+import {
+  activeLayer,
+  blockedDrawingEdit,
+  isEditProtected,
+  isItemLocked,
+  placeOnActiveLayer,
+  visiblePlan,
+  type RenovationView,
+} from "./layers";
 import { isShareHash, readShareHash } from "./share";
 import {
   activePlan,
@@ -85,18 +116,18 @@ import {
   type ProjectDrawing,
   type Project,
 } from "./project";
-import { checkJsonSize, readProjectFile } from "./validation";
+import { checkJsonSize, readProjectFile, validateProject } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
 import {
-  annotatedPlanBounds,
   createExteriorContourReader,
   visibleExteriorContour,
 } from "./exterior";
 const BuildingViewport = lazy(() => import("./BuildingViewport"));
+const MapWorkspace = lazy(() => import("./MapWorkspace"));
+type ViewMode = "plan" | "3d" | "map";
 
-const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
   label: string;
@@ -121,16 +152,20 @@ const palette: {
   { tool: "measure", label: "Measure", icon: ScanLine, key: "M" },
   { tool: "text", label: "Label", icon: Type, key: "T" },
 ];
-function startup(): Project {
+function startup(sharedProject?: Project) {
+  if (sharedProject) return { project: sharedProject, status: "Shared copy" };
   try {
-    const s =
-      localStorage.getItem(RECOVERY) ||
-      localStorage.getItem("planform-recovery-v3") ||
-      localStorage.getItem("planform-recovery-v2") ||
-      localStorage.getItem("planform-recovery-v1");
-    if (s) return readProjectFile(s);
-  } catch {}
-  return emptyPlan();
+    const latest = readRecovery(localStorage)[0];
+    if (latest)
+      return {
+        project: latest.project,
+        status: "Saved locally",
+        recovered: true,
+      };
+    return { project: emptyPlan(), status: "No local recovery yet" };
+  } catch {
+    return { project: emptyPlan(), status: "Recovery unavailable" };
+  }
 }
 function localAddress() {
   const url = new URL(window.location.href);
@@ -190,9 +225,8 @@ function SharedProject({ hash }: { hash: string }) {
 }
 
 function Editor({ sharedProject }: { sharedProject?: Project }) {
-  const [project, setProject] = useState<Project>(
-      () => sharedProject ?? startup(),
-    ),
+  const [initial] = useState(() => startup(sharedProject));
+  const [project, setProject] = useState<Project>(initial.project),
     [preview, setPreview] = useState<Plan | null>(null),
     [overlay, setOverlay] = useState(false),
     [overlayId, setOverlayId] = useState<string>(),
@@ -208,23 +242,43 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [wallThickness, setWallThickness] = useState(15),
     [camera, setCamera] = useState<Camera>({ x: 100, y: 100, k: 0.8 }),
     [panelOpen, setPanelOpen] = useState(false),
-    [tab, setTab] = useState<"properties" | "objects" | "building">(
+    [tab, setTab] = useState<"properties" | "objects" | "layers" | "building">(
       "properties",
     ),
-    [viewMode, setViewMode] = useState<"plan" | "3d">("plan"),
+    [viewMode, setViewMode] = useState<ViewMode>("plan"),
+    [openedMap, setOpenedMap] = useState(false),
+    [mapBackground, setMapBackground] = useState<BackgroundId>("property"),
     [opened3D, setOpened3D] = useState(false),
     [buildingViewReset, setBuildingViewReset] = useState(0),
     [query, setQuery] = useState(""),
     [overlap, setOverlap] = useState<string[]>([]),
     [overlapOpen, setOverlapOpen] = useState(false),
     [menu, setMenu] = useState(false),
-    [exportMenu, setExportMenu] = useState(false),
+    [exportOpen, setExportOpen] = useState(false),
+    [drawingToolsOpen, setDrawingToolsOpen] = useState(false),
+    [drawingTool, setDrawingTool] = useState<"area" | "views" | "site">(
+      "views",
+    ),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
     [shareOpen, setShareOpen] = useState(false),
     [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
-    [autosave, setAutosave] = useState("Saved locally"),
+    [referencePicker, setReferencePicker] = useState(false),
+    [referenceSettings, setReferenceSettings] = useState(false),
+    [autosave, setAutosave] = useState(initial.status),
+    [revisions, setRevisions] = useState<RecoveryRevision[] | null>(null),
+    [replacement, setReplacement] = useState<{
+      action: string;
+      run: () => void;
+    } | null>(null),
+    [fileState, setFileState] = useState<{
+      baseline: Project | null;
+      hasFile: boolean;
+    }>({
+      baseline: initial.recovered ? null : initial.project,
+      hasFile: false,
+    }),
     [coords, setCoords] = useState("0.0, 0.0"),
     [cancelToken, setCancelToken] = useState(0),
     [measure, setMeasure] = useState<{
@@ -241,6 +295,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     histories = useRef(new Map<string, History>()),
     projectRef = useRef(project),
     lastSaved = useRef(project),
+    fileSession = useRef(0),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
   const saveHandle = useRef<FileSystemFileHandle | null>(null);
@@ -254,7 +309,28 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     drawings.find((d) => d.role === "existing" && d.id !== version) ??
     drawings.find((d) => d.id !== version);
   const drawing = activePlan(project);
+  const parcels = useParcelMap(
+    viewMode === "map" || exportOpen ? drawing.propertyMap : undefined,
+  );
   const plan = preview ?? drawing;
+  const shown = useMemo(() => visiblePlan(plan), [plan]);
+  const shownIds = useMemo(
+    () => new Set(shown.items.map((item) => item.id)),
+    [shown.items],
+  );
+  const visibleSelection = selection.filter((id) => shownIds.has(id));
+  useEffect(() => {
+    setSelection((ids) =>
+      ids.every((id) => shownIds.has(id))
+        ? ids
+        : ids.filter((id) => shownIds.has(id)),
+    );
+    setOverlap((ids) =>
+      ids.every((id) => shownIds.has(id))
+        ? ids
+        : ids.filter((id) => shownIds.has(id)),
+    );
+  }, [shownIds]);
   function drawingHistory(id: string) {
     let history = histories.current.get(id);
     if (!history) {
@@ -264,13 +340,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     return history;
   }
   const history = drawingHistory(version);
-  const ghost = overlay ? reference?.plan : undefined;
+  const ghostPlan = overlay ? reference?.plan : undefined;
+  const ghost = useMemo(() => ghostPlan && visiblePlan(ghostPlan), [ghostPlan]);
   const [readExterior] = useState(createExteriorContourReader);
-  const exterior = readExterior(plan);
-  const visibleExterior = visibleExteriorContour(plan, readExterior);
+  const exterior = readExterior(shown);
+  const visibleExterior = visibleExteriorContour(shown, readExterior);
   const { rooms, roomError } = useMemo(() => {
     try {
-      return { rooms: findRooms(plan.items), roomError: undefined };
+      return { rooms: findRooms(shown.items), roomError: undefined };
     } catch {
       // Automatic analysis must not prevent editing or reopening a document
       // when polygon clipping cannot resolve unusual wall geometry.
@@ -280,7 +357,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           "Room areas could not be calculated. Check overlapping or very small walls.",
       };
     }
-  }, [plan.items]);
+  }, [shown.items]);
   const showNotice = useCallback((s: string) => {
     setNotice(s);
   }, []);
@@ -293,19 +370,67 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       const current = projectRef.current;
       const before = base || activePlan(current);
       const clean = strict ? next : normalizeOpenings(next);
+      if (!strict) {
+        const blocked = blockedDrawingEdit(before, clean);
+        if (blocked) {
+          setPreview(null);
+          showNotice(
+            `“${blocked.name}” is hidden or locked. Show and unlock it to make this edit.`,
+          );
+          return;
+        }
+      }
       drawingHistory(activeDrawingId(current)).push(before);
       setPreview(null);
       updateProject(replaceActivePlan(current, clean));
     },
-    [updateProject],
+    [showNotice, updateProject],
   );
+  function setRenovationView(view: RenovationView) {
+    const current = projectRef.current;
+    const update = (plan: Plan) => ({ ...plan, renovationView: view });
+    drawingHistory(activeDrawingId(current)).updateSnapshots(update);
+    setPreview(null);
+    setOverlapOpen(false);
+    setCancelToken((id) => id + 1);
+    updateProject(replaceActivePlan(current, update(activePlan(current))));
+  }
+  function previewEdit(next: Plan | null) {
+    if (next && blockedDrawingEdit(drawing, next)) {
+      setPreview(null);
+      return;
+    }
+    setPreview(next);
+  }
+  function changeLayers(next: Plan) {
+    setOverlapOpen(false);
+    setCancelToken((id) => id + 1);
+    commit(next, undefined, true);
+  }
+  function updatePropertyMap(propertyMap: PropertyMap) {
+    const current = projectRef.current;
+    const next = { ...activePlan(current), propertyMap };
+    try {
+      checkJsonSize(serialize(replaceActivePlan(current, next)));
+      commit(next, undefined, true);
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
+  function updateGarage(garage: Plan["garage"]) {
+    const current = projectRef.current;
+    const next = { ...activePlan(current), garage };
+    checkJsonSize(serialize(replaceActivePlan(current, next)));
+    commit(next, undefined, true);
+  }
   const fit = useCallback(
     (p: Plan = activePlan(projectRef.current)) => {
       const svg = svgRef.current;
       if (!svg) return;
-      const box = annotatedPlanBounds(
-          p,
-          visibleExteriorContour(p, readExterior),
+      const visible = visiblePlan(p);
+      const box = planArtworkBounds(
+          visible,
+          visibleExteriorContour(visible, readExterior),
         ),
         b = svg.getBoundingClientRect(),
         pad = Math.min(90, b.width * 0.12),
@@ -328,41 +453,31 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [readExterior],
   );
   useEffect(() => {
-    if (activePlan(projectRef.current).items.length) fit();
+    const plan = activePlan(projectRef.current);
+    if (plan.items.length || plan.traceReference?.visible) fit();
   }, []);
   const saveRecovery = useCallback(() => {
-    const current = projectRef.current;
-    if (lastSaved.current !== current) {
-      try {
-        const contents = serialize(current);
-        checkJsonSize(contents);
-        localStorage.setItem(RECOVERY, contents);
-        lastSaved.current = current;
-      } catch {
-        return "Recovery unavailable · download to save";
-      }
+    if (sharedProject || lastSaved.current === projectRef.current) return;
+    try {
+      saveLocalRevision(localStorage, projectRef.current);
+      lastSaved.current = projectRef.current;
+      setAutosave("Saved locally");
+    } catch {
+      setAutosave("Recovery unavailable");
     }
-    return "Saved locally";
-  }, []);
+  }, [sharedProject]);
   useEffect(() => {
     if (sharedProject) return;
-    const flush = () => {
-      saveRecovery();
-    };
-    window.addEventListener("pagehide", flush);
+    window.addEventListener("pagehide", saveRecovery);
     return () => {
-      window.removeEventListener("pagehide", flush);
-      flush();
+      window.removeEventListener("pagehide", saveRecovery);
+      saveRecovery();
     };
   }, [sharedProject, saveRecovery]);
   useEffect(() => {
-    if (sharedProject) return;
-    if (project === lastSaved.current) {
-      setAutosave("Saved locally");
-      return;
-    }
-    setAutosave("Saving…");
-    const timer = setTimeout(() => setAutosave(saveRecovery()), 900);
+    if (sharedProject || project === lastSaved.current) return;
+    setAutosave("Saving locally…");
+    const timer = setTimeout(saveRecovery, 900);
     return () => clearTimeout(timer);
   }, [project, sharedProject, saveRecovery]);
   useEffect(() => {
@@ -370,11 +485,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     const t = setTimeout(() => setNotice(""), 7000);
     return () => clearTimeout(t);
   }, [notice]);
-  function changeViewMode(next: "plan" | "3d") {
+  function changeViewMode(next: ViewMode) {
     if (next === viewMode) return;
     cancel();
     setMeasure(null);
     setViewMode(next);
+    if (next === "map") {
+      setOpenedMap(true);
+      setPanelOpen(false);
+    }
     if (next === "3d") {
       setOpened3D(true);
       if (!selection.length) setTab("building");
@@ -412,6 +531,56 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     updateProject(
       replaceActivePlan(current, withVisibility(activePlan(current))),
     );
+  }
+  function installReference(image: EmbeddedRaster) {
+    const current = projectRef.current;
+    const plan = activePlan(current);
+    const previous = plan.traceReference;
+    const reference: TraceReference = {
+      image,
+      x: previous?.x ?? 0,
+      y: previous?.y ?? 0,
+      width: previous?.width ?? Math.min(image.width, 1000),
+      opacity: previous?.opacity ?? 0.55,
+      locked: previous?.locked ?? true,
+      visible: true,
+      calibrated: false,
+      includeInExport: previous?.includeInExport ?? false,
+    };
+    const next = {
+      ...plan,
+      traceReference: reference,
+      calibration:
+        plan.items.length === 0
+          ? { ...plan.calibration, imported: true, calibrated: false }
+          : plan.calibration,
+    };
+    checkJsonSize(serialize(replaceActivePlan(current, next)));
+    validateProject(next);
+    clearDrawingContext();
+    commit(next, undefined, true);
+    setReferencePicker(false);
+    fit(next);
+    showNotice(
+      "Tracing reference imported. Calibrate a known distance to set its scale.",
+    );
+  }
+  function changeReference(reference?: TraceReference) {
+    const current = activePlan(projectRef.current);
+    let next: Plan;
+    if (reference) {
+      next = { ...current, traceReference: reference };
+    } else {
+      const { traceReference: _removed, ...remaining } = current;
+      next = remaining;
+    }
+    try {
+      validateProject(next);
+      commit(next, undefined, true);
+      if (!reference) setReferenceSettings(false);
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
   }
   function switchVersion(next: string) {
     if (next === version) return;
@@ -496,34 +665,74 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     proposalImportTarget.current = replace ? version : null;
     proposedFileRef.current?.click();
   }
+  function editableSelection() {
+    return shown.items
+      .filter(
+        (item) => selection.includes(item.id) && !isEditProtected(plan, item),
+      )
+      .map((item) => item.id);
+  }
   function del() {
-    const ids = selection.filter(
-      (id) => !plan.items.find((i) => i.id === id)?.locked,
-    );
+    const ids = editableSelection();
     if (!ids.length) return;
+    const removed = deletionIds(plan, ids);
+    const dependent = plan.items.filter(
+      (i) => removed.has(i.id) && !ids.includes(i.id),
+    );
+    if (dependent.some((i) => isEditProtected(plan, i))) {
+      showNotice(
+        "Show and unlock the attached objects before deleting this selection.",
+      );
+      return;
+    }
+    const dimensions = dependent.filter((i) => i.type === "dimension").length;
+    if (
+      dimensions &&
+      !window.confirm(
+        `Delete the selection and ${dimensions} attached dimension(s)? Undo will restore their attachments.`,
+      )
+    )
+      return;
     commit(removeItems(plan, ids));
     setSelection([]);
   }
   function duplicate() {
-    const ids = selection.filter(
-      (id) => !plan.items.find((i) => i.id === id)?.locked,
-    );
+    const ids = editableSelection();
     if (!ids.length) return;
+    const wallIds = new Set(ids);
+    const blocked = plan.items.find(
+      (item) =>
+        (item.type === "door" || item.type === "window") &&
+        wallIds.has(item.hostId) &&
+        isEditProtected(plan, item),
+    );
+    if (blocked) {
+      showNotice(`Unlock “${blocked.name}” before duplicating its wall.`);
+      return;
+    }
     const r = duplicateItems(plan, ids);
     commit(r.plan);
     setSelection(r.ids);
   }
   function copy() {
-    const ids = new Set(selection);
+    const ids = new Set(visibleSelection);
+    const copied = shown.items.filter(
+      (i) =>
+        ids.has(i.id) ||
+        ((i.type === "door" || i.type === "window") && ids.has(i.hostId)),
+    );
+    const copiedIds = new Set(copied.map((i) => i.id));
     clipboard.current = clone(
-      plan.items.filter(
-        (i) =>
-          ids.has(i.id) ||
-          ((i.type === "door" || i.type === "window") && ids.has(i.hostId)),
+      copied.map((i) =>
+        i.type === "dimension"
+          ? mapDimensionAnchors(i, plan.items, (anchor) =>
+              copiedIds.has(anchor.itemId) ? anchor : undefined,
+            )
+          : i,
       ),
     );
     showNotice(
-      `${selection.length} object(s) copied. Use Paste to place a copy.`,
+      `${visibleSelection.length} object(s) copied. Use Paste to place a copy.`,
     );
   }
   function paste() {
@@ -531,36 +740,67 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       showNotice("Select objects and use Copy first.");
       return;
     }
+    if (activeLayer(plan).locked || !activeLayer(plan).visible) {
+      showNotice("Choose a visible, unlocked layer to paste objects.");
+      return;
+    }
+    const copiedWalls = new Set(
+      clipboard.current
+        .filter((item) => item.type === "wall")
+        .map((item) => item.id),
+    );
+    const visibleWalls = new Set(
+      shown.items
+        .filter((item) => item.type === "wall" && !isItemLocked(plan, item))
+        .map((item) => item.id),
+    );
+    const items = clone(clipboard.current)
+      .filter(
+        (item) =>
+          (item.type !== "door" && item.type !== "window") ||
+          copiedWalls.has(item.hostId) ||
+          visibleWalls.has(item.hostId),
+      )
+      .map((item) => {
+        const { layerId: _sourceLayer, ...copy } = item;
+        return placeOnActiveLayer(plan, copy);
+      });
+    if (!items.length) {
+      showNotice(
+        "Paste openings with their host walls or into a drawing with the same visible, unlocked host.",
+      );
+      return;
+    }
     const temp = {
       ...plan,
       items: [
-        ...plan.items.filter(
-          (i) => !clipboard.current.some((x) => x.id === i.id),
-        ),
-        ...clone(clipboard.current),
+        ...plan.items.filter((i) => !items.some((x) => x.id === i.id)),
+        ...items,
       ],
     };
     const r = duplicateItems(
       temp,
-      clipboard.current.map((i) => i.id),
+      items.map((i) => i.id),
     );
     const newItems = r.plan.items.slice(temp.items.length);
     commit({ ...plan, items: [...plan.items, ...newItems] });
     setSelection(r.ids);
   }
-  function downloadProject() {
+  function downloadProject(filename?: string) {
     const current = projectRef.current;
     const contents = serialize(current);
     checkJsonSize(contents);
     download(
       new Blob([contents], { type: "application/json" }),
-      `${current.name || "Untitled"}.planform.json`,
+      filename ?? `${current.name || "Untitled"}.planform.json`,
     );
+    setFileState({ baseline: current, hasFile: true });
   }
   async function save(filename?: string) {
     try {
       if (!filename) {
         const current = projectRef.current;
+        const session = fileSession.current;
         const contents = serialize(current);
         checkJsonSize(contents);
         const fileName = `${current.name || "Untitled"}.planform.json`;
@@ -585,17 +825,17 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           const writable = await handle.createWritable();
           await writable.write(contents);
           await writable.close();
-          saveHandle.current = handle;
-          showNotice("Project saved. Future saves will update this file.");
+          if (fileSession.current === session) {
+            saveHandle.current = handle;
+            setFileState({ baseline: current, hasFile: true });
+            showNotice("Project saved. Future saves will update this file.");
+          }
           return;
         }
         setSaveOpen(true);
         return;
       }
-      const current = projectRef.current;
-      const contents = serialize(current);
-      checkJsonSize(contents);
-      download(new Blob([contents], { type: "application/json" }), filename);
+      downloadProject(filename);
       setSaveOpen(false);
       showNotice(
         "Project downloaded. Open the JSON file to continue editing later.",
@@ -610,13 +850,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     clearDrawingContext();
     commit(next, undefined, true);
     fit(next);
-    showNotice(
-      "Drawing opened. All objects are editable; Undo restores the previous drawing.",
-    );
+    showNotice("Drawing opened. Undo restores the previous drawing.");
   }
   function replaceProject(next: Project) {
     setBuildingViewReset((n) => n + 1);
-    saveHandle.current = null;
     clearDrawingContext();
     setOverlay(false);
     histories.current = new Map();
@@ -625,17 +862,66 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     setManageOpen(false);
     updateProject(next);
   }
-  function newProject() {
+  function resetFileSession(next: Project | null, hasFile: boolean) {
+    fileSession.current++;
     saveHandle.current = null;
-    if (project.version === 2) {
+    setFileState({ baseline: next, hasFile });
+  }
+  function requestReplacement(action: string, run: () => void) {
+    if (projectRef.current === fileState.baseline) run();
+    else setReplacement({ action, run });
+  }
+  function continueReplacement(downloadFirst: boolean) {
+    if (!replacement) return;
+    try {
+      if (downloadFirst) downloadProject();
+      setReplacement(null);
+      replacement.run();
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
+  function newProject() {
+    saveRecovery();
+    const next = emptyPlan();
+    resetFileSession(next, false);
+    if (projectRef.current.version === 2) {
       setBuildingViewReset((n) => n + 1);
       clearDrawingContext();
-      commit(emptyPlan());
+      commit(next, undefined, true);
     } else {
-      replaceProject(emptyPlan());
+      replaceProject(next);
     }
     setCamera({ x: 100, y: 100, k: 0.8 });
     setMenu(false);
+  }
+  function requestNewProject() {
+    requestReplacement("Create new project", newProject);
+  }
+  function chooseProjectFile() {
+    fileRef.current?.click();
+    setMenu(false);
+  }
+  function showRecovery() {
+    setMenu(false);
+    saveRecovery();
+    try {
+      setRevisions(readRecovery(localStorage));
+    } catch {
+      setAutosave("Recovery unavailable");
+      setRevisions([]);
+    }
+  }
+  function restoreRecovery(revision: RecoveryRevision) {
+    setRevisions(null);
+    requestReplacement("Restore selected revision", () => {
+      saveRecovery();
+      const next = revision.project;
+      resetFileSession(null, false);
+      replaceProject(next);
+      fit(activePlan(next));
+      showNotice("Local revision restored.");
+    });
   }
   async function loadFile(
     input: HTMLInputElement,
@@ -673,43 +959,44 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         return;
       }
       const next = readProjectFile(contents);
-      saveHandle.current = null;
-      if (next.version === 2 && projectRef.current.version === 2) {
-        openDrawing(next);
-      } else {
-        replaceProject(next);
-        fit(activePlan(next));
-        showNotice("Project opened.");
-      }
+      requestReplacement("Open selected project", () => {
+        saveRecovery();
+        resetFileSession(next, true);
+        if (next.version === 2 && projectRef.current.version === 2) {
+          openDrawing(next);
+        } else {
+          replaceProject(next);
+          fit(activePlan(next));
+          showNotice("Project opened.");
+        }
+      });
     } catch (e) {
       showNotice((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  async function exporting(png: boolean) {
-    setExportMenu(false);
-    try {
-      const svg = exportSvg(
-        svgRef.current!,
-        annotatedPlanBounds(plan, visibleExterior),
-      );
-      const name =
-        project.version !== 2
-          ? `${project.name} - ${activeDrawing.name}`
-          : plan.name;
-      if (png) await exportPng(svg, `${name}.png`);
-      else download(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
-      showNotice(
-        `${png ? "PNG" : "SVG"} exported with a white background, without the editing grid or selection.`,
-      );
-    } catch (e) {
-      showNotice((e as Error).message);
-    }
-  }
   useEffect(() => {
     function key(e: KeyboardEvent) {
-      if (shareOpen || manageOpen || saveOpen || busy) return;
+      if (e.key === "Escape" && !referencePicker) {
+        if (drawingToolsOpen) {
+          setDrawingToolsOpen(false);
+          return;
+        }
+      }
+      if (
+        drawingToolsOpen ||
+        exportOpen ||
+        shareOpen ||
+        manageOpen ||
+        saveOpen ||
+        revisions ||
+        replacement ||
+        referencePicker ||
+        referenceSettings ||
+        busy
+      )
+        return;
       const el = e.target as HTMLElement;
       if (el.closest('input,textarea,select,[contenteditable="true"]')) return;
       const mod = e.metaKey || e.ctrlKey,
@@ -723,7 +1010,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       if (mod && ["s", "o"].includes(k)) {
         e.preventDefault();
         if (k === "s") save();
-        else fileRef.current?.click();
+        else chooseProjectFile();
         return;
       }
       if (mod && k === "z") {
@@ -736,9 +1023,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         redo();
         return;
       }
+      if (viewMode === "map") return;
       if (mod && k === "a") {
         e.preventDefault();
-        setSelection(plan.items.map((i) => i.id));
+        setSelection(shown.items.map((i) => i.id));
         return;
       }
       if (mod && selection.length && ["c", "d", "x"].includes(k)) {
@@ -780,13 +1068,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     });
   }
   function chooseTool(t: Tool) {
-    if (viewMode === "3d") changeViewMode("plan");
+    if (viewMode !== "plan") changeViewMode("plan");
     setTool(t);
     if ((t === "furniture" || t === "door") && window.innerWidth < 760)
       setPanelOpen(false);
   }
-  const selected = plan.items.filter((i) => selection.includes(i.id));
-  const matching = plan.items.filter(
+  const selected = shown.items.filter((i) => selection.includes(i.id));
+  const matching = shown.items.filter(
     (i) =>
       !query ||
       `${i.name} ${i.type}`.toLowerCase().includes(query.toLowerCase()),
@@ -831,23 +1119,34 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               nameBefore.current = null;
             }}
           />
-          <span>
-            <span className="save-dot" />
-            {sharedProject ? "Shared copy" : autosave}
+          <span role="status">{autosave}</span>
+          <span role="status">
+            {project !== fileState.baseline
+              ? "File has unsaved edits"
+              : fileState.hasFile
+                ? "Project file current"
+                : "No project file saved"}
           </span>
         </div>
         <div className="header-actions">
-          <button onClick={newProject} title="New empty project">
+          <button onClick={requestNewProject} title="New empty project">
             <FilePlus2 size={16} />
             <span>New</span>
           </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            title="Open Planform project"
-          >
+          <button onClick={chooseProjectFile} title="Open Planform project">
             <FolderOpen size={16} />
             <span>Open</span>
           </button>
+          {!sharedProject && (
+            <button
+              onClick={showRecovery}
+              className="recovery-button"
+              title="Local recovery history"
+              aria-label="Local recovery history"
+            >
+              <HistoryIcon size={16} />
+            </button>
+          )}
           <button onClick={() => save()} title="Download editable project">
             <Download size={16} />
             <span>Save project</span>
@@ -860,19 +1159,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <Link2 size={16} />
             <span>Share</span>
           </button>
-          <div className="dropdown-anchor">
-            <button
-              className="primary"
-              onClick={() => setExportMenu(!exportMenu)}
-            >
-              Export <ChevronDown size={14} />
+          <div className="drawing-export-action">
+            <button className="primary" onClick={() => setExportOpen(true)}>
+              Export
             </button>
-            {exportMenu && (
-              <div className="dropdown">
-                <button onClick={() => exporting(false)}>SVG · drawing</button>
-                <button onClick={() => exporting(true)}>PNG · image</button>
-              </div>
-            )}
           </div>
           <button
             className="mobile-menu"
@@ -893,15 +1183,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       )}
       {menu && (
         <div className="mobile-project-menu">
-          <button onClick={newProject}>New project</button>
-          <button
-            onClick={() => {
-              fileRef.current?.click();
-              setMenu(false);
-            }}
-          >
-            Open project
-          </button>
+          <button onClick={requestNewProject}>New project</button>
+          <button onClick={chooseProjectFile}>Open project</button>
+          {!sharedProject && (
+            <button onClick={showRecovery}>Local recovery history</button>
+          )}
           <button
             onClick={() => {
               save();
@@ -916,6 +1202,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         type="file"
         ref={fileRef}
         accept=".json,.planform.json"
+        aria-label="Project file"
         hidden
         onChange={(e) => loadFile(e.currentTarget)}
       />
@@ -1021,17 +1308,24 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <button
           aria-label="Copy"
           title="Copy"
+          hidden={viewMode === "map"}
           disabled={!selection.length}
           onClick={copy}
         >
           <Copy size={17} />
         </button>
-        <button aria-label="Paste" title="Paste" onClick={paste}>
+        <button
+          hidden={viewMode === "map"}
+          aria-label="Paste"
+          title="Paste"
+          onClick={paste}
+        >
           <ClipboardPaste size={17} />
         </button>
         <button
           aria-label="Delete"
           title="Delete selected"
+          hidden={viewMode === "map"}
           disabled={!selection.length}
           onClick={del}
         >
@@ -1047,7 +1341,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             aria-pressed={viewMode === "plan"}
             onClick={() => changeViewMode("plan")}
           >
-            2D
+            Floor plan
           </button>
           <button
             aria-pressed={viewMode === "3d"}
@@ -1055,9 +1349,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           >
             3D
           </button>
+          <button
+            aria-pressed={viewMode === "map"}
+            onClick={() => changeViewMode("map")}
+          >
+            Map
+          </button>
         </div>
         <button
-          hidden={viewMode === "3d"}
+          hidden={viewMode !== "plan"}
           className={snap ? "snap-toggle active" : "snap-toggle"}
           aria-pressed={snap}
           onClick={() => setSnap(!snap)}
@@ -1066,12 +1366,18 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           <Magnet size={16} />
           <span>Snap {snap ? "on" : "off"}</span>
         </button>
-        <button className="cancel-button" aria-label="Cancel" onClick={cancel}>
+        <button
+          hidden={viewMode === "map"}
+          className="cancel-button"
+          aria-label="Cancel"
+          onClick={cancel}
+        >
           <X size={15} />
           <span>Cancel</span>
         </button>
         <button
           className="properties-toggle"
+          hidden={viewMode === "map"}
           aria-label="Toggle properties"
           aria-expanded={panelOpen}
           onClick={() => setPanelOpen(!panelOpen)}
@@ -1080,7 +1386,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         </button>
       </div>
       <main className="workspace">
-        <nav className="tool-palette" aria-label="Drawing tools">
+        <nav
+          className="tool-palette"
+          aria-label="Drawing tools"
+          hidden={viewMode === "map"}
+        >
           {palette.map(({ tool: t, label, icon: Icon, key }, idx) => (
             <button
               key={t}
@@ -1106,8 +1416,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <section className="drawing-region">
           <div
             className="plan-view"
-            inert={viewMode === "3d"}
-            aria-hidden={viewMode === "3d"}
+            inert={viewMode !== "plan"}
+            aria-hidden={viewMode !== "plan"}
           >
             <div className="drawing-topline">
               <span>
@@ -1117,9 +1427,21 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                   {ghost ? `${reference!.name} overlay` : "DESIGN MODE"}
                 </b>
               </span>
-              <span className="private-badge">
-                {sharedProject ? "SHARED COPY" : "LOCAL & PRIVATE"}
-              </span>
+              <button
+                className="trace-reference-button"
+                onClick={() =>
+                  plan.traceReference
+                    ? setReferenceSettings(true)
+                    : setReferencePicker(true)
+                }
+              >
+                <ImageIcon size={14} />
+                <span>
+                  {plan.traceReference
+                    ? "Tracing reference"
+                    : "Import reference"}
+                </span>
+              </button>
             </div>
             {!plan.calibration.calibrated && (
               <div className="calibration-banner">
@@ -1182,12 +1504,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             )}
             <Canvas
               plan={plan}
+              shown={shown}
               ghost={ghost}
               rooms={rooms}
               exterior={visibleExterior}
-              setPreview={setPreview}
+              setPreview={previewEdit}
               commit={commit}
-              selection={selection}
+              selection={visibleSelection}
               setSelection={setSelection}
               tool={tool}
               setTool={setTool}
@@ -1231,7 +1554,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                               setPanelOpen(true);
                             }}
                           >
-                            {plan.items.find((i) => i.id === id)?.name || id}
+                            {shown.items.find((i) => i.id === id)?.name || id}
                             {selection.includes(id) && <Check size={14} />}
                           </button>
                         ))}
@@ -1270,8 +1593,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               >
                 <BuildingViewport
                   key={`${buildingViewReset}:${version}`}
-                  plan={plan}
-                  selection={selection}
+                  plan={shown}
+                  selection={visibleSelection}
                   onSelect={(id) => {
                     setSelection([id]);
                     setTab("properties");
@@ -1281,15 +1604,43 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               </Suspense>
             </div>
           )}
+          {openedMap && (
+            <div className="building-view" hidden={viewMode !== "map"}>
+              <Suspense
+                fallback={
+                  <p className="building-view-loading" role="status">
+                    Loading map…
+                  </p>
+                }
+              >
+                <MapWorkspace
+                  key={`${buildingViewReset}:${version}`}
+                  plan={shown}
+                  active={viewMode === "map"}
+                  background={mapBackground}
+                  onBackground={setMapBackground}
+                  parcels={parcels}
+                  onChange={updatePropertyMap}
+                  onImportedMap={() => {
+                    setDrawingTool("site");
+                    setDrawingToolsOpen(true);
+                  }}
+                />
+              </Suspense>
+            </div>
+          )}
         </section>
-        {panelOpen && (
+        {panelOpen && viewMode !== "map" && (
           <button
             className="drawer-scrim"
             aria-label="Close properties"
             onClick={() => setPanelOpen(false)}
           />
         )}
-        <aside className={`inspector ${panelOpen ? "open" : ""}`}>
+        <aside
+          className={`inspector ${panelOpen ? "open" : ""}`}
+          hidden={viewMode === "map"}
+        >
           <div className="inspector-tabs">
             <button
               className={tab === "properties" ? "active" : ""}
@@ -1304,6 +1655,12 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             >
               <Layers size={15} />
               Objects
+            </button>
+            <button
+              className={tab === "layers" ? "active" : ""}
+              onClick={() => setTab("layers")}
+            >
+              Layers
             </button>
             <button
               className={tab === "building" ? "active" : ""}
@@ -1325,7 +1682,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               rooms={rooms}
               roomError={roomError}
               exterior={exterior}
-              selection={selection}
+              selection={visibleSelection}
               commit={commit}
               setSelection={setSelection}
               setTool={setTool}
@@ -1333,6 +1690,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onDelete={del}
               onError={showNotice}
               onShowExteriorDimensions={setExteriorDimensions}
+              onRenovationView={setRenovationView}
+            />
+          ) : tab === "layers" ? (
+            <LayerPanel
+              plan={plan}
+              selection={visibleSelection}
+              onLayerChange={changeLayers}
+              onMove={commit}
+              onError={showNotice}
             />
           ) : tab === "building" ? (
             <BuildingSettingsPanel
@@ -1356,7 +1722,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 {matching.length.toLocaleString()} objects{" "}
                 <button
                   onClick={() => {
-                    setSelection(plan.items.map((i) => i.id));
+                    setSelection(shown.items.map((i) => i.id));
                   }}
                 >
                   Select all
@@ -1382,7 +1748,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       {i.name}
                       <small>{i.type}</small>
                     </span>
-                    {i.locked && <LockKeyhole size={13} />}
+                    {isItemLocked(plan, i) && <LockKeyhole size={13} />}
                   </button>
                 ))}
               </div>
@@ -1401,13 +1767,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       <footer className="statusbar">
         <span>
           <span className="status-dot" />
-          {viewMode === "3d" && !selected.length
-            ? "3D view"
-            : selected.length
-              ? `${selected.length} selected`
-              : tool === "select"
-                ? "Ready to design"
-                : palette.find((p) => p.tool === tool)?.label || "Select"}
+          {viewMode === "map"
+            ? "Map"
+            : viewMode === "3d" && !selected.length
+              ? "3D view"
+              : selected.length
+                ? `${selected.length} selected`
+                : tool === "select"
+                  ? "Ready to design"
+                  : palette.find((p) => p.tool === tool)?.label || "Select"}
         </span>
         {viewMode === "plan" && (
           <>
@@ -1468,6 +1836,121 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           onDownload={downloadProject}
         />
       )}
+      {drawingToolsOpen && (
+        <div className="modal-backdrop">
+          <section
+            className="modal sheet-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drawing-tools-title"
+          >
+            <button
+              className="modal-close"
+              aria-label="Close more drawings"
+              onClick={() => setDrawingToolsOpen(false)}
+            >
+              <X size={16} />
+            </button>
+            <h2 id="drawing-tools-title">More drawings and measurements</h2>
+            <p>
+              Open a side view, mark a site map or estimate building areas for a
+              simple rectangular building.
+            </p>
+            <div
+              className="drawing-tools-tabs"
+              role="group"
+              aria-label="Drawing tools"
+            >
+              <button
+                aria-pressed={drawingTool === "area"}
+                onClick={() => setDrawingTool("area")}
+              >
+                Building areas
+              </button>
+              <button
+                aria-pressed={drawingTool === "views"}
+                onClick={() => setDrawingTool("views")}
+              >
+                Section and elevations
+              </button>
+              <button
+                aria-pressed={drawingTool === "site"}
+                onClick={() => setDrawingTool("site")}
+              >
+                Site plan
+              </button>
+            </div>
+            {drawingTool === "area" ? (
+              <GarageArea plan={drawing} onChange={updateGarage} />
+            ) : drawingTool === "views" ? (
+              <GarageViewsPanel
+                key={version}
+                plan={drawing}
+                onChange={updateGarage}
+              />
+            ) : (
+              <GarageSitePanel
+                key={version}
+                plan={drawing}
+                onChange={updateGarage}
+              />
+            )}
+          </section>
+        </div>
+      )}
+      {exportOpen && (
+        <ExportDrawingDialog
+          plan={drawing}
+          mapBackground={mapBackground}
+          parcels={parcels}
+          name={
+            project.version === 2
+              ? drawing.name
+              : `${project.name} - ${activeDrawing.name}`
+          }
+          onClose={() => setExportOpen(false)}
+          onAdditionalDrawings={() => {
+            setExportOpen(false);
+            setDrawingToolsOpen(true);
+          }}
+        />
+      )}
+      {revisions && (
+        <RecoveryDialog
+          revisions={revisions}
+          onClose={() => setRevisions(null)}
+          onRestore={restoreRecovery}
+        />
+      )}
+      {replacement && (
+        <ReplaceProjectDialog
+          action={replacement.action}
+          onClose={() => setReplacement(null)}
+          onContinue={continueReplacement}
+        />
+      )}
+      {referencePicker && (
+        <ReferencePicker
+          onApply={installReference}
+          onClose={() => setReferencePicker(false)}
+        />
+      )}
+      {referenceSettings && plan.traceReference && (
+        <TraceReferenceDialog
+          reference={plan.traceReference}
+          onChange={changeReference}
+          onClose={() => setReferenceSettings(false)}
+          onCalibrate={() => {
+            setReferenceSettings(false);
+            setTool("calibrate");
+          }}
+          onReplace={() => {
+            setReferenceSettings(false);
+            setReferencePicker(true);
+          }}
+          onRemove={() => changeReference()}
+        />
+      )}
       {saveOpen && (
         <SaveDialog
           initialName={projectRef.current.name || "Untitled"}
@@ -1511,7 +1994,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <>
                 <p>
                   Enter the real distance between your two points. This rescales
-                  the entire floor plan, including objects and annotations.
+                  the entire floor plan, including hidden and locked objects and
+                  any tracing reference. The site map keeps its own scale.
                 </p>
                 <label className="field">
                   <span>Real distance in centimeters</span>
@@ -1536,7 +2020,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                         dist(measure.a, measure.b),
                         Number(realDistance),
                       );
-                      commit(next);
+                      commit(next, undefined, true);
                       setMeasure(null);
                       fit(next);
                       showNotice(
@@ -1570,7 +2054,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       b: measure.b,
                       offset: -30,
                     };
-                    commit({ ...plan, items: [...plan.items, i] });
+                    try {
+                      commit({
+                        ...plan,
+                        items: [...plan.items, placeOnActiveLayer(plan, i)],
+                      });
+                    } catch (error) {
+                      showNotice((error as Error).message);
+                      return;
+                    }
                     setMeasure(null);
                     setSelection([i.id]);
                   }}

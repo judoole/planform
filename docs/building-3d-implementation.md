@@ -1,6 +1,6 @@
 # Building model and 3D implementation
 
-Planform uses one drawing for editable floor-plan geometry and its 3D view. The initial model covers one storey, with walls, hosted doors and windows, and one flat, shed or gable roof over a convex closed outer shell. The garage permit is a documentation workflow built on that model.
+Planform uses one drawing for editable floor-plan geometry and its 3D view. The initial model covers one storey, with walls, hosted doors and windows, and one flat, shed or gable roof over a convex closed outer shell. The drawing exports use that model for additional drawing views.
 
 ## Implementation order
 
@@ -23,4 +23,4 @@ Use normal editor controls for wall heights and roofs. Verify the full edit, und
 - The floor default updates all inheriting walls in one undo step. Newly drawn walls also inherit it. An explicit wall override survives a change of default. A group of selected unlocked walls can receive a height together and return to the default.
 - Flat, shed and gable roofs respond to the building settings. Door and window openings respond to their host wall, position, height and sill. Older files without vertical settings remain editable.
 - The 6 × 7 m garage uses the same model as the house. Changing its wall heights and roof settings updates the 3D view and the next section and elevation exports. Existing permit draft data reopens with its geometry and terrain. Export opens a compact output chooser.
-- The permit package still includes the 1:100 floor plan and section/elevations, the 1:500 site plan, the area report, editable draft and attachment checklist. Verify both scales using actual PDF coordinates.
+- Export downloads a fit-to-page sketch or a scaled floor plan PDF. Additional drawings include scaled sections, elevations, and a site plan. Verify 1:100 and 1:500 using actual PDF coordinates.

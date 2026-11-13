@@ -1,3 +1,4 @@
+import { legendLayout } from "./layers";
 import {
   add,
   angle,
@@ -22,7 +23,12 @@ const dot = (a: Point, b: Point) => a.x * b.x + a.y * b.y;
 
 export type ExteriorContour =
   | { status: "uncalibrated" | "open" | "unsupported" }
-  | { status: "ready"; corners: Point[] };
+  | {
+      status: "ready";
+      corners: Point[];
+      insideCorners: Point[];
+      wallIds: string[][];
+    };
 
 function wallLoop(walls: Wall[]) {
   const key = ({ x, y }: Point) => `${x},${y}`;
@@ -62,7 +68,14 @@ function wallLoop(walls: Wall[]) {
     : ({ status: "open" } as const);
 }
 
-const reverseWall = (wall: Wall): Wall => ({ ...wall, a: wall.b, b: wall.a });
+const reverseWall = (wall: Wall): Wall => ({
+  ...wall,
+  a: wall.b,
+  b: wall.a,
+  ...(wall.junctions
+    ? { junctions: { a: wall.junctions.b, b: wall.junctions.a } }
+    : {}),
+});
 
 function wallFace(wall: Wall) {
   const delta = subtract(wall.b, wall.a);
@@ -70,6 +83,7 @@ function wallFace(wall: Wall) {
   const direction = { x: delta.x / length, y: delta.y / length };
   return {
     ...wall,
+    wallIds: [wall.id],
     direction,
     // Clockwise in the drawing's Y-down coordinates.
     outward: {
@@ -77,6 +91,34 @@ function wallFace(wall: Wall) {
       y: (-direction.x * wall.thickness) / 2,
     },
   };
+}
+
+function mergeStraightFaces(walls: Wall[]) {
+  const faces = walls.map(wallFace);
+  const adjacent = (a: (typeof faces)[number], b: (typeof faces)[number]) =>
+    a.junctions?.b &&
+    a.junctions.b === b.junctions?.a &&
+    a.thickness === b.thickness &&
+    Math.abs(cross(a.direction, b.direction)) <= tolerance &&
+    dot(a.direction, b.direction) > 0;
+  const start = faces.findIndex(
+    (face, index) =>
+      !adjacent(faces[(index + faces.length - 1) % faces.length], face),
+  );
+  if (start === -1) return faces;
+  const reordered = [...faces.slice(start), ...faces.slice(0, start)];
+  const result: typeof faces = [];
+  for (const face of reordered) {
+    const previous = result.at(-1);
+    if (previous && adjacent(previous, face)) {
+      previous.b = face.b;
+      previous.junctions = { ...previous.junctions, b: face.junctions?.b };
+      previous.wallIds.push(...face.wallIds);
+    } else {
+      result.push(face);
+    }
+  }
+  return result;
 }
 
 function offsetCorners(faces: ReturnType<typeof wallFace>[], side: 1 | -1) {
@@ -98,23 +140,163 @@ function offsetCorners(faces: ReturnType<typeof wallFace>[], side: 1 | -1) {
   });
 }
 
+const interpolate = (a: Point, b: Point, t: number): Point => ({
+  x: a.x + t * (b.x - a.x),
+  y: a.y + t * (b.y - a.y),
+});
+
+function convexHull(points: Point[]) {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  const unique = sorted.filter(
+    (point, i) => !i || dist(point, sorted[i - 1]) > tolerance,
+  );
+  const half = (sequence: Point[]) => {
+    const chain: Point[] = [];
+    for (const point of sequence) {
+      while (chain.length >= 2) {
+        const a = chain[chain.length - 2],
+          b = chain[chain.length - 1];
+        if (cross(subtract(b, a), subtract(point, a)) > tolerance * dist(a, b))
+          break;
+        chain.pop();
+      }
+      chain.push(point);
+    }
+    chain.pop();
+    return chain;
+  };
+  return [...half(unique), ...half(unique.reverse())];
+}
+
+/** Find wall-backed supporting edges, retaining collinear subdivisions. */
+function convexWallShell(walls: Wall[]) {
+  if (walls.length < 3) return;
+  const hull = convexHull(walls.flatMap((wall) => [wall.a, wall.b]));
+  if (hull.length < 3) return;
+  const center = hull.reduce(
+    (sum, p) => ({
+      x: sum.x + p.x / hull.length,
+      y: sum.y + p.y / hull.length,
+    }),
+    { x: 0, y: 0 },
+  );
+  const polarAngle = (p: Point) => Math.atan2(p.y - center.y, p.x - center.x);
+  const edges = hull
+    .map((a, i) => {
+      const b = hull[(i + 1) % hull.length];
+      const length = dist(a, b);
+      return {
+        a,
+        b,
+        length,
+        angle: polarAngle(a),
+        direction: { x: (b.x - a.x) / length, y: (b.y - a.y) / length },
+        segments: [] as { wall: Wall; start: number; end: number }[],
+      };
+    })
+    .sort((a, b) => a.angle - b.angle);
+
+  for (const wall of walls) {
+    const theta = polarAngle(interpolate(wall.a, wall.b, 0.5));
+    let left = 0,
+      right = edges.length;
+    while (left < right) {
+      const mid = (left + right) >>> 1;
+      if (edges[mid].angle <= theta) left = mid + 1;
+      else right = mid;
+    }
+    const edge = edges[(left + edges.length - 1) % edges.length];
+    const a = subtract(wall.a, edge.a),
+      b = subtract(wall.b, edge.a);
+    if (
+      Math.abs(cross(edge.direction, a)) > tolerance ||
+      Math.abs(cross(edge.direction, b)) > tolerance
+    )
+      continue;
+    const projections = [dot(a, edge.direction), dot(b, edge.direction)];
+    edge.segments.push({
+      wall,
+      start: Math.min(...projections),
+      end: Math.max(...projections),
+    });
+  }
+
+  for (const edge of edges) {
+    const sorted = edge.segments.sort((a, b) => a.start - b.start);
+    if (!sorted.length) return;
+    let end = 0;
+    for (const segment of sorted) {
+      // Gaps, overlaps and thickness steps do not form a single supported,
+      // straight outside face.
+      if (
+        Math.abs(segment.start - end) > tolerance ||
+        Math.abs(segment.wall.thickness - sorted[0].wall.thickness) > tolerance
+      )
+        return;
+      end = segment.end;
+    }
+    if (Math.abs(end - edge.length) > tolerance) return;
+  }
+
+  const contour = deriveSingleWallContour(
+    edges.map((edge, index): Wall => ({
+      id: String(index),
+      name: "",
+      type: "wall",
+      a: edge.a,
+      b: edge.b,
+      thickness: edge.segments[0].wall.thickness,
+    })),
+  );
+  if (contour.status !== "ready") return;
+  // Match each offset contour edge to its centerline edge by direction. Both
+  // lists are clockwise, so one alignment maps every edge in linear time.
+  const first = subtract(contour.corners[1], contour.corners[0]);
+  const length = Math.hypot(first.x, first.y);
+  const start = edges.findIndex(
+    ({ direction }) =>
+      dot(direction, first) > 0 &&
+      Math.abs(cross(direction, first)) <= tolerance * length,
+  );
+  if (start < 0) return;
+  const edgeWallIds = contour.corners.map((_, index) =>
+    edges[(index + start) % edges.length].segments.map(({ wall }) => wall.id),
+  );
+  return { ...contour, wallIds: edgeWallIds };
+}
+
 /** Intersections of neighboring outside wall faces, in clockwise order in cm.
  * The first edge points most nearly right, then down on a tie. Each edge
- * corresponds to one wall in a single convex loop of straight walls.
+ * corresponds to a straight face, which can include explicitly split walls.
  */
 export function deriveExteriorContour(plan: Plan): ExteriorContour {
   if (!plan.calibration.calibrated) return { status: "uncalibrated" };
-  return deriveWallContour(plan.items.filter((item) => item.type === "wall"));
+  return outerWallContour(plan.items.filter((item) => item.type === "wall"));
 }
 
-function deriveWallContour(walls: Wall[]): ExteriorContour {
+/** Single wall loop required by tools that model an unenclosed interior for now. */
+export function deriveSingleLoopContour(plan: Plan): ExteriorContour {
+  if (!plan.calibration.calibrated) return { status: "uncalibrated" };
+  return deriveSingleWallContour(
+    plan.items.filter((item) => item.type === "wall"),
+  );
+}
+
+function outerWallContour(walls: Wall[]): ExteriorContour {
+  const single = deriveSingleWallContour(walls);
+  return single.status === "ready"
+    ? single
+    : (convexWallShell(walls) ?? single);
+}
+
+function deriveSingleWallContour(walls: Wall[]): ExteriorContour {
   if (walls.length < 3) return { status: "open" };
   if (walls.some((wall) => same(wall.a, wall.b)))
     return { status: "unsupported" };
   const path = wallLoop(walls);
   if (path.status !== "closed") return { status: path.status };
 
-  let faces = path.loop.map(wallFace);
+  let faces = mergeStraightFaces(path.loop);
   const turns = faces.map(({ direction }, i) => {
     const next = faces[(i + 1) % faces.length].direction;
     return Math.atan2(cross(direction, next), dot(direction, next));
@@ -131,7 +313,7 @@ function deriveWallContour(walls: Wall[]): ExteriorContour {
   )
     return { status: "unsupported" };
   if (winding < 0)
-    faces = path.loop.reverse().map((wall) => wallFace(reverseWall(wall)));
+    faces = mergeStraightFaces(path.loop.reverse().map(reverseWall));
 
   const maxRight = faces.reduce(
     (right, face) => Math.max(right, face.direction.x),
@@ -147,15 +329,21 @@ function deriveWallContour(walls: Wall[]): ExteriorContour {
   faces = [...faces.slice(first), ...faces.slice(0, first)];
 
   const corners = offsetCorners(faces, 1);
+  const insideCorners = offsetCorners(faces, -1);
   const forwardEdges = (points: Point[]) =>
     exteriorDimensionSegments(points).every(
       ([a, b], i) => dot(subtract(b, a), faces[i].direction) > tolerance,
     );
   // Extreme thickness differences can make an offset edge disappear, and
   // excessive thickness can fill the enclosure entirely.
-  if (!forwardEdges(corners) || !forwardEdges(offsetCorners(faces, -1)))
+  if (!forwardEdges(corners) || !forwardEdges(insideCorners))
     return { status: "unsupported" };
-  return { status: "ready", corners };
+  return {
+    status: "ready",
+    corners,
+    insideCorners,
+    wallIds: faces.map((wall) => wall.wallIds),
+  };
 }
 
 export function createExteriorContourReader() {
@@ -179,7 +367,7 @@ export function createExteriorContourReader() {
       last.walls.length !== walls.length ||
       !walls.every((wall, index) => wall === last?.walls[index])
     )
-      last = { walls, contour: deriveWallContour(walls) };
+      last = { walls, contour: outerWallContour(walls) };
     cache.set(plan.items, last);
     return last.contour;
   };
@@ -197,7 +385,7 @@ export function visibleExteriorContour(
   plan: Plan,
   read = deriveExteriorContour,
 ) {
-  if (plan.showExteriorDimensions) return read(plan);
+  if (plan.showExteriorDimensions !== false) return read(plan);
 }
 
 /** Share the label's explicit SVG advance and rotated bounds across renderers.
@@ -236,6 +424,15 @@ export function annotatedPlanBounds(
   plan: Plan,
   exterior: ExteriorContour | undefined,
 ) {
+  const geometry = geometryAnnotationBounds(plan, exterior);
+  const legend = legendLayout(plan, geometry);
+  return legend ? unionBoxes([geometry, legend.bounds]) : geometry;
+}
+
+export function geometryAnnotationBounds(
+  plan: Plan,
+  exterior: ExteriorContour | undefined,
+) {
   const drawing = planBounds(plan);
   if (exterior?.status !== "ready") return drawing;
   const marks = exteriorDimensionSegments(exterior.corners).map(([a, b]) => {
@@ -260,4 +457,13 @@ export function annotatedPlanBounds(
     );
   });
   return unionBoxes([drawing, ...marks]);
+}
+
+export function exteriorWallLengthSummary(plan: Plan) {
+  const contour = visibleExteriorContour(plan);
+  if (contour?.status !== "ready") return;
+  const labels = exteriorDimensionSegments(contour.corners).map(([a, b]) =>
+    exteriorDimensionLabel(a, b),
+  );
+  return `Exterior wall lengths: ${[...new Set(labels)].join(", ")}`;
 }

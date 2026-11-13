@@ -3,7 +3,12 @@ import { buildingGeometry } from "./building";
 import schema from "../public/agent/planform.schema.json";
 import comparisonSchema from "../public/agent/comparison.schema.json";
 import projectSchema from "../public/agent/project.schema.json";
-import type { Item, Plan, RectItem, Wall } from "./model";
+import type { Item, Plan, Point, RectItem, Wall } from "./model";
+import { wallEnds } from "./junctions";
+import { siteMapProblem } from "./siteMap";
+import { adoptLegacyGarageMeasurements } from "./legacyGarage";
+import { embeddedRasterProblem, referenceHeight } from "./reference";
+import { defaultLayer, drawingLayers } from "./layers";
 import {
   asMultiProject,
   MAX_PROPOSALS,
@@ -90,13 +95,62 @@ export function validateProject(input: unknown): Plan {
   const plan = structuredClone(input) as Plan;
   validateStructure(plan, validateSchema);
   validateRelationships(plan, "");
-  return plan;
+  return adoptLegacyGarageMeasurements(plan);
 }
 
 function validateRelationships(plan: Plan, path: string) {
   const issues: Issue[] = [];
+  const site = plan.garage?.site;
+  if (site) {
+    const problem = embeddedRasterProblem(site.map) ?? siteMapProblem(site);
+    if (problem)
+      issues.push({
+        path: `${path}/garage/site`,
+        code: "site",
+        message: problem,
+      });
+  }
+  const reference = plan.traceReference;
+  if (reference) {
+    const problem = embeddedRasterProblem(reference.image);
+    if (problem)
+      issues.push({
+        path: `${path}/traceReference/image`,
+        code: "raster",
+        message: problem,
+      });
+    if (!Number.isFinite(referenceHeight(reference)))
+      issues.push({
+        path: `${path}/traceReference/width`,
+        code: "raster",
+        message: "Tracing reference dimensions must be finite.",
+      });
+  }
   const all = new Map<string, Item>();
-  function walk(items: Item[], path: string) {
+  const junctions = new Map<string, Point>();
+  const layers = new Set<string>();
+  drawingLayers(plan).forEach((layer, i) => {
+    if (layers.has(layer.id))
+      issues.push({
+        path: `${path}/layers/${i}/id`,
+        code: "duplicate_layer",
+        message: "Layer IDs must be unique.",
+      });
+    layers.add(layer.id);
+  });
+  if (!layers.has(defaultLayer.id))
+    issues.push({
+      path: `${path}/layers`,
+      code: "missing_default_layer",
+      message: "Layers must include the Default layer ID.",
+    });
+  if (plan.activeLayerId !== undefined && !layers.has(plan.activeLayerId))
+    issues.push({
+      path: `${path}/activeLayerId`,
+      code: "missing_layer",
+      message: "Active layer must reference an existing layer.",
+    });
+  function walk(items: Item[], path: string, grouped = false) {
     items.forEach((item, n) => {
       const here = `${path}/${n}`;
       const issue = (field: string, code: string, message: string) =>
@@ -108,8 +162,17 @@ function validateRelationships(plan: Plan, path: string) {
           "Object IDs must be unique throughout the document.",
         );
       all.set(item.id, item);
+      if (item.layerId !== undefined && (grouped || !layers.has(item.layerId)))
+        issue(
+          "/layerId",
+          "layer_membership",
+          grouped
+            ? "Grouped objects inherit the enclosing group’s layer."
+            : "Object must reference an existing layer.",
+        );
       if (
-        (item.type === "wall" || item.type === "dimension") &&
+        (item.type === "wall" ||
+          (item.type === "dimension" && !item.anchors)) &&
         length(item as Wall) < 0.001
       )
         issue(
@@ -117,21 +180,31 @@ function validateRelationships(plan: Plan, path: string) {
           "zero_length",
           "Endpoints must be at least 0.001 cm apart.",
         );
-      if (item.type === "group") walk(item.children!, `${here}/children`);
+      if (item.type === "wall") {
+        for (const end of wallEnds) {
+          const id = item.junctions?.[end];
+          if (!id) continue;
+          const point = item[end];
+          const existing = junctions.get(id);
+          if (existing && (existing.x !== point.x || existing.y !== point.y))
+            issue(
+              `/junctions/${end}`,
+              "junction_mismatch",
+              `Junction "${id}" must have identical endpoint coordinates on every wall.`,
+            );
+          junctions.set(id, point);
+        }
+      }
+      if (item.type === "group") walk(item.children!, `${here}/children`, true);
     });
   }
   walk(plan.items, path + "/items");
-  const walls = new Map(
-    plan.items
-      .filter((i): i is Wall => i.type === "wall")
-      .map((w) => [w.id, w]),
-  );
+  const topLevel = new Map(plan.items.map((item) => [item.id, item]));
   const occupied = new Map<
     string,
     { start: number; end: number; id: string }[]
   >();
   plan.items.forEach((item, n) => {
-    if (item.type !== "door" && item.type !== "window") return;
     const fail = (field: string, code: string, message: string) =>
       issues.push({
         path: `${path}/items/${n}/${field}`,
@@ -139,8 +212,34 @@ function validateRelationships(plan: Plan, path: string) {
         message,
         objectId: item.id,
       });
-    const wall = walls.get(item.hostId);
-    if (!wall) {
+    if (item.type === "dimension") {
+      for (const end of wallEnds) {
+        const anchor = item.anchors?.[end];
+        if (!anchor) continue;
+        const target = topLevel.get(anchor.itemId);
+        const valid =
+          anchor.point === "center"
+            ? target && target.type !== "wall" && target.type !== "dimension"
+            : target?.type === "wall";
+        if (!valid)
+          fail(
+            `anchors/${end}`,
+            "invalid_anchor",
+            `Anchor "${anchor.itemId}" must identify a top-level wall endpoint or object center.`,
+          );
+      }
+      const { a, b } = item.anchors ?? {};
+      if (a && b && a.itemId === b.itemId && a.point === b.point)
+        fail(
+          "anchors/b",
+          "duplicate_anchor",
+          "Choose a different second anchor.",
+        );
+      return;
+    }
+    if (item.type !== "door" && item.type !== "window") return;
+    const wall = topLevel.get(item.hostId);
+    if (!wall || wall.type !== "wall") {
       fail(
         "hostId",
         "missing_host",
@@ -182,8 +281,12 @@ function validateComparison(input: ComparisonProject): ComparisonProject {
     guardDrawing(input.plans?.[version], `/plans/${version}`);
   const project = structuredClone(input);
   validateStructure(project, validateComparisonSchema);
-  for (const version of planVersions)
+  for (const version of planVersions) {
     validateRelationships(project.plans[version], `/plans/${version}`);
+    project.plans[version] = adoptLegacyGarageMeasurements(
+      project.plans[version],
+    );
+  }
   return project;
 }
 
@@ -232,9 +335,10 @@ function validateMultiProject(input: MultiPlanProject): MultiPlanProject {
       message: "Active must reference a drawing ID.",
     });
   if (issues.length) throw new ProjectError(issues);
-  project.drawings.forEach((d, i) =>
-    validateRelationships(d.plan, `/drawings/${i}/plan`),
-  );
+  project.drawings.forEach((d, i) => {
+    validateRelationships(d.plan, `/drawings/${i}/plan`);
+    d.plan = adoptLegacyGarageMeasurements(d.plan);
+  });
   return project;
 }
 

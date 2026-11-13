@@ -96,9 +96,18 @@
               "offset",
               "width"
             ],
-            "if": { "properties": { "type": { "const": "window" } } },
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "window"
+                }
+              }
+            },
             "then": {
-              "properties": { "style": false, "slideDirection": false }
+              "properties": {
+                "style": false,
+                "slideDirection": false
+              }
             }
           },
           {
@@ -121,6 +130,82 @@
               }
             },
             "required": ["op", "wallId", "end", "point"]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "const": "splitWall"
+              },
+              "wallId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "offset": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 30000000
+              },
+              "segmentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "junctionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": ["op", "wallId", "offset", "segmentId", "junctionId"]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "const": "joinWalls"
+              },
+              "sourceWallId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sourceEnd": {
+                "enum": ["a", "b"]
+              },
+              "targetWallId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "targetOffset": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 30000000
+              },
+              "segmentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "junctionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "op",
+              "sourceWallId",
+              "sourceEnd",
+              "targetWallId",
+              "targetOffset",
+              "segmentId",
+              "junctionId"
+            ]
           },
           {
             "type": "object",

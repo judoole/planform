@@ -1,4 +1,12 @@
+import { referenceHeight, type TraceReference } from "./reference";
 import { Fragment, memo } from "react";
+import {
+  drawRenovationStatus,
+  phaseLegendStyles,
+  renovationStatus,
+  renovationStyles,
+} from "./layers";
+import { dimensionEndpoints } from "./dimensions";
 import { type Room, formatRoomArea } from "./rooms";
 import {
   dimensionFontSize,
@@ -22,6 +30,52 @@ import {
 } from "./model";
 const ink = "#34443f",
   light = "#e5ebe5";
+
+export function RenovationLegend({
+  plan,
+  x,
+  y,
+  fontSize = 16,
+}: {
+  plan: Plan;
+  x: number;
+  y: number;
+  fontSize?: number;
+}) {
+  const legend = phaseLegendStyles(plan);
+  if (!legend) return null;
+  return (
+    <g
+      data-renovation-legend="true"
+      transform={`translate(${x} ${y})`}
+      fill={ink}
+      fontSize={fontSize}
+      fontFamily="Arial, sans-serif"
+      pointerEvents="none"
+    >
+      <text y={fontSize}>{legend.title}</text>
+      {legend.entries.map((entry, index) => {
+        const baseline = fontSize * (2.4 + index * 1.4);
+        return (
+          <g key={entry.label}>
+            <rect
+              x={0}
+              y={baseline - fontSize * 0.75}
+              width={fontSize * 1.25}
+              height={fontSize * 0.7}
+              fill={entry.fill}
+              stroke={entry.line}
+              strokeDasharray={"dash" in entry ? entry.dash : undefined}
+            />
+            <text x={fontSize * 1.65} y={baseline}>
+              {entry.label}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 
 function DimensionMark({
   a,
@@ -111,9 +165,11 @@ export const ExteriorDimensions = memo(function ExteriorDimensions({
 export function RoomLabels({
   rooms,
   calibrated,
+  showScalePrompt = true,
 }: {
   rooms: Room[];
   calibrated: boolean;
+  showScalePrompt?: boolean;
 }) {
   return (
     <g
@@ -123,15 +179,20 @@ export function RoomLabels({
     >
       {rooms.map((room, n) => {
         const name = `Room ${n + 1}`;
-        const area = calibrated ? formatRoomArea(room.areaCm2) : "Set scale";
+        const area = calibrated
+          ? formatRoomArea(room.areaCm2)
+          : showScalePrompt
+            ? "Set scale"
+            : undefined;
+        const label = area ? `${name}: ${area}` : name;
         const size = Math.min(18, room.clearance / 3);
         return (
           <g
             key={n}
             transform={`translate(${room.label.x} ${room.label.y})`}
-            aria-label={`${name}: ${area}`}
+            aria-label={label}
           >
-            <title>{`${name}: ${area}`}</title>
+            <title>{label}</title>
             <text
               textAnchor="middle"
               fill="#52685d"
@@ -140,12 +201,14 @@ export function RoomLabels({
               strokeLinejoin="round"
               paintOrder="stroke"
             >
-              <tspan x={0} y={-size * 0.35} fontSize={size * 0.72}>
+              <tspan x={0} y={area ? -size * 0.35 : 0} fontSize={size * 0.72}>
                 {name}
               </tspan>
-              <tspan x={0} y={size * 0.85} fontSize={size} fontWeight={600}>
-                {area}
-              </tspan>
+              {area && (
+                <tspan x={0} y={size * 0.85} fontSize={size} fontWeight={600}>
+                  {area}
+                </tspan>
+              )}
             </text>
           </g>
         );
@@ -369,6 +432,8 @@ function WallShape({
   interactive: boolean;
 }) {
   const len = dist(w.a, w.b);
+  const style =
+    renovationStyles[drawRenovationStatus(plan, w.renovationStatus)];
   const openings = plan.items
     .filter(
       (i) => (i.type === "door" || i.type === "window") && i.hostId === w.id,
@@ -404,8 +469,9 @@ function WallShape({
           y={-w.thickness / 2}
           width={s.end - s.start}
           height={w.thickness}
-          fill="#52645a"
-          stroke="#344b3f"
+          fill={style.fill}
+          stroke={style.line}
+          strokeDasharray={"dash" in style ? style.dash : undefined}
           strokeWidth={1}
         />
       ))}
@@ -421,7 +487,7 @@ function WallShape({
             cx={n ? len : 0}
             cy={0}
             r={w.thickness / 2}
-            fill="#52645a"
+            fill={style.fill}
           />
         ) : null,
       )}
@@ -439,17 +505,21 @@ export const DrawItem = memo(
     interactive?: boolean;
   }) {
     let shape;
+    const status = renovationStatus(plan, i);
     if (i.type === "wall")
       shape = <WallShape wall={i} plan={plan} interactive={interactive} />;
     else if (i.type === "door" || i.type === "window") {
       const f = openingFrame(i, plan.items);
       if (!f) return null;
+      const displayStatus = drawRenovationStatus(plan, status);
+      const style = renovationStyles[displayStatus];
       const w = i.width,
         t = f.wall.thickness;
       shape = (
         <g
           transform={`translate(${f.center.x} ${f.center.y}) rotate(${f.angle})`}
-          stroke={ink}
+          stroke={displayStatus === "existing" ? ink : style.line}
+          strokeDasharray={"dash" in style ? style.dash : undefined}
           strokeWidth={1.5}
         >
           {interactive && (
@@ -465,7 +535,13 @@ export const DrawItem = memo(
           )}
           {i.type === "window" ? (
             <>
-              <rect x={-w / 2} y={-t / 2} width={w} height={t} fill="#dfedf0" />
+              <rect
+                x={-w / 2}
+                y={-t / 2}
+                width={w}
+                height={t}
+                fill={style.opening}
+              />
               <line x1={-w / 2} x2={w / 2} y1={0} y2={0} />
               <line x1={-w / 2 + 4} x2={-w / 2 + 4} y1={-t / 2} y2={t / 2} />
               <line x1={w / 2 - 4} x2={w / 2 - 4} y1={-t / 2} y2={t / 2} />
@@ -491,12 +567,13 @@ export const DrawItem = memo(
         </g>
       );
     } else if (i.type === "dimension") {
+      const { a, b } = dimensionEndpoints(i, plan.items);
       shape = (
         <DimensionMark
-          a={i.a}
-          b={i.b}
+          a={a}
+          b={b}
           offset={i.offset}
-          label={`${dist(i.a, i.b).toFixed(1)} ${plan.calibration.calibrated ? "cm" : "units"}`}
+          label={`${dist(a, b).toFixed(1)} ${plan.calibration.calibrated ? "cm" : "units"}`}
           interactive={interactive}
         />
       );
@@ -526,7 +603,12 @@ export const DrawItem = memo(
       );
     }
     return (
-      <g data-item-id={i.id} data-item-type={i.type} opacity={1}>
+      <g
+        data-item-id={i.id}
+        data-item-type={i.type}
+        data-renovation-status={status}
+        opacity={1}
+      >
         {shape}
       </g>
     );
@@ -538,6 +620,29 @@ export const DrawItem = memo(
       a.plan.calibration.calibrated === b.plan.calibration.calibrated) &&
     ((a.item.type !== "wall" &&
       a.item.type !== "door" &&
-      a.item.type !== "window") ||
+      a.item.type !== "window" &&
+      !(a.item.type === "dimension" && a.item.anchors)) ||
       a.plan === b.plan),
 );
+
+export function TraceReferenceArtwork({
+  reference,
+  preview = false,
+}: {
+  reference?: TraceReference;
+  preview?: boolean;
+}) {
+  if (!reference?.visible) return null;
+  return (
+    <image
+      data-trace-reference={preview ? "" : undefined}
+      href={reference.image.dataUrl}
+      x={reference.x}
+      y={reference.y}
+      width={reference.width}
+      height={referenceHeight(reference)}
+      opacity={reference.opacity}
+      pointerEvents="none"
+    />
+  );
+}

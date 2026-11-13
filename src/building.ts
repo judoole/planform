@@ -81,7 +81,6 @@ const subtract = (a: Point, b: Point): Point => ({
   y: a.y - b.y,
 });
 const dot = (a: Point, b: Point) => a.x * b.x + a.y * b.y;
-const cross = (a: Point, b: Point) => a.x * b.y - a.y * b.x;
 const interpolate = (a: Point, b: Point, t: number): Point => ({
   x: a.x + t * (b.x - a.x),
   y: a.y + t * (b.y - a.y),
@@ -105,130 +104,6 @@ export function openingVertical(plan: Plan, opening: Opening, host?: Wall) {
     top: bottom + height,
     fits: Boolean(host && sill + height <= wallHeight(plan, host) + tolerance),
   };
-}
-
-function convexHull(points: Point[]) {
-  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
-  const unique = sorted.filter(
-    (point, i) => !i || dist(point, sorted[i - 1]) > tolerance,
-  );
-  const half = (sequence: Point[]) => {
-    const chain: Point[] = [];
-    for (const point of sequence) {
-      while (chain.length >= 2) {
-        const a = chain[chain.length - 2],
-          b = chain[chain.length - 1];
-        if (cross(subtract(b, a), subtract(point, a)) > tolerance * dist(a, b))
-          break;
-        chain.pop();
-      }
-      chain.push(point);
-    }
-    chain.pop();
-    return chain;
-  };
-  return [...half(unique), ...half(unique.reverse())];
-}
-
-/** Find wall-backed supporting edges, retaining collinear subdivisions. */
-function buildingFootprint(
-  plan: Plan,
-  walls: Wall[],
-): BuildingFootprint | undefined {
-  if (walls.length < 3) return;
-  const hull = convexHull(walls.flatMap((wall) => [wall.a, wall.b]));
-  if (hull.length < 3) return;
-  const center = hull.reduce(
-    (sum, p) => ({
-      x: sum.x + p.x / hull.length,
-      y: sum.y + p.y / hull.length,
-    }),
-    { x: 0, y: 0 },
-  );
-  const polarAngle = (p: Point) => Math.atan2(p.y - center.y, p.x - center.x);
-  const edges = hull
-    .map((a, i) => {
-      const b = hull[(i + 1) % hull.length];
-      const length = dist(a, b);
-      return {
-        a,
-        b,
-        length,
-        angle: polarAngle(a),
-        direction: { x: (b.x - a.x) / length, y: (b.y - a.y) / length },
-        segments: [] as { wall: Wall; start: number; end: number }[],
-      };
-    })
-    .sort((a, b) => a.angle - b.angle);
-
-  for (const wall of walls) {
-    const theta = polarAngle(interpolate(wall.a, wall.b, 0.5));
-    let left = 0,
-      right = edges.length;
-    while (left < right) {
-      const mid = (left + right) >>> 1;
-      if (edges[mid].angle <= theta) left = mid + 1;
-      else right = mid;
-    }
-    const edge = edges[(left + edges.length - 1) % edges.length];
-    const a = subtract(wall.a, edge.a),
-      b = subtract(wall.b, edge.a);
-    if (
-      Math.abs(cross(edge.direction, a)) > tolerance ||
-      Math.abs(cross(edge.direction, b)) > tolerance
-    )
-      continue;
-    const projections = [dot(a, edge.direction), dot(b, edge.direction)];
-    edge.segments.push({
-      wall,
-      start: Math.min(...projections),
-      end: Math.max(...projections),
-    });
-  }
-
-  for (const edge of edges) {
-    const sorted = edge.segments.sort((a, b) => a.start - b.start);
-    if (!sorted.length) return;
-    let end = 0;
-    for (const segment of sorted) {
-      // Gaps, overlaps and thickness steps do not form a single supported,
-      // straight outside face.
-      if (
-        Math.abs(segment.start - end) > tolerance ||
-        Math.abs(segment.wall.thickness - sorted[0].wall.thickness) > tolerance
-      )
-        return;
-      end = segment.end;
-    }
-    if (Math.abs(end - edge.length) > tolerance) return;
-  }
-
-  const contour = deriveExteriorContour({
-    ...plan,
-    items: edges.map((edge, index): Wall => ({
-      id: String(index),
-      name: "",
-      type: "wall",
-      a: edge.a,
-      b: edge.b,
-      thickness: edge.segments[0].wall.thickness,
-    })),
-  });
-  if (contour.status !== "ready") return;
-  // Match each offset contour edge to its centerline edge by direction. Both
-  // lists are clockwise, so one alignment maps every edge in linear time.
-  const first = subtract(contour.corners[1], contour.corners[0]);
-  const length = Math.hypot(first.x, first.y);
-  const start = edges.findIndex(
-    ({ direction }) =>
-      dot(direction, first) > 0 &&
-      Math.abs(cross(direction, first)) <= tolerance * length,
-  );
-  if (start < 0) return;
-  const edgeWallIds = contour.corners.map((_, index) =>
-    edges[(index + start) % edges.length].segments.map(({ wall }) => wall.id),
-  );
-  return { corners: contour.corners, wallIds: edgeWallIds.flat(), edgeWallIds };
 }
 
 export function roofHeightAt(
@@ -371,7 +246,15 @@ export function buildingGeometry(plan: Plan): BuildingGeometry {
     (item): item is Wall =>
       item.type === "wall" && dist(item.a, item.b) > tolerance,
   );
-  const footprint = buildingFootprint(plan, items);
+  const contour = deriveExteriorContour(plan);
+  const footprint: BuildingFootprint | undefined =
+    contour.status === "ready"
+      ? {
+          corners: contour.corners,
+          wallIds: contour.wallIds.flat(),
+          edgeWallIds: contour.wallIds,
+        }
+      : undefined;
   const exterior = new Set(footprint?.wallIds);
   const walls = items.map((wall): BuildingWall => {
     const height = wallHeight(plan, wall);

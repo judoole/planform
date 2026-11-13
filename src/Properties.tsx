@@ -27,13 +27,24 @@ import {
 } from "./model";
 import { openingVertical, wallHeight, DEFAULT_WALL_HEIGHT } from "./building";
 import type { Tool } from "./Canvas";
+import {
+  isEditProtected,
+  isLayerLocked,
+  renovationStatus,
+  renovationStyles,
+  renovationViews,
+  type RenovationStatus,
+  type RenovationView,
+} from "./layers";
 import { type Room, formatRoomArea } from "./rooms";
 import type { ExteriorContour } from "./exterior";
+import WallJunctionControls from "./WallJunctionControls";
+import { dimensionEndpoints, mapDimensionAnchors } from "./dimensions";
 
 const exteriorMessages = {
   open: "Close the wall loop to show exterior dimensions.",
   unsupported:
-    "Use one convex wall loop with no extra walls, including partitions or stubs. Keep corners distinct and leave space inside the walls.",
+    "Exterior lengths need one closed outer outline with straight walls and no inward corners.",
   uncalibrated: "Calibrate scale to show exterior dimensions in meters.",
 };
 
@@ -137,23 +148,41 @@ export default function Properties({
   onDelete,
   onError,
   onShowExteriorDimensions,
+  onRenovationView,
 }: {
   plan: Plan;
   rooms: Room[];
   roomError?: string;
   exterior: ExteriorContour;
   selection: string[];
-  commit: (p: Plan) => void;
+  commit: (p: Plan, base?: Plan, strict?: boolean) => void;
   setSelection: (s: string[]) => void;
   setTool: (t: Tool) => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onError: (s: string) => void;
   onShowExteriorDimensions: (show: boolean) => void;
+  onRenovationView?: (view: RenovationView) => void;
 }) {
   const items = plan.items.filter((i) => selection.includes(i.id)),
     item = items.length === 1 ? items[0] : null;
+  const itemProtected = !!item && isEditProtected(plan, item);
+  const lockableItems = items.filter(
+    (item) =>
+      !isLayerLocked(plan, item) &&
+      (!isEditProtected(plan, item) || item.locked),
+  );
+  const allLocked = lockableItems.every((item) => item.locked);
+  const groupProtected = items.some((item) => isEditProtected(plan, item));
+  const selectedWalls = new Set(
+    items
+      .filter((item) => item.type === "wall" && !isEditProtected(plan, item))
+      .map((item) => item.id),
+  );
+  const statuses = new Set(items.map((item) => renovationStatus(plan, item)));
   const units = plan.calibration.calibrated ? "cm" : "units";
+  const endpoints =
+    item?.type === "dimension" ? dimensionEndpoints(item, plan.items) : null;
   const walls = items.filter((i): i is Wall => i.type === "wall");
   const openingSize =
     item?.type === "door" || item?.type === "window"
@@ -161,7 +190,9 @@ export default function Properties({
       : undefined;
   function setWallHeight(height: number | undefined) {
     const selected = new Set(
-      walls.filter((wall) => !wall.locked).map((wall) => wall.id),
+      walls
+        .filter((wall) => !isEditProtected(plan, wall))
+        .map((wall) => wall.id),
     );
     commit({
       ...plan,
@@ -173,7 +204,7 @@ export default function Properties({
     });
   }
   function patch(changes: Partial<Item>) {
-    if (!item || item.locked) return;
+    if (!item || itemProtected) return;
     commit(
       normalizeOpenings({
         ...plan,
@@ -189,6 +220,15 @@ export default function Properties({
     } catch (e) {
       onError((e as Error).message);
     }
+  }
+  function moveCorner(wall: Wall, end: "a" | "b", point: Wall["a"]) {
+    action(() =>
+      commit(
+        setCorner(plan, wall.id, end, point, true, (item) =>
+          isEditProtected(plan, item),
+        ),
+      ),
+    );
   }
   return (
     <div className="properties-content">
@@ -224,25 +264,27 @@ export default function Properties({
               </button>
               <button
                 title={
-                  items.every((i) => i.locked)
+                  allLocked
                     ? "Unlock selected objects"
                     : "Lock selected objects"
                 }
                 aria-label={
-                  items.every((i) => i.locked)
+                  allLocked
                     ? "Unlock selected objects"
                     : "Lock selected objects"
                 }
+                disabled={!lockableItems.length}
                 onClick={() => {
                   const p = clone(plan),
-                    lock = !items.every((i) => i.locked);
+                    lock = !allLocked;
                   p.items.forEach((i) => {
-                    if (selection.includes(i.id)) i.locked = lock;
+                    if (lockableItems.some((selected) => selected.id === i.id))
+                      i.locked = lock;
                   });
                   commit(p);
                 }}
               >
-                {items.every((i) => i.locked) ? (
+                {allLocked ? (
                   <UnlockKeyhole size={17} />
                 ) : (
                   <LockKeyhole size={17} />
@@ -252,6 +294,7 @@ export default function Properties({
                 <button
                   title="Group selection"
                   aria-label="Group selection"
+                  disabled={groupProtected}
                   onClick={() =>
                     action(() => {
                       const p = groupItems(plan, selection),
@@ -272,6 +315,7 @@ export default function Properties({
                 <button
                   title="Ungroup"
                   aria-label="Ungroup"
+                  disabled={itemProtected}
                   onClick={() =>
                     action(() => {
                       const p = ungroupItems(plan, item.id);
@@ -290,7 +334,7 @@ export default function Properties({
                 <input
                   key={item.id + item.name}
                   defaultValue={item.name}
-                  disabled={item.locked}
+                  disabled={itemProtected}
                   onBlur={(e) => {
                     if (e.target.value !== item.name)
                       patch({ name: e.target.value });
@@ -301,14 +345,74 @@ export default function Properties({
                 />
               </label>
             )}
-            {item?.locked && (
+            {itemProtected && (
               <p className="notice">
-                Reference locked. Unlock to edit this object.
+                Object or layer is locked. Unlock it to edit this object.
               </p>
             )}
           </>
         )}
       </div>
+      {onRenovationView && (
+        <div className="panel-section">
+          <label className="field">
+            <span>Renovation view</span>
+            <select
+              aria-label="Renovation view"
+              value={plan.renovationView ?? "all"}
+              onChange={(event) =>
+                onRenovationView(event.target.value as RenovationView)
+              }
+            >
+              {Object.entries(renovationViews).map(([value, view]) => (
+                <option key={value} value={value}>
+                  {view.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedWalls.size > 0 && (
+            <label className="field">
+              <span>Renovation status</span>
+              <select
+                aria-label="Renovation status"
+                value={statuses.size === 1 ? [...statuses][0] : ""}
+                onChange={(event) => {
+                  const renovationStatus = event.target
+                    .value as RenovationStatus;
+                  commit({
+                    ...plan,
+                    items: plan.items.map((entry) =>
+                      entry.type === "wall" && selectedWalls.has(entry.id)
+                        ? { ...entry, renovationStatus }
+                        : entry,
+                    ),
+                  });
+                }}
+              >
+                <option value="" disabled>
+                  Mixed
+                </option>
+                {Object.entries(renovationStyles).map(([value, style]) => (
+                  <option key={value} value={value}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {(item?.type === "door" || item?.type === "window") && (
+            <p className="muted">
+              Renovation status follows its wall (
+              {
+                renovationStyles[renovationStatus(plan, item) ?? "existing"]
+                  .label
+              }
+              ).
+            </p>
+          )}
+        </div>
+      )}
       {item?.evidence && (
         <div className="panel-section">
           <h3>
@@ -329,7 +433,7 @@ export default function Properties({
               label="Wall height"
               value={wallHeight(plan, walls[0])}
               onChange={setWallHeight}
-              disabled={walls[0].locked}
+              disabled={isEditProtected(plan, walls[0])}
               unit="cm"
               min={1}
               max={5000}
@@ -356,20 +460,24 @@ export default function Properties({
                     min={1}
                     max={5000}
                     required
-                    disabled={walls.every((wall) => wall.locked)}
+                    disabled={walls.every((wall) =>
+                      isEditProtected(plan, wall),
+                    )}
                   />
                   <small>cm</small>
                 </div>
               </label>
               <button
-                disabled={walls.every((wall) => wall.locked)}
+                disabled={walls.every((wall) => isEditProtected(plan, wall))}
                 type="submit"
               >
                 Apply height
               </button>
             </form>
           )}
-          {walls.some((wall) => !wall.locked && wall.height !== undefined) ? (
+          {walls.some(
+            (wall) => !isEditProtected(plan, wall) && wall.height !== undefined,
+          ) ? (
             <button onClick={() => setWallHeight(undefined)}>
               Use floor default
             </button>
@@ -412,7 +520,7 @@ export default function Properties({
         <label className="property-checkbox">
           <input
             type="checkbox"
-            checked={Boolean(plan.showExteriorDimensions)}
+            checked={plan.showExteriorDimensions !== false}
             onChange={(event) => onShowExteriorDimensions(event.target.checked)}
           />
           Show exterior wall lengths
@@ -459,7 +567,7 @@ export default function Properties({
           </>
         )}
       </section>
-      {item && !item.locked && (
+      {item && !itemProtected && (
         <>
           {item.type === "wall" && (
             <>
@@ -472,12 +580,10 @@ export default function Properties({
                   value={dist(item.a, item.b)}
                   onChange={(length) => {
                     const r = (angle(item.a, item.b) * Math.PI) / 180;
-                    commit(
-                      setCorner(plan, item.id, "b", {
-                        x: item.a.x + Math.cos(r) * length,
-                        y: item.a.y + Math.sin(r) * length,
-                      }),
-                    );
+                    moveCorner(item, "b", {
+                      x: item.a.x + Math.cos(r) * length,
+                      y: item.a.y + Math.sin(r) * length,
+                    });
                   }}
                 />
                 <div className="field-grid">
@@ -495,12 +601,10 @@ export default function Properties({
                     onChange={(v) => {
                       const l = dist(item.a, item.b),
                         r = (v * Math.PI) / 180;
-                      commit(
-                        setCorner(plan, item.id, "b", {
-                          x: item.a.x + Math.cos(r) * l,
-                          y: item.a.y + Math.sin(r) * l,
-                        }),
-                      );
+                      moveCorner(item, "b", {
+                        x: item.a.x + Math.cos(r) * l,
+                        y: item.a.y + Math.sin(r) * l,
+                      });
                     }}
                   />
                 </div>
@@ -516,9 +620,7 @@ export default function Properties({
                         unit={units}
                         value={item[end].x}
                         onChange={(x) =>
-                          commit(
-                            setCorner(plan, item.id, end, { ...item[end], x }),
-                          )
+                          moveCorner(item, end, { ...item[end], x })
                         }
                       />
                       <NumberField
@@ -526,9 +628,7 @@ export default function Properties({
                         unit={units}
                         value={item[end].y}
                         onChange={(y) =>
-                          commit(
-                            setCorner(plan, item.id, end, { ...item[end], y }),
-                          )
+                          moveCorner(item, end, { ...item[end], y })
                         }
                       />
                     </div>
@@ -539,6 +639,14 @@ export default function Properties({
                   every connected wall.
                 </p>
               </div>
+              <WallJunctionControls
+                key={item.id}
+                plan={plan}
+                wall={item}
+                protectedItem={(item) => isEditProtected(plan, item)}
+                onCommit={(p) => commit(p, undefined, true)}
+                onError={onError}
+              />
             </>
           )}
           {(item.type === "door" || item.type === "window") && (
@@ -683,11 +791,12 @@ export default function Properties({
               )}
             </>
           )}
-          {item.type === "dimension" && (
+          {item.type === "dimension" && endpoints && (
             <div className="panel-section">
               <h3>Dimension</h3>
               <p className="measure-value">
-                {dist(item.a, item.b).toFixed(1)} <small>{units}</small>
+                {dist(endpoints.a, endpoints.b).toFixed(1)}{" "}
+                <small>{units}</small>
               </p>
               <NumberField
                 label="Annotation offset"
@@ -695,22 +804,65 @@ export default function Properties({
                 value={item.offset}
                 onChange={(v) => patch({ offset: v })}
               />
-              {(["a", "b"] as const).map((end, n) => (
-                <div className="field-grid" key={end}>
-                  <NumberField
-                    label={`${n ? "End" : "Start"} X`}
-                    unit={units}
-                    value={item[end].x}
-                    onChange={(v) => patch({ [end]: { ...item[end], x: v } })}
-                  />
-                  <NumberField
-                    label={`${n ? "End" : "Start"} Y`}
-                    unit={units}
-                    value={item[end].y}
-                    onChange={(v) => patch({ [end]: { ...item[end], y: v } })}
-                  />
-                </div>
-              ))}
+              {(["a", "b"] as const).map((end, n) => {
+                const anchor = item.anchors?.[end];
+                const label = n ? "End" : "Start";
+                const target =
+                  anchor && plan.items.find((i) => i.id === anchor.itemId);
+                if (anchor && target) {
+                  const point =
+                    anchor.point === "a"
+                      ? "start"
+                      : anchor.point === "b"
+                        ? "end"
+                        : "center";
+                  return (
+                    <div key={end} className="field">
+                      <span>
+                        {label} attached to {target.name || target.id} {point}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const updated = mapDimensionAnchors(
+                            item,
+                            plan.items,
+                            (candidate) =>
+                              candidate === anchor ? undefined : candidate,
+                          );
+                          commit({
+                            ...plan,
+                            items: plan.items.map((i) =>
+                              i.id === item.id ? updated : i,
+                            ),
+                          });
+                        }}
+                      >
+                        Detach {label.toLowerCase()}
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="field-grid" key={end}>
+                    <NumberField
+                      label={`${label} X`}
+                      unit={units}
+                      value={endpoints[end].x}
+                      onChange={(v) =>
+                        patch({ [end]: { ...endpoints[end], x: v } })
+                      }
+                    />
+                    <NumberField
+                      label={`${label} Y`}
+                      unit={units}
+                      value={endpoints[end].y}
+                      onChange={(v) =>
+                        patch({ [end]: { ...endpoints[end], y: v } })
+                      }
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </>

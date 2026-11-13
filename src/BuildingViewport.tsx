@@ -17,6 +17,7 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { exteriorWallLengthSummary } from "./exterior";
 import { buildScene } from "./buildingScene";
 import type { Plan } from "./model";
 import "./buildingViewport.css";
@@ -303,6 +304,10 @@ export default function BuildingViewport({
     event.stopPropagation();
   }
 
+  const exteriorLengths = useMemo(
+    () => exteriorWallLengthSummary(plan),
+    [plan],
+  );
   const hasRoof = building.roof.children.length > 0;
   return (
     <section className="building-viewport" aria-label="Building 3D view">
@@ -314,6 +319,9 @@ export default function BuildingViewport({
           onKeyDown={keyboard}
         />
       </div>
+      {!building.empty && !error && exteriorLengths && (
+        <p className="building-viewport-dimensions">{exteriorLengths}</p>
+      )}
       <span className="building-viewport-help" id="building-viewport-controls">
         Drag to orbit · Right-drag to pan · Scroll to zoom
         <span className="building-viewport-keyboard">

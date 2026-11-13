@@ -1,3 +1,4 @@
+import { traceForExport } from "./reference";
 import { type Camera, screenToWorld, pinchCamera } from "./coordinates";
 import {
   useRef,
@@ -14,6 +15,7 @@ import {
   type Wall,
   type Box,
   type DoorStyle,
+  type DimensionAnchor,
   uid,
   dist,
   angle,
@@ -27,10 +29,26 @@ import {
   snapPoint,
   rotate,
 } from "./model";
-import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
+import { planArtworkBounds } from "./preview";
+import { GarageSectionMark } from "./garageViews";
+import {
+  DrawItem,
+  ExteriorDimensions,
+  RenovationLegend,
+  RoomLabels,
+  TraceReferenceArtwork,
+} from "./Drawing";
+import { findDimensionAnchor } from "./dimensions";
 import type { ExteriorContour } from "./exterior";
 import { furniture, type FurnitureKind } from "./furniture";
 import type { Room } from "./rooms";
+import {
+  activeLayer,
+  isEditProtected,
+  isItemLocked,
+  legendLayout,
+  placeOnActiveLayer,
+} from "./layers";
 export type Tool =
   | "select"
   | "box"
@@ -56,7 +74,8 @@ const toolHelp: Record<Tool, string> = {
   window: "Click a wall to attach a window",
   stairs: "Click to place stairs · edit size and steps in Properties",
   furniture: "Choose a symbol, then click to place it",
-  dimension: "Choose two points to add a dimension",
+  dimension:
+    "Choose endpoints or object centers to attach · Alt or turn off Snap for free points",
   measure: "Choose two points to measure their distance",
   calibrate: "Choose two points with a known real-world distance",
   text: "Click to add a label · edit its text in Properties",
@@ -73,6 +92,7 @@ type Gesture = {
 };
 export default function Canvas({
   plan,
+  shown = plan,
   ghost,
   rooms,
   exterior,
@@ -95,6 +115,7 @@ export default function Canvas({
   cancelToken,
 }: {
   plan: Plan;
+  shown?: Plan;
   ghost?: Plan;
   rooms: Room[];
   exterior?: ExteriorContour;
@@ -119,6 +140,9 @@ export default function Canvas({
   const wrapper = useRef<HTMLDivElement>(null),
     [size, setSize] = useState({ w: 1000, h: 700 }),
     [anchor, setAnchor] = useState<Point | null>(null),
+    [dimensionAnchor, setDimensionAnchor] = useState<
+      DimensionAnchor | undefined
+    >(),
     [cursor, setCursor] = useState<Point | null>(null),
     [snapKind, setSnapKind] = useState(""),
     [marquee, setMarquee] = useState<Box | null>(null);
@@ -138,6 +162,7 @@ export default function Canvas({
   }, []);
   useEffect(() => {
     setAnchor(null);
+    setDimensionAnchor(undefined);
     setMarquee(null);
     setSnapKind("");
     if (gesture.current) setPreview(null);
@@ -181,7 +206,7 @@ export default function Canvas({
   const snapped = (p: Point, exclude: string[] = []) => {
     const r = snapPoint(
       p,
-      plan,
+      shown,
       snap,
       8 / camera.k,
       exclude,
@@ -190,6 +215,21 @@ export default function Canvas({
     setSnapKind(r.kind);
     return r.point;
   };
+  function measurementPoint(point: Point, free: boolean) {
+    const result =
+      tool === "dimension" && snap && !free
+        ? findDimensionAnchor(point, shown.items, 8 / camera.k)
+        : undefined;
+    if (result) {
+      setSnapKind(`Attach to ${result.name}`);
+      return result;
+    }
+    if (tool === "dimension" && free) {
+      setSnapKind("");
+      return { point, anchor: undefined };
+    }
+    return { point: snapped(point), anchor: undefined };
+  }
   function targetId(e: ReactPointerEvent) {
     let el = (e.target as Element).closest("[data-item-id]");
     while (el?.parentElement?.closest("[data-item-id]"))
@@ -242,9 +282,9 @@ export default function Canvas({
       cam: camera,
     };
     if (tool === "pan" || e.button === 1) g = { ...base, kind: "pan" };
-    else if (handle && selection.length === 1) {
+    else if (tool === "select" && handle && selection.length === 1) {
       const selected = plan.items.find((i) => i.id === selection[0]);
-      if (selected?.locked) return;
+      if (selected && isEditProtected(plan, selected)) return;
       g = {
         ...base,
         kind:
@@ -272,11 +312,11 @@ export default function Canvas({
             ? selection
             : [hit];
         setSelection(ids);
-        if (object && !object.locked)
+        if (object && !isEditProtected(plan, object))
           g = {
             ...base,
-            ids: ids.filter(
-              (id) => !plan.items.find((i) => i.id === id)?.locked,
+            ids: ids.filter((id) =>
+              shown.items.some((i) => i.id === id && !isEditProtected(plan, i)),
             ),
             kind: "move",
           };
@@ -306,7 +346,7 @@ export default function Canvas({
         anchor ||
         ["wall", "room", "dimension", "measure", "calibrate"].includes(tool)
       )
-        setCursor(snapped(p));
+        setCursor(measurementPoint(p, e.altKey).point);
       onStatus(`${p.x.toFixed(1)}, ${p.y.toFixed(1)}`);
       return;
     }
@@ -330,7 +370,11 @@ export default function Canvas({
       });
       return;
     }
-    setPreview(gesturePlan(g, p));
+    try {
+      setPreview(gesturePlan(g, p));
+    } catch {
+      setPreview(null);
+    }
   }
   function gesturePlan(g: Gesture, p: Point): Plan {
     const item = g.base.items.find((i) => i.id === g.ids[0]);
@@ -339,13 +383,17 @@ export default function Canvas({
       const b = bounds(item, g.base.items),
         raw = { x: b.x + p.x - g.start.x, y: b.y + p.y - g.start.y },
         q = snapped(raw, g.ids);
-      return translate(g.base, g.ids, { x: q.x - b.x, y: q.y - b.y });
+      return translate(g.base, g.ids, { x: q.x - b.x, y: q.y - b.y }, (item) =>
+        isEditProtected(g.base, item),
+      );
     } else if (g.kind === "endpoint" && item.type === "wall") {
       return setCorner(
         g.base,
         item.id,
         g.handle as "a" | "b",
         snapped(p, g.ids),
+        true,
+        (item) => isEditProtected(g.base, item),
       );
     } else if (isRect(item)) {
       const i = { ...item },
@@ -403,7 +451,7 @@ export default function Canvas({
           h: Math.abs(p.y - g.start.y),
         };
         if (dist(s, g.screen) > 3) {
-          const selected = plan.items
+          const selected = shown.items
             .filter((i) => {
               const b = bounds(i, plan.items);
               return (
@@ -420,20 +468,26 @@ export default function Canvas({
         return;
       }
       if (g.kind === "room") {
+        if (!canPlace()) {
+          setMarquee(null);
+          return;
+        }
         const q = snapped(p);
         if (Math.abs(q.x - g.start.x) > 1 && Math.abs(q.y - g.start.y) > 1) {
           const a = g.start,
             b = { x: q.x, y: a.y },
             c = q,
             d = { x: a.x, y: q.y };
-          const items = [a, b, c, d].map((pt, n) => ({
-            id: uid(),
-            type: "wall" as const,
-            name: `Wall ${plan.items.filter((i) => i.type === "wall").length + n + 1}`,
-            a: pt,
-            b: [b, c, d, a][n],
-            thickness: wallThickness,
-          }));
+          const items = [a, b, c, d].map((pt, n) =>
+            placeOnActiveLayer(plan, {
+              id: uid(),
+              type: "wall" as const,
+              name: `Wall ${plan.items.filter((i) => i.type === "wall").length + n + 1}`,
+              a: pt,
+              b: [b, c, d, a][n],
+              thickness: wallThickness,
+            }),
+          );
           commit({ ...plan, items: [...plan.items, ...items] });
           setSelection(items.map((i) => i.id));
           setTool("select");
@@ -441,14 +495,31 @@ export default function Canvas({
         setMarquee(null);
         return;
       }
-      if (g.moved || dist(s, g.screen) > 3) commit(gesturePlan(g, p), g.base);
+      if (g.moved || dist(s, g.screen) > 3) {
+        try {
+          commit(gesturePlan(g, p), g.base);
+        } catch (error) {
+          setPreview(null);
+          onStatus((error as Error).message);
+        }
+      }
       return;
     }
     if (tool === "pan" || tool === "select" || tool === "box") return;
-    const q = snapped(p);
+    if (
+      tool !== "measure" &&
+      tool !== "calibrate" &&
+      tool !== "door" &&
+      tool !== "window" &&
+      !canPlace()
+    )
+      return;
+    const chosen = measurementPoint(p, e.altKey);
+    const q = chosen.point;
     if (["wall", "dimension", "measure", "calibrate"].includes(tool)) {
       if (!anchor) {
         setAnchor(q);
+        if (tool === "dimension") setDimensionAnchor(chosen.anchor);
         return;
       }
       if (dist(anchor, q) < 0.001) return;
@@ -461,7 +532,10 @@ export default function Canvas({
           b: q,
           thickness: wallThickness,
         };
-        commit({ ...plan, items: [...plan.items, i] });
+        commit({
+          ...plan,
+          items: [...plan.items, placeOnActiveLayer(plan, i)],
+        });
         setSelection([i.id]);
         setAnchor(q);
       } else {
@@ -473,8 +547,19 @@ export default function Canvas({
             a: anchor,
             b: q,
             offset: -30,
+            ...(dimensionAnchor || chosen.anchor
+              ? {
+                  anchors: {
+                    ...(dimensionAnchor ? { a: dimensionAnchor } : {}),
+                    ...(chosen.anchor ? { b: chosen.anchor } : {}),
+                  },
+                }
+              : {}),
           };
-          commit({ ...plan, items: [...plan.items, i] });
+          commit({
+            ...plan,
+            items: [...plan.items, placeOnActiveLayer(plan, i)],
+          });
           setSelection([i.id]);
         } else onMeasure(anchor, q, tool === "calibrate");
         setAnchor(null);
@@ -483,8 +568,8 @@ export default function Canvas({
       return;
     }
     if (tool === "door" || tool === "window") {
-      const wall = plan.items
-        .filter((i) => i.type === "wall" && !i.locked)
+      const wall = shown.items
+        .filter((i) => i.type === "wall" && !isEditProtected(plan, i))
         .map((w) => ({ w: w as Wall, ...project(p, w as Wall) }))
         .sort((a, b) => a.distance - b.distance)[0];
       if (
@@ -542,11 +627,29 @@ export default function Canvas({
           ? { steps: 12 }
           : { text: "Room label", fontSize: 18 }),
     };
-    commit({ ...plan, items: [...plan.items, i] });
+    commit({ ...plan, items: [...plan.items, placeOnActiveLayer(plan, i)] });
     setSelection([i.id]);
     setTool("select");
   }
-  const selected = plan.items.filter((i) => selection.includes(i.id)),
+  function canPlace() {
+    const layer = activeLayer(plan);
+    if (layer.visible && !layer.locked) return true;
+    onStatus("Choose a visible, unlocked layer to place objects.");
+    return false;
+  }
+  const legend =
+    shown.renovationView ||
+    shown.items.some((item) => item.type === "wall" && item.renovationStatus)
+      ? legendLayout(
+          shown,
+          planArtworkBounds(
+            { ...shown, traceReference: traceForExport(shown.traceReference) },
+            exterior,
+            false,
+          ),
+        )
+      : undefined;
+  const selected = shown.items.filter((i) => selection.includes(i.id)),
     box = selected.length
       ? unionBoxes(selected.map((i) => bounds(i, plan.items)))
       : null,
@@ -627,6 +730,7 @@ export default function Canvas({
           </pattern>
         </defs>
         <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.k})`}>
+          <TraceReferenceArtwork reference={plan.traceReference} preview />
           <rect
             {...{
               x: visible.x,
@@ -650,14 +754,16 @@ export default function Canvas({
             </g>
           )}
           <g data-drawing="true">
-            {plan.items.map((i) => (
-              <DrawItem key={i.id} item={i} plan={plan} />
+            {shown.items.map((i) => (
+              <DrawItem key={i.id} item={i} plan={shown} />
             ))}
             <RoomLabels
               rooms={rooms}
               calibrated={plan.calibration.calibrated}
             />
             <ExteriorDimensions contour={exterior} />
+            <GarageSectionMark plan={shown} />
+            {legend && <RenovationLegend plan={shown} {...legend} />}
           </g>
           <g className="selection-overlay">
             {box && (
@@ -670,13 +776,15 @@ export default function Canvas({
                 stroke="#27846b"
                 strokeWidth={1.3 / camera.k}
                 strokeDasharray={
-                  single?.locked ? `${5 / camera.k} ${4 / camera.k}` : undefined
+                  single && isItemLocked(plan, single)
+                    ? `${5 / camera.k} ${4 / camera.k}`
+                    : undefined
                 }
                 pointerEvents="none"
               />
             )}
             {single &&
-              !single.locked &&
+              !isEditProtected(plan, single) &&
               (single.type === "wall" ? (
                 <>
                   {handle(single.a, "a")}
