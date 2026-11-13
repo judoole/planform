@@ -6,4 +6,4 @@ See the fully functional page at [https://judoole.github.io/planform/](https://j
 
 Documentation: [Getting started](docs/getting-started.md) · [Drawing and editing](docs/drawing-and-editing.md) · [Save, share, and compare](docs/projects.md) · [Agent workflow](docs/agent-workflow.md) · [File format](docs/file-format.md) · [Development](docs/development.md).
 
-Open **Export** to download a floor-plan PDF. The [drawing export guide](docs/garage-permit.md) covers fit-to-page sketches, scaled sheets and additional drawings.
+Open **Export** to download a PDF of the available drawing views. The [drawing export guide](docs/garage-permit.md) covers fit-to-page sketches, scaled sheets and additional drawings.

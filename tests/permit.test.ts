@@ -1,3 +1,4 @@
+import { drawingPdfOptions, drawingPdfPages } from "../src/drawingPdfPages";
 import { describe, expect, it } from "vitest";
 import { splitWall } from "../src/junctions";
 import { garageViews, garageViewSheet } from "../src/garageViews";
@@ -265,6 +266,39 @@ describe("permit deliverables share the edited garage", () => {
       "Calibrate the site map",
     );
   });
+  it("includes ready pages and keeps site scale independent of drawing scale", () => {
+    const garage = fittedGarage();
+    const ready = drawingPdfPages(garage);
+    expect(ready.canRender3D).toBe(true);
+    expect(ready.pages.map((page) => page.id)).toEqual([
+      "plan",
+      "section",
+      "front",
+      "right",
+      "rear",
+      "left",
+      "site",
+      "area",
+    ]);
+    const options = { ...defaultSheetOptions, name: "Example" };
+    expect(drawingPdfOptions(ready.pages[0], options, true).scale).toBe(100);
+    expect(
+      drawingPdfOptions(
+        ready.pages.find((page) => page.id === "site")!,
+        options,
+        true,
+      ).scale,
+    ).toBe(500);
+    const uncalibrated = {
+      ...garage,
+      calibration: { ...garage.calibration, calibrated: false },
+    };
+    expect(drawingPdfPages(uncalibrated)).toMatchObject({
+      canRender3D: false,
+      pages: [{ id: "plan" }],
+    });
+  });
+
   it("updates the additional drawing sheets from the edited building", () => {
     const plan = fittedGarage();
     expect(garageViews.map((view) => garageViewSheet(plan, view))).toHaveLength(

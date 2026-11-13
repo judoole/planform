@@ -1,6 +1,8 @@
 # Export your drawings
 
-Open **Export → Download PDF** for a floor-plan sketch you can share or attach to an application. **Fit to page** works even before you calibrate the drawing and marks the PDF as a sketch. If you need a specific scale, calibrate a known distance, choose a scale such as **1:100**, and print at 100% actual size. SVG and PNG are also available under **Format**.
+Open **Export → Download PDF** to share or attach your drawing. The PDF includes the floor plan, a 3D illustration when the browser can render it, and any ready sections, elevations, site plan and building area estimate. Each view is on its own page. Use **Pages included** to choose what goes in the file and **Preview page** to look through the selection.
+
+**Fit to page** works even before you calibrate the floor plan and labels the PDF page as a sketch. For a drawing at a specific scale, calibrate a known distance, choose a scale such as **1:100**, and print at 100% actual size. The 3D illustration fits the page, and the site plan keeps its own 1:500 scale. SVG and PNG export the floor plan.
 
 Select **More drawings and measurements** for optional views of a simple rectangular building.
 

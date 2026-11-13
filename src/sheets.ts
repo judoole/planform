@@ -3,8 +3,9 @@ import type { Box } from "./model";
 export type SheetDrawing = {
   title: string;
   bounds: Box;
-  /** Architectural SVG children. The coordinate unit is one centimeter. */
+  /** SVG artwork. Fixed-scale sheets use centimeters. */
   markup: string;
+  fitLabel?: string;
   legend?: string[];
   legendSwatches?: {
     index: number;
@@ -72,7 +73,7 @@ export function layoutSheet(drawing: SheetDrawing, options: SheetOptions) {
     barMeters,
     barWidth: fit ? 0 : barMeters * 100 * mmPerCm,
     scaleLabel: fit
-      ? `Sketch - Not to scale   ${options.paper}`
+      ? `${drawing.fitLabel ?? "Sketch - Not to scale"}   ${options.paper}`
       : `1:${options.scale}   ${options.paper}   Print at 100% actual size`,
   };
 }
@@ -96,19 +97,47 @@ function sheetArtwork(drawing: SheetDrawing, width: number, height: number) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${w} ${h}">${drawing.markup}</svg>`;
 }
 
-export async function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
-  const page = layoutSheet(drawing, options);
+type SheetPage = { drawing: SheetDrawing; options: SheetOptions };
+
+export function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
+  return sheetsPdf(
+    [{ drawing, options }],
+    `${options.name} - ${drawing.title}`,
+  );
+}
+
+export async function sheetsPdf(pages: SheetPage[], title: string) {
+  if (!pages.length) throw Error("Choose at least one page.");
+  const layouts = pages.map(({ drawing, options }) =>
+    layoutSheet(drawing, options),
+  );
   const [{ jsPDF }] = await Promise.all([
     import("jspdf"),
     import("svg2pdf.js"),
   ]);
+  const first = layouts[0];
   const pdf = new jsPDF({
     unit: "mm",
-    format: [page.width, page.height],
-    orientation: options.orientation,
+    format: [first.width, first.height],
+    orientation: pages[0].options.orientation,
     precision: 8,
     compress: true,
   });
+  pdf.setProperties({ title });
+  for (const [index, { drawing, options }] of pages.entries()) {
+    const page = layouts[index];
+    if (index) pdf.addPage([page.width, page.height], options.orientation);
+    await drawPdfSheet(pdf, drawing, options, page);
+  }
+  return pdf.output("blob");
+}
+
+async function drawPdfSheet(
+  pdf: import("jspdf").jsPDF,
+  drawing: SheetDrawing,
+  options: SheetOptions,
+  page: ReturnType<typeof layoutSheet>,
+) {
   const svg = new DOMParser().parseFromString(
     sheetArtwork(drawing, page.w, page.h),
     "image/svg+xml",
@@ -119,7 +148,6 @@ export async function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
     label.setAttribute("stroke", "none");
   }
   await pdf.svg(svg, { x: page.x, y: page.y, width: page.w, height: page.h });
-  pdf.setProperties({ title: `${options.name} - ${drawing.title}` });
   pdf.setDrawColor(65);
   pdf.setLineWidth(0.25);
   pdf.line(page.margin, page.footer, page.width - page.margin, page.footer);
@@ -160,7 +188,6 @@ export async function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
       maxWidth: page.width - page.margin * 2 - (swatch ? 7 : 0),
     });
   });
-  return pdf.output("blob");
 }
 
 export function sheetPreview(drawing: SheetDrawing, options: SheetOptions) {

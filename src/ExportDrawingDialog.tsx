@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { download, exportPng } from "./exports";
 import type { Plan } from "./model";
-import { floorPlanSheet } from "./planSheet";
 import { renderPlanSvg } from "./preview";
-import SheetExport from "./SheetExport";
+import DrawingPdfExport from "./DrawingPdfExport";
 
 type Format = "pdf" | "svg" | "png";
 
@@ -72,9 +71,7 @@ export default function ExportDrawingDialog({
         <X size={16} />
       </button>
       <h2 id="drawing-export-title">Export drawing</h2>
-      <p>
-        Download a PDF of your floor plan to share or attach to an application.
-      </p>
+      <p>Download your available drawing views together in one PDF.</p>
       <label className="field">
         <span>Format</span>
         <select
@@ -90,12 +87,7 @@ export default function ExportDrawingDialog({
         </select>
       </label>
       {format === "pdf" ? (
-        <SheetExport
-          build={({ scale }) => floorPlanSheet(plan, { fit: scale === "fit" })}
-          name={name}
-          initialScale="fit"
-          allowFit
-        />
+        <DrawingPdfExport plan={plan} name={name} />
       ) : (
         <>
           {svg && (

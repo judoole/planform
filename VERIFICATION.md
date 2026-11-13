@@ -1,5 +1,9 @@
 # Verification - 13 November 2026
 
+## Combined drawing PDF
+
+Chrome downloaded one PDF with the floor plan, 3D illustration, section, four elevations, site plan and building areas. The same dialog produced eight pages after deselecting 3D and one page from an uncalibrated sketch. Rendered all nine pages and independently measured the 60 × 70 mm floor plan at 1:100 and the 12 × 14 mm site plan at 1:500. The 3D page contains a still image with its own scale label.
+
 ## Sketch-first export
 
 Chrome verified that an uncalibrated house exports a fit-to-page PDF directly from **Export**, with the sketch’s scale status on the page. Verified that selecting a fixed scale still requires calibration. The 6 × 7 m example still measures 60 × 70 mm at 1:100 and 12 × 14 mm at 1:500. The site sheet can be saved without a property reference. Chrome also checked the optional floor elevation and the Layers explanation. All 128 tests, the production build and formatting checks passed.

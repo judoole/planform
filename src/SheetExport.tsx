@@ -52,44 +52,80 @@ export default function SheetExport({
 
   return (
     <div className="sheet-export">
-      <div className="sheet-fields">
+      <SheetFields
+        options={options}
+        onChange={setOptions}
+        allowFit={allowFit}
+      />
+      {error && <p role="alert">{error}</p>}
+      {preview && (
+        <img
+          className="sheet-preview"
+          alt="Scaled sheet preview"
+          src={`data:image/svg+xml,${encodeURIComponent(preview)}`}
+        />
+      )}
+      {exportError && <p role="alert">{exportError}</p>}
+      <button disabled={!preview || exporting} onClick={() => void save()}>
+        {exporting ? "Preparing PDF…" : "Download PDF"}
+      </button>
+    </div>
+  );
+}
+
+export function SheetFields({
+  options,
+  onChange,
+  allowFit,
+  scaleLabel = "Scale",
+  showScale = true,
+}: {
+  options: SheetOptions;
+  onChange: (options: SheetOptions) => void;
+  allowFit?: boolean;
+  scaleLabel?: string;
+  showScale?: boolean;
+}) {
+  return (
+    <div className="sheet-fields">
+      <label>
+        Paper
+        <select
+          value={options.paper}
+          onChange={(e) =>
+            onChange({
+              ...options,
+              paper: e.target.value as SheetOptions["paper"],
+            })
+          }
+        >
+          <option>A4</option>
+          <option>A3</option>
+        </select>
+      </label>
+      <label>
+        Orientation
+        <select
+          value={options.orientation}
+          onChange={(e) =>
+            onChange({
+              ...options,
+              orientation: e.target.value as SheetOptions["orientation"],
+            })
+          }
+        >
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
+      </label>
+      {showScale && (
         <label>
-          Paper
+          {scaleLabel}
           <select
-            value={options.paper}
-            onChange={(e) =>
-              setOptions({
-                ...options,
-                paper: e.target.value as SheetOptions["paper"],
-              })
-            }
-          >
-            <option>A4</option>
-            <option>A3</option>
-          </select>
-        </label>
-        <label>
-          Orientation
-          <select
-            value={options.orientation}
-            onChange={(e) =>
-              setOptions({
-                ...options,
-                orientation: e.target.value as SheetOptions["orientation"],
-              })
-            }
-          >
-            <option value="portrait">Portrait</option>
-            <option value="landscape">Landscape</option>
-          </select>
-        </label>
-        <label>
-          Scale
-          <select
-            aria-label="Scale"
+            aria-label={scaleLabel}
             value={options.scale}
             onChange={(e) =>
-              setOptions({
+              onChange({
                 ...options,
                 scale:
                   e.target.value === "fit"
@@ -106,27 +142,15 @@ export default function SheetExport({
             ))}
           </select>
         </label>
-        <label>
-          Sheet name
-          <input
-            maxLength={100}
-            value={options.name}
-            onChange={(e) => setOptions({ ...options, name: e.target.value })}
-          />
-        </label>
-      </div>
-      {error && <p role="alert">{error}</p>}
-      {preview && (
-        <img
-          className="sheet-preview"
-          alt="Scaled sheet preview"
-          src={`data:image/svg+xml,${encodeURIComponent(preview)}`}
-        />
       )}
-      {exportError && <p role="alert">{exportError}</p>}
-      <button disabled={!preview || exporting} onClick={() => void save()}>
-        {exporting ? "Preparing PDF…" : "Download PDF"}
-      </button>
+      <label>
+        Sheet name
+        <input
+          maxLength={100}
+          value={options.name}
+          onChange={(e) => onChange({ ...options, name: e.target.value })}
+        />
+      </label>
     </div>
   );
 }
