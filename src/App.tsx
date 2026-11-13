@@ -213,6 +213,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     ),
     [viewMode, setViewMode] = useState<"plan" | "3d">("plan"),
     [opened3D, setOpened3D] = useState(false),
+    [buildingViewReset, setBuildingViewReset] = useState(0),
     [query, setQuery] = useState(""),
     [overlap, setOverlap] = useState<string[]>([]),
     [overlapOpen, setOverlapOpen] = useState(false),
@@ -605,6 +606,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     }
   }
   function openDrawing(next: Plan) {
+    setBuildingViewReset((n) => n + 1);
     clearDrawingContext();
     commit(next, undefined, true);
     fit(next);
@@ -613,6 +615,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     );
   }
   function replaceProject(next: Project) {
+    setBuildingViewReset((n) => n + 1);
     saveHandle.current = null;
     clearDrawingContext();
     setOverlay(false);
@@ -625,6 +628,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   function newProject() {
     saveHandle.current = null;
     if (project.version === 2) {
+      setBuildingViewReset((n) => n + 1);
       clearDrawingContext();
       commit(emptyPlan());
     } else {
@@ -1265,6 +1269,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 }
               >
                 <BuildingViewport
+                  key={`${buildingViewReset}:${version}`}
                   plan={plan}
                   selection={selection}
                   onSelect={(id) => {
