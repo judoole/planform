@@ -1,3 +1,4 @@
+import { useLanguage, useTranslation } from "./i18n";
 import { useState } from "react";
 import { download } from "./exports";
 import {
@@ -19,17 +20,20 @@ export default function SheetExport({
   initialScale?: SheetOptions["scale"];
   allowFit?: boolean;
 }) {
+  const t = useTranslation();
   const [options, setOptions] = useState<SheetOptions>({
     ...defaultSheetOptions,
     scale: initialScale,
     name,
   });
+  const language = useLanguage();
+  const localizedOptions = { ...options, language };
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   let preview: string | undefined;
   let error: string | undefined;
   try {
-    preview = sheetPreview(build(options), options);
+    preview = sheetPreview(build(localizedOptions), localizedOptions);
   } catch (e) {
     error = (e as Error).message;
   }
@@ -38,9 +42,9 @@ export default function SheetExport({
     setExporting(true);
     setExportError("");
     try {
-      const drawing = build(options);
+      const drawing = build(localizedOptions);
       download(
-        await sheetPdf(drawing, options),
+        await sheetPdf(drawing, localizedOptions),
         `${options.name} - ${drawing.title}.pdf`,
       );
     } catch (e) {
@@ -57,17 +61,17 @@ export default function SheetExport({
         onChange={setOptions}
         allowFit={allowFit}
       />
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert">{t(error)}</p>}
       {preview && (
         <img
           className="sheet-preview"
-          alt="Scaled sheet preview"
+          alt={t("Scaled sheet preview")}
           src={`data:image/svg+xml,${encodeURIComponent(preview)}`}
         />
       )}
-      {exportError && <p role="alert">{exportError}</p>}
+      {exportError && <p role="alert">{t(exportError)}</p>}
       <button disabled={!preview || exporting} onClick={() => void save()}>
-        {exporting ? "Preparing PDF…" : "Download PDF"}
+        {t(exporting ? "Preparing PDF…" : "Download PDF")}
       </button>
     </div>
   );
@@ -77,7 +81,7 @@ export function SheetFields({
   options,
   onChange,
   allowFit,
-  scaleLabel = "Scale",
+  scaleLabel,
   showScale = true,
 }: {
   options: SheetOptions;
@@ -86,10 +90,11 @@ export function SheetFields({
   scaleLabel?: string;
   showScale?: boolean;
 }) {
+  const t = useTranslation();
   return (
     <div className="sheet-fields">
       <label>
-        Paper
+        {t("Paper")}
         <select
           value={options.paper}
           onChange={(e) =>
@@ -104,7 +109,7 @@ export function SheetFields({
         </select>
       </label>
       <label>
-        Orientation
+        {t("Orientation")}
         <select
           value={options.orientation}
           onChange={(e) =>
@@ -114,15 +119,15 @@ export function SheetFields({
             })
           }
         >
-          <option value="portrait">Portrait</option>
-          <option value="landscape">Landscape</option>
+          <option value="portrait">{t("Portrait")}</option>
+          <option value="landscape">{t("Landscape")}</option>
         </select>
       </label>
       {showScale && (
         <label>
-          {scaleLabel}
+          {scaleLabel ?? t("Scale")}
           <select
-            aria-label={scaleLabel}
+            aria-label={scaleLabel ?? t("Scale")}
             value={options.scale}
             onChange={(e) =>
               onChange({
@@ -134,7 +139,7 @@ export function SheetFields({
               })
             }
           >
-            {allowFit && <option value="fit">Fit to page</option>}
+            {allowFit && <option value="fit">{t("Fit to page")}</option>}
             {[50, 100, 200, 500].map((scale) => (
               <option value={scale} key={scale}>
                 1:{scale}
@@ -144,7 +149,7 @@ export function SheetFields({
         </label>
       )}
       <label>
-        Sheet name
+        {t("Sheet name")}
         <input
           maxLength={100}
           value={options.name}

@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { download } from "./exports";
 import { garageAreaReport, garageAreas, type GarageDetails } from "./garage";
 import { pointsBox, type Plan, type Point } from "./model";
@@ -19,11 +20,12 @@ export default function GarageArea({
   plan: Plan;
   onChange: (details: GarageDetails) => void;
 }) {
+  const t = useTranslation();
   let areas: ReturnType<typeof garageAreas>;
   try {
     areas = garageAreas(plan);
   } catch (e) {
-    return <p role="alert">{(e as Error).message}</p>;
+    return <p role="alert">{t((e as Error).message)}</p>;
   }
   const { bra, bya, footprint } = areas;
   const b = pointsBox(footprint.corners);
@@ -32,7 +34,7 @@ export default function GarageArea({
       <div className="sheet-fields">
         {confirmations.map(([field, label]) => (
           <label key={field}>
-            {label}
+            {t(label)}
             <select
               value={String(plan.garage?.area?.[field] ?? "")}
               onChange={(e) =>
@@ -48,9 +50,9 @@ export default function GarageArea({
                 })
               }
             >
-              <option value="">Unconfirmed</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
+              <option value="">{t("Unconfirmed")}</option>
+              <option value="true">{t("Yes")}</option>
+              <option value="false">{t("No")}</option>
             </select>
           </label>
         ))}
@@ -58,7 +60,7 @@ export default function GarageArea({
       <svg
         className="garage-area-diagram"
         role="img"
-        aria-label="BRA inside wall faces and BYA outside wall faces"
+        aria-label={t("BRA inside wall faces and BYA outside wall faces")}
         viewBox={`${b.x - 18} ${b.y - 18} ${b.w + 36} ${b.h + 36}`}
       >
         <polygon
@@ -77,31 +79,32 @@ export default function GarageArea({
       </svg>
       <p>
         <strong>BRA {bra.value.toFixed(2)} m²</strong>
-        {bra.notes.length ? " · Provisional" : ""} · Inside wall faces, dashed
-        blue.
+        {bra.notes.length ? t(" · Provisional") : ""} ·{" "}
+        {t("Inside wall faces, dashed blue.")}
       </p>
       {bra.notes.length > 0 && (
         <ul>
           {bra.notes.map((note) => (
-            <li key={note}>{note}</li>
+            <li key={t(note)}>{t(note)}</li>
           ))}
         </ul>
       )}
       <p>
         <strong>BYA {bya.value.toFixed(2)} m²</strong>
-        {bya.notes.length ? " · Provisional" : ""} · Outside wall faces, solid
-        green.
+        {bya.notes.length ? t(" · Provisional") : ""} ·{" "}
+        {t("Outside wall faces, solid green.")}
       </p>
       {bya.notes.length > 0 && (
         <ul>
           {bya.notes.map((note) => (
-            <li key={note}>{note}</li>
+            <li key={t(note)}>{t(note)}</li>
           ))}
         </ul>
       )}
       <p>
-        Building areas only. Plot utilization accounts separately for other
-        structures and outdoor parking.
+        {t(
+          "Building areas only. Plot utilization accounts separately for other structures and outdoor parking.",
+        )}
       </p>
       <button
         onClick={() =>
@@ -113,7 +116,7 @@ export default function GarageArea({
           )
         }
       >
-        Download area calculation
+        {t("Download area calculation")}
       </button>
     </>
   );

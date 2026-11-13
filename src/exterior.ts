@@ -1,3 +1,4 @@
+import { fixed, translate, type Language } from "./messages";
 import { legendLayout } from "./layers";
 import {
   add,
@@ -378,8 +379,11 @@ export const dimensionFontSize = 15;
 export const dimensionLabelStroke = 5;
 export const exteriorDimensionSegments = (corners: Point[]): [Point, Point][] =>
   corners.map((point, i) => [point, corners[(i + 1) % corners.length]]);
-export const exteriorDimensionLabel = (a: Point, b: Point) =>
-  `${(dist(a, b) / 100).toFixed(2)} m`;
+export const exteriorDimensionLabel = (
+  a: Point,
+  b: Point,
+  language: Language = "en",
+) => `${fixed(dist(a, b) / 100, 2, language)} m`;
 
 export function visibleExteriorContour(
   plan: Plan,
@@ -459,11 +463,15 @@ export function geometryAnnotationBounds(
   return unionBoxes([drawing, ...marks]);
 }
 
-export function exteriorWallLengthSummary(plan: Plan) {
+export function exteriorWallLengthSummary(
+  plan: Plan,
+  language: Language = "en",
+) {
   const contour = visibleExteriorContour(plan);
   if (contour?.status !== "ready") return;
   const labels = exteriorDimensionSegments(contour.corners).map(([a, b]) =>
-    exteriorDimensionLabel(a, b),
+    exteriorDimensionLabel(a, b, language),
   );
-  return `Exterior wall lengths: ${[...new Set(labels)].join(", ")}`;
+  const lengths = [...new Set(labels)].join(language === "nb" ? " · " : ", ");
+  return translate(language)("Exterior wall lengths: {lengths}", { lengths });
 }

@@ -1,3 +1,4 @@
+import { useLanguage, useTranslation } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import type { RecoveryRevision } from "./recovery";
 
@@ -10,6 +11,8 @@ export function RecoveryDialog({
   onClose: () => void;
   onRestore: (revision: RecoveryRevision) => void;
 }) {
+  const language = useLanguage();
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const [selected, setSelected] = useState(0);
 
@@ -29,35 +32,35 @@ export function RecoveryDialog({
         onClose();
       }}
     >
-      <h2 id="recovery-title">Local recovery history</h2>
+      <h2 id="recovery-title">{t("Local recovery history")}</h2>
       {revisions.length > 0 ? (
         <label className="field">
-          <span>Revision to restore</span>
+          <span>{t("Revision to restore")}</span>
           <select
             value={selected}
             onChange={(event) => setSelected(Number(event.target.value))}
           >
             {revisions.map(({ project, savedAt }, index) => (
               <option key={index} value={index}>
-                {project.name || "Untitled plan"} ·{" "}
+                {project.name || t("Untitled plan")} ·{" "}
                 {savedAt === null
-                  ? "Legacy recovery, save time unavailable"
-                  : new Date(savedAt).toLocaleString()}
+                  ? t("Legacy recovery, save time unavailable")
+                  : new Date(savedAt).toLocaleString(language)}
               </option>
             ))}
           </select>
         </label>
       ) : (
-        <p>No local revisions available.</p>
+        <p>{t("No local revisions available.")}</p>
       )}
       <div className="modal-actions">
-        <button onClick={onClose}>Cancel</button>
+        <button onClick={onClose}>{t("Cancel")}</button>
         <button
           className="primary"
           disabled={!revisions.length}
           onClick={() => onRestore(revisions[selected])}
         >
-          Restore revision
+          {t("Restore revision")}
         </button>
       </div>
     </dialog>
@@ -73,6 +76,7 @@ export function ReplaceProjectDialog({
   onClose: () => void;
   onContinue: (download: boolean) => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -91,13 +95,15 @@ export function ReplaceProjectDialog({
         onClose();
       }}
     >
-      <h2 id="replace-project-title">Save your current project?</h2>
-      <p>The current project has changes that aren’t in a project file.</p>
+      <h2 id="replace-project-title">{t("Save your current project?")}</h2>
+      <p>
+        {t("The current project has changes that aren’t in a project file.")}
+      </p>
       <div className="modal-actions">
-        <button onClick={onClose}>Cancel</button>
+        <button onClick={onClose}>{t("Cancel")}</button>
         <button onClick={() => onContinue(false)}>{action}</button>
         <button className="primary" onClick={() => onContinue(true)}>
-          Download and continue
+          {t("Download and continue")}
         </button>
       </div>
     </dialog>

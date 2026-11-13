@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useState } from "react";
 import {
   ArrowDown,
@@ -32,6 +33,7 @@ export default function LayerPanel({
   onMove: (plan: Plan) => void;
   onError: (message: string) => void;
 }) {
+  const t = useTranslation();
   const [name, setName] = useState("");
   const layers = drawingLayers(plan);
   const active = activeLayer(plan);
@@ -58,14 +60,14 @@ export default function LayerPanel({
   return (
     <div className="layer-panel panel-section">
       <p className="muted">
-        Layers let you show, hide or lock parts of your drawing together. For
-        example, keep furniture on its own layer so you can hide it to see the
-        layout. Leave everything on Default for a simple sketch.
+        {t(
+          "Layers let you show, hide or lock parts of your drawing together. For example, keep furniture on its own layer so you can hide it to see the layout. Leave everything on Default for a simple sketch.",
+        )}
       </p>
       <label className="field">
-        <span>Add new objects to</span>
+        <span>{t("Add new objects to")}</span>
         <select
-          aria-label="Active layer"
+          aria-label={t("Active layer")}
           value={active.id}
           onChange={(event) =>
             onLayerChange({ ...plan, activeLayerId: event.target.value })
@@ -73,7 +75,7 @@ export default function LayerPanel({
         >
           {layers.map((layer) => (
             <option key={layer.id} value={layer.id}>
-              {layer.name}
+              {plan.layers ? layer.name : t(layer.name)}
             </option>
           ))}
         </select>
@@ -97,21 +99,21 @@ export default function LayerPanel({
         }}
       >
         <input
-          aria-label="New layer name"
+          aria-label={t("New layer name")}
           maxLength={200}
-          placeholder="Layer name"
+          placeholder={t("Layer name")}
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
         <button type="submit" disabled={!name.trim() || layers.length >= 100}>
-          Add layer
+          {t("Add layer")}
         </button>
       </form>
       {layers.map((layer, index) => (
         <div key={layer.id} className="layer-row">
           <input
-            aria-label={`Rename ${layer.name} layer`}
-            title="Rename layer"
+            aria-label={t("Rename {name} layer", { name: layer.name })}
+            title={t("Rename layer")}
             key={layer.name}
             defaultValue={layer.name}
             maxLength={200}
@@ -126,15 +128,21 @@ export default function LayerPanel({
             }}
           />
           <button
-            aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name} layer`}
-            title={layer.visible ? "Hide layer" : "Show layer"}
+            aria-label={t(
+              layer.visible ? "Hide {name} layer" : "Show {name} layer",
+              { name: layer.name },
+            )}
+            title={t(layer.visible ? "Hide layer" : "Show layer")}
             onClick={() => updateLayer(layer.id, { visible: !layer.visible })}
           >
             {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
           </button>
           <button
-            aria-label={`${layer.locked ? "Unlock" : "Lock"} ${layer.name} layer`}
-            title={layer.locked ? "Unlock layer" : "Lock layer"}
+            aria-label={t(
+              layer.locked ? "Unlock {name} layer" : "Lock {name} layer",
+              { name: layer.name },
+            )}
+            title={t(layer.locked ? "Unlock layer" : "Lock layer")}
             onClick={() => updateLayer(layer.id, { locked: !layer.locked })}
           >
             {layer.locked ? (
@@ -144,16 +152,16 @@ export default function LayerPanel({
             )}
           </button>
           <button
-            aria-label={`Move ${layer.name} layer earlier`}
-            title="Draw earlier"
+            aria-label={t("Move {name} layer earlier", { name: layer.name })}
+            title={t("Draw earlier")}
             disabled={!index}
             onClick={() => reorder(index, -1)}
           >
             <ArrowUp size={15} />
           </button>
           <button
-            aria-label={`Move ${layer.name} layer later`}
-            title="Draw later"
+            aria-label={t("Move {name} layer later", { name: layer.name })}
+            title={t("Draw later")}
             disabled={index === layers.length - 1}
             onClick={() => reorder(index, 1)}
           >
@@ -161,8 +169,11 @@ export default function LayerPanel({
           </button>
           {layer.id !== defaultLayer.id && (
             <button
-              aria-label={`Delete ${layer.name} layer`}
-              title={`Delete layer and move its objects to ${layers.find((entry) => entry.id === defaultLayer.id)?.name}`}
+              aria-label={t("Delete {name} layer", { name: layer.name })}
+              title={t("Delete layer and move its objects to {name}", {
+                name: layers.find((entry) => entry.id === defaultLayer.id)!
+                  .name,
+              })}
               disabled={layer.locked}
               onClick={() => onLayerChange(deleteLayer(plan, layer.id))}
             >
@@ -181,7 +192,7 @@ export default function LayerPanel({
           }
         }}
       >
-        Move selected to active layer
+        {t("Move selected to active layer")}
       </button>
     </div>
   );

@@ -1,3 +1,4 @@
+import { fixed, translate, type Language } from "./messages";
 import type { Box } from "./model";
 
 export type SheetDrawing = {
@@ -20,6 +21,7 @@ export type SheetOptions = {
   orientation: "portrait" | "landscape";
   scale: "fit" | 50 | 100 | 200 | 500;
   name: string;
+  language?: Language;
 };
 export const defaultSheetOptions: Omit<SheetOptions, "name"> = {
   paper: "A4",
@@ -28,6 +30,8 @@ export const defaultSheetOptions: Omit<SheetOptions, "name"> = {
 };
 
 export function layoutSheet(drawing: SheetDrawing, options: SheetOptions) {
+  const language = options.language ?? "en";
+  const t = translate(language);
   const [short, long] = options.paper === "A4" ? [210, 297] : [297, 420];
   const [width, height] =
     options.orientation === "portrait" ? [short, long] : [long, short];
@@ -46,12 +50,21 @@ export function layoutSheet(drawing: SheetDrawing, options: SheetOptions) {
   const w = drawing.bounds.w * mmPerCm;
   const h = drawing.bounds.h * mmPerCm;
   if (w <= 0 || h <= 0 || !Number.isFinite(w + h))
-    throw Error("The drawing has no printable extent.");
+    throw Error(t("The drawing has no printable extent."));
   if (w > contentWidth + 1e-8 || h > contentHeight + 1e-8)
     throw Error(
       fit
-        ? "There is not enough room on this page. Try larger paper or a different orientation."
-        : `The drawing needs ${w.toFixed(1)} × ${h.toFixed(1)} mm at 1:${options.scale}. Choose larger paper, a different orientation, or a smaller drawing scale.`,
+        ? t(
+            "There is not enough room on this page. Try larger paper or a different orientation.",
+          )
+        : t(
+            "The drawing needs {width} × {height} mm at 1:{scale}. Choose larger paper, a different orientation, or a smaller drawing scale.",
+            {
+              width: fixed(w, 1, language),
+              height: fixed(h, 1, language),
+              scale: options.scale,
+            },
+          ),
     );
 
   const barMeters =
@@ -74,8 +87,8 @@ export function layoutSheet(drawing: SheetDrawing, options: SheetOptions) {
     barMeters,
     barWidth: fit ? 0 : barMeters * 100 * mmPerCm,
     scaleLabel: fit
-      ? `${drawing.fitLabel ?? "Sketch - Not to scale"}   ${options.paper}`
-      : `1:${options.scale}   ${options.paper}   Print at 100% actual size`,
+      ? `${drawing.fitLabel ?? t("Sketch - Not to scale")}   ${options.paper}`
+      : `1:${options.scale}   ${options.paper}   ${t("Print at 100% actual size")}`,
   };
 }
 
@@ -125,6 +138,7 @@ export async function sheetsPdf(pages: SheetPage[], title: string) {
     compress: true,
   });
   pdf.setProperties({ title });
+  pdf.setLanguage(pages[0].options.language ?? "en");
   for (const [index, { drawing, options }] of pages.entries()) {
     const page = layouts[index];
     if (index) pdf.addPage([page.width, page.height], options.orientation);
@@ -216,7 +230,7 @@ export function sheetPreview(drawing: SheetDrawing, options: SheetOptions) {
     <g font-family="Arial, sans-serif" font-size="3.2" fill="#222">
       <text x="${page.margin}" y="${page.footer + 6}" font-size="4.6">${title}</text>
       <text x="${page.margin}" y="${page.footer + 12}">${name}</text>
-      <text x="${page.width - page.margin}" y="${page.footer + 6}" text-anchor="end">${page.scaleLabel}</text>
+      <text x="${page.width - page.margin}" y="${page.footer + 6}" text-anchor="end">${escapeXml(page.scaleLabel)}</text>
       ${
         page.barWidth
           ? `<text x="${barX}" y="${barY + 5}">0</text>

@@ -1324,7 +1324,11 @@ button svg {
     font-size: 12px;
   }
   .project-heading > span {
+    display: block;
     font-size: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .header-actions > button {
     display: none;
@@ -1916,5 +1920,25 @@ button svg {
   .building-view-switch button {
     padding-inline: 5px;
     font-size: 11px;
+  }
+}
+
+.language-picker {
+  border: 1px solid #dfe5dc;
+  border-radius: 7px;
+  background: white;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 4px 6px;
+}
+.mobile-project-menu .language-picker {
+  margin: 4px;
+}
+
+@media (max-width: 600px) {
+  .header-actions .language-picker {
+    display: none;
   }
 }

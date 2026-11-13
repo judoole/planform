@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useState, useEffect, useRef } from "react";
 import {
   Copy,
@@ -49,7 +50,7 @@ const exteriorMessages = {
 };
 
 export function DoorStyleSelect({
-  label = "Door type",
+  label,
   value,
   onChange,
 }: {
@@ -57,14 +58,15 @@ export function DoorStyleSelect({
   value: DoorStyle;
   onChange: (style: DoorStyle) => void;
 }) {
+  const t = useTranslation();
   return (
     <select
-      aria-label={label}
+      aria-label={label ?? t("Door type")}
       value={value}
       onChange={(e) => onChange(e.target.value as DoorStyle)}
     >
-      <option value="hinged">Hinged door</option>
-      <option value="sliding">Sliding door</option>
+      <option value="hinged">{t("Hinged door")}</option>
+      <option value="sliding">{t("Sliding door")}</option>
     </select>
   );
 }
@@ -164,6 +166,7 @@ export default function Properties({
   onShowExteriorDimensions: (show: boolean) => void;
   onRenovationView?: (view: RenovationView) => void;
 }) {
+  const t = useTranslation();
   const items = plan.items.filter((i) => selection.includes(i.id)),
     item = items.length === 1 ? items[0] : null;
   const itemProtected = !!item && isEditProtected(plan, item);
@@ -180,7 +183,7 @@ export default function Properties({
       .map((item) => item.id),
   );
   const statuses = new Set(items.map((item) => renovationStatus(plan, item)));
-  const units = plan.calibration.calibrated ? "cm" : "units";
+  const units = plan.calibration.calibrated ? "cm" : t("units");
   const endpoints =
     item?.type === "dimension" ? dimensionEndpoints(item, plan.items) : null;
   const walls = items.filter((i): i is Wall => i.type === "wall");
@@ -234,30 +237,34 @@ export default function Properties({
     <div className="properties-content">
       <div className="panel-section">
         <div className="eyebrow">
-          {items.length ? `${items.length} selected` : "Document"}
+          {items.length
+            ? t("{count} selected", { count: items.length })
+            : t("Document")}
         </div>
         <h2>
           {item?.name ||
-            (items.length ? "Multiple objects" : "Your floor plan")}
+            t(items.length ? "Multiple objects" : "Your floor plan")}
         </h2>
         {!items.length && (
           <p className="muted">
-            Select an object to adjust its dimensions, position and appearance.
+            {t(
+              "Select an object to adjust its dimensions, position and appearance.",
+            )}
           </p>
         )}
         {items.length > 0 && (
           <>
             <div className="object-actions">
               <button
-                title="Duplicate selected objects"
-                aria-label="Duplicate selected objects"
+                title={t("Duplicate selected objects")}
+                aria-label={t("Duplicate selected objects")}
                 onClick={onDuplicate}
               >
                 <Copy size={17} />
               </button>
               <button
-                title="Delete selected objects"
-                aria-label="Delete selected objects"
+                title={t("Delete selected objects")}
+                aria-label={t("Delete selected objects")}
                 onClick={onDelete}
               >
                 <Trash2 size={17} />
@@ -265,13 +272,13 @@ export default function Properties({
               <button
                 title={
                   allLocked
-                    ? "Unlock selected objects"
-                    : "Lock selected objects"
+                    ? t("Unlock selected objects")
+                    : t("Lock selected objects")
                 }
                 aria-label={
                   allLocked
-                    ? "Unlock selected objects"
-                    : "Lock selected objects"
+                    ? t("Unlock selected objects")
+                    : t("Lock selected objects")
                 }
                 disabled={!lockableItems.length}
                 onClick={() => {
@@ -292,8 +299,8 @@ export default function Properties({
               </button>
               {items.length > 1 && (
                 <button
-                  title="Group selection"
-                  aria-label="Group selection"
+                  title={t("Group selection")}
+                  aria-label={t("Group selection")}
                   disabled={groupProtected}
                   onClick={() =>
                     action(() => {
@@ -313,8 +320,8 @@ export default function Properties({
               )}
               {item?.type === "group" && (
                 <button
-                  title="Ungroup"
-                  aria-label="Ungroup"
+                  title={t("Ungroup")}
+                  aria-label={t("Ungroup")}
                   disabled={itemProtected}
                   onClick={() =>
                     action(() => {
@@ -330,7 +337,7 @@ export default function Properties({
             </div>
             {item && (
               <label className="field">
-                <span>Object name</span>
+                <span>{t("Object name")}</span>
                 <input
                   key={item.id + item.name}
                   defaultValue={item.name}
@@ -347,7 +354,7 @@ export default function Properties({
             )}
             {itemProtected && (
               <p className="notice">
-                Object or layer is locked. Unlock it to edit this object.
+                {t("Object or layer is locked. Unlock it to edit this object.")}
               </p>
             )}
           </>
@@ -356,9 +363,9 @@ export default function Properties({
       {onRenovationView && (
         <div className="panel-section">
           <label className="field">
-            <span>Renovation view</span>
+            <span>{t("Renovation view")}</span>
             <select
-              aria-label="Renovation view"
+              aria-label={t("Renovation view")}
               value={plan.renovationView ?? "all"}
               onChange={(event) =>
                 onRenovationView(event.target.value as RenovationView)
@@ -366,16 +373,16 @@ export default function Properties({
             >
               {Object.entries(renovationViews).map(([value, view]) => (
                 <option key={value} value={value}>
-                  {view.title}
+                  {t(view.title)}
                 </option>
               ))}
             </select>
           </label>
           {selectedWalls.size > 0 && (
             <label className="field">
-              <span>Renovation status</span>
+              <span>{t("Renovation status")}</span>
               <select
-                aria-label="Renovation status"
+                aria-label={t("Renovation status")}
                 value={statuses.size === 1 ? [...statuses][0] : ""}
                 onChange={(event) => {
                   const renovationStatus = event.target
@@ -391,11 +398,11 @@ export default function Properties({
                 }}
               >
                 <option value="" disabled>
-                  Mixed
+                  {t("Mixed")}
                 </option>
                 {Object.entries(renovationStyles).map(([value, style]) => (
                   <option key={value} value={value}>
-                    {style.label}
+                    {t(style.label)}
                   </option>
                 ))}
               </select>
@@ -403,12 +410,12 @@ export default function Properties({
           )}
           {(item?.type === "door" || item?.type === "window") && (
             <p className="muted">
-              Renovation status follows its wall (
-              {
-                renovationStyles[renovationStatus(plan, item) ?? "existing"]
-                  .label
-              }
-              ).
+              {t("Renovation status follows its wall ({status}).", {
+                status: t(
+                  renovationStyles[renovationStatus(plan, item) ?? "existing"]
+                    .label,
+                ),
+              })}
             </p>
           )}
         </div>
@@ -417,20 +424,20 @@ export default function Properties({
         <div className="panel-section">
           <h3>
             {item.evidence.basis === "estimated"
-              ? "Estimated geometry"
-              : "Measured geometry"}
+              ? t("Estimated geometry")
+              : t("Measured geometry")}
           </h3>
           <p className="notice">{item.evidence.note}</p>
         </div>
       )}
       {walls.length > 0 && (
-        <section className="panel-section" aria-label="Wall heights">
+        <section className="panel-section" aria-label={t("Wall heights")}>
           <h3>
-            {walls.length === 1 ? "Wall height" : "Selected wall heights"}
+            {walls.length === 1 ? t("Wall height") : t("Selected wall heights")}
           </h3>
           {walls.length === 1 ? (
             <NumberField
-              label="Wall height"
+              label={t("Wall height")}
               value={wallHeight(plan, walls[0])}
               onChange={setWallHeight}
               disabled={isEditProtected(plan, walls[0])}
@@ -449,12 +456,12 @@ export default function Properties({
               }}
             >
               <label className="field">
-                <span>Height for selected walls</span>
+                <span>{t("Height for selected walls")}</span>
                 <div>
                   <input
                     key={walls.map((wall) => wall.id).join(",")}
                     name="height"
-                    aria-label="Height for selected walls"
+                    aria-label={t("Height for selected walls")}
                     type="number"
                     step="any"
                     min={1}
@@ -471,7 +478,7 @@ export default function Properties({
                 disabled={walls.every((wall) => isEditProtected(plan, wall))}
                 type="submit"
               >
-                Apply height
+                {t("Apply height")}
               </button>
             </form>
           )}
@@ -479,21 +486,25 @@ export default function Properties({
             (wall) => !isEditProtected(plan, wall) && wall.height !== undefined,
           ) ? (
             <button onClick={() => setWallHeight(undefined)}>
-              Use floor default
+              {t("Use floor default")}
             </button>
           ) : (
             <p className="muted">
-              Floor default{" "}
-              {plan.building?.defaultWallHeight ?? DEFAULT_WALL_HEIGHT} cm.
+              {t("Floor default {height} cm.", {
+                height: plan.building?.defaultWallHeight ?? DEFAULT_WALL_HEIGHT,
+              })}
             </p>
           )}
         </section>
       )}
       {openingSize && item && (
-        <section className="panel-section" aria-label="Opening height settings">
-          <h3>Opening height</h3>
+        <section
+          className="panel-section"
+          aria-label={t("Opening height settings")}
+        >
+          <h3>{t("Opening height")}</h3>
           <NumberField
-            label="Opening height"
+            label={t("Opening height")}
             value={openingSize.height}
             onChange={(height) => patch({ height })}
             disabled={item.locked}
@@ -501,7 +512,7 @@ export default function Properties({
             max={5000}
           />
           <NumberField
-            label="Sill above floor"
+            label={t("Sill above floor")}
             value={openingSize.sill}
             onChange={(sill) => patch({ sill })}
             disabled={item.locked}
@@ -510,50 +521,58 @@ export default function Properties({
           />
           {!openingSize.fits && (
             <p className="notice" role="status">
-              The opening extends above its wall. Increase the wall height or
-              lower the opening.
+              {t(
+                "The opening extends above its wall. Increase the wall height or lower the opening.",
+              )}
             </p>
           )}
         </section>
       )}
-      <section className="panel-section" aria-label="Exterior dimensions">
+      <section className="panel-section" aria-label={t("Exterior dimensions")}>
         <label className="property-checkbox">
           <input
             type="checkbox"
             checked={plan.showExteriorDimensions !== false}
             onChange={(event) => onShowExteriorDimensions(event.target.checked)}
           />
-          Show exterior wall lengths
+          {t("Show exterior wall lengths")}
         </label>
         {exterior.status !== "ready" && (
           <p className="notice" role="status">
-            {exteriorMessages[exterior.status]}
+            {t(exteriorMessages[exterior.status])}
           </p>
         )}
       </section>
-      <section className="panel-section room-areas" aria-label="Room areas">
-        <h3>Room areas</h3>
+      <section
+        className="panel-section room-areas"
+        aria-label={t("Room areas")}
+      >
+        <h3>{t("Room areas")}</h3>
         {roomError ? (
           <p className="notice">{roomError}</p>
         ) : !rooms.length ? (
           <p className="muted">
-            Close a space with walls to calculate its area automatically.
+            {t("Close a space with walls to calculate its area automatically.")}
           </p>
         ) : !plan.calibration.calibrated ? (
           <p className="notice">
-            {rooms.length} enclosed {rooms.length === 1 ? "room" : "rooms"}.
-            Calibrate scale to display areas in m².
+            {t(
+              rooms.length === 1
+                ? "{count} enclosed room. Calibrate scale to display areas in m²."
+                : "{count} enclosed rooms. Calibrate scale to display areas in m².",
+              { count: rooms.length },
+            )}
           </p>
         ) : (
           <>
             {rooms.map((room, n) => (
               <div className="stat-row" key={n}>
-                <span>Room {n + 1}</span>
+                <span>{t("Room {number}", { number: n + 1 })}</span>
                 <strong>{formatRoomArea(room.areaCm2)}</strong>
               </div>
             ))}
             <div className="stat-row room-area-total">
-              <span>Total room area</span>
+              <span>{t("Total room area")}</span>
               <strong>
                 {formatRoomArea(
                   rooms.reduce((sum, room) => sum + room.areaCm2, 0),
@@ -561,8 +580,9 @@ export default function Properties({
               </strong>
             </div>
             <p className="muted">
-              Inside wall faces, excluding wall thickness. Updates as walls
-              change.
+              {t(
+                "Inside wall faces, excluding wall thickness. Updates as walls change.",
+              )}
             </p>
           </>
         )}
@@ -572,9 +592,9 @@ export default function Properties({
           {item.type === "wall" && (
             <>
               <div className="panel-section">
-                <h3>Wall geometry</h3>
+                <h3>{t("Wall geometry")}</h3>
                 <NumberField
-                  label="Length"
+                  label={t("Length")}
                   unit={units}
                   min={1}
                   value={dist(item.a, item.b)}
@@ -588,14 +608,14 @@ export default function Properties({
                 />
                 <div className="field-grid">
                   <NumberField
-                    label="Thickness"
+                    label={t("Thickness")}
                     unit={units}
                     value={item.thickness}
                     min={1}
                     onChange={(v) => patch({ thickness: v })}
                   />
                   <NumberField
-                    label="Angle"
+                    label={t("Angle")}
                     unit="°"
                     value={angle(item.a, item.b)}
                     onChange={(v) => {
@@ -610,13 +630,13 @@ export default function Properties({
                 </div>
               </div>
               <div className="panel-section">
-                <h3>Endpoints</h3>
+                <h3>{t("Endpoints")}</h3>
                 {(["a", "b"] as const).map((end, n) => (
                   <div key={end}>
-                    <span className="eyebrow">{n ? "End" : "Start"}</span>
+                    <span className="eyebrow">{n ? t("End") : t("Start")}</span>
                     <div className="field-grid">
                       <NumberField
-                        label={`${n ? "End" : "Start"} X`}
+                        label={t(n ? "End X" : "Start X")}
                         unit={units}
                         value={item[end].x}
                         onChange={(x) =>
@@ -624,7 +644,7 @@ export default function Properties({
                         }
                       />
                       <NumberField
-                        label={`${n ? "End" : "Start"} Y`}
+                        label={t(n ? "End Y" : "Start Y")}
                         unit={units}
                         value={item[end].y}
                         onChange={(y) =>
@@ -635,8 +655,9 @@ export default function Properties({
                   </div>
                 ))}
                 <p className="notice">
-                  Shared corners move together. Moving an endpoint also updates
-                  every connected wall.
+                  {t(
+                    "Shared corners move together. Moving an endpoint also updates every connected wall.",
+                  )}
                 </p>
               </div>
               <WallJunctionControls
@@ -651,19 +672,20 @@ export default function Properties({
           )}
           {(item.type === "door" || item.type === "window") && (
             <div className="panel-section">
-              <h3>Wall attachment</h3>
+              <h3>{t("Wall attachment")}</h3>
               <p className="muted">
-                Attached to {plan.items.find((i) => i.id === item.hostId)?.name}
+                {t("Attached to")}{" "}
+                {plan.items.find((i) => i.id === item.hostId)?.name}
               </p>
               <NumberField
-                label="Opening width"
+                label={t("Opening width")}
                 unit={units}
                 min={1}
                 value={item.width}
                 onChange={(v) => patch({ width: v })}
               />
               <NumberField
-                label="Distance from wall start"
+                label={t("Distance from wall start")}
                 unit={units}
                 min={0}
                 value={
@@ -683,7 +705,7 @@ export default function Properties({
               {item.type === "door" && (
                 <>
                   <label className="field">
-                    <span>Door type</span>
+                    <span>{t("Door type")}</span>
                     <DoorStyleSelect
                       value={item.style ?? "hinged"}
                       onChange={(style) => patch({ style })}
@@ -698,15 +720,15 @@ export default function Properties({
                           })
                         }
                       >
-                        <FlipHorizontal size={16} /> Flip slide direction
+                        <FlipHorizontal size={16} /> {t("Flip slide direction")}
                       </button>
                     ) : (
                       <>
                         <button onClick={() => patch({ hinge: -item.hinge })}>
-                          <FlipHorizontal size={16} /> Flip hinge side
+                          <FlipHorizontal size={16} /> {t("Flip hinge side")}
                         </button>
                         <button onClick={() => patch({ swing: -item.swing })}>
-                          <FlipVertical size={16} /> Flip swing direction
+                          <FlipVertical size={16} /> {t("Flip swing direction")}
                         </button>
                       </>
                     )}
@@ -714,38 +736,38 @@ export default function Properties({
                 </>
               )}
               <p className="notice">
-                Openings follow their wall. If space shrinks, openings move or
-                shrink to fit; openings with less than 5 cm available are
-                removed. Deleting the wall removes its openings.
+                {t(
+                  "Openings follow their wall. If space shrinks, openings move or shrink to fit; openings with less than 5 cm available are removed. Deleting the wall removes its openings.",
+                )}
               </p>
             </div>
           )}
           {isRect(item) && (
             <>
               <div className="panel-section">
-                <h3>Position & size</h3>
+                <h3>{t("Position & size")}</h3>
                 <div className="field-grid">
                   <NumberField
-                    label="Position X"
+                    label={t("Position X")}
                     unit={units}
                     value={item.x}
                     onChange={(v) => patch({ x: v })}
                   />
                   <NumberField
-                    label="Position Y"
+                    label={t("Position Y")}
                     unit={units}
                     value={item.y}
                     onChange={(v) => patch({ y: v })}
                   />
                   <NumberField
-                    label="Width"
+                    label={t("Width")}
                     unit={units}
                     value={item.w}
                     min={0.001}
                     onChange={(v) => patch({ w: v })}
                   />
                   <NumberField
-                    label="Height / length"
+                    label={t("Height / length")}
                     unit={units}
                     value={item.h}
                     min={0.001}
@@ -753,14 +775,14 @@ export default function Properties({
                   />
                 </div>
                 <NumberField
-                  label="Rotation"
+                  label={t("Rotation")}
                   unit="°"
                   value={item.rotation}
                   onChange={(v) => patch({ rotation: v })}
                 />
                 {item.type === "stairs" && (
                   <NumberField
-                    label="Number of steps"
+                    label={t("Number of steps")}
                     unit="steps"
                     value={item.steps || 12}
                     min={2}
@@ -771,9 +793,9 @@ export default function Properties({
               </div>
               {item.type === "text" && (
                 <div className="panel-section">
-                  <h3>Label</h3>
+                  <h3>{t("Label")}</h3>
                   <label className="field">
-                    <span>Text</span>
+                    <span>{t("Text")}</span>
                     <input
                       key={item.id + item.text}
                       defaultValue={item.text}
@@ -781,7 +803,7 @@ export default function Properties({
                     />
                   </label>
                   <NumberField
-                    label="Font size"
+                    label={t("Font size")}
                     min={1}
                     unit={units}
                     value={item.fontSize || 18}
@@ -793,13 +815,13 @@ export default function Properties({
           )}
           {item.type === "dimension" && endpoints && (
             <div className="panel-section">
-              <h3>Dimension</h3>
+              <h3>{t("Dimension")}</h3>
               <p className="measure-value">
                 {dist(endpoints.a, endpoints.b).toFixed(1)}{" "}
                 <small>{units}</small>
               </p>
               <NumberField
-                label="Annotation offset"
+                label={t("Annotation offset")}
                 unit={units}
                 value={item.offset}
                 onChange={(v) => patch({ offset: v })}
@@ -819,7 +841,11 @@ export default function Properties({
                   return (
                     <div key={end} className="field">
                       <span>
-                        {label} attached to {target.name || target.id} {point}
+                        {t("{endpoint} attached to {name} {point}", {
+                          endpoint: t(label),
+                          name: target.name || target.id,
+                          point: t(point),
+                        })}
                       </span>
                       <button
                         onClick={() => {
@@ -837,7 +863,7 @@ export default function Properties({
                           });
                         }}
                       >
-                        Detach {label.toLowerCase()}
+                        {t(n ? "Detach end" : "Detach start")}
                       </button>
                     </div>
                   );
@@ -845,7 +871,7 @@ export default function Properties({
                 return (
                   <div className="field-grid" key={end}>
                     <NumberField
-                      label={`${label} X`}
+                      label={t(n ? "End X" : "Start X")}
                       unit={units}
                       value={endpoints[end].x}
                       onChange={(v) =>
@@ -853,7 +879,7 @@ export default function Properties({
                       }
                     />
                     <NumberField
-                      label={`${label} Y`}
+                      label={t(n ? "End Y" : "Start Y")}
                       unit={units}
                       value={endpoints[end].y}
                       onChange={(v) =>
@@ -870,12 +896,14 @@ export default function Properties({
       {!items.length && (
         <>
           <div className="panel-section">
-            <h3>Drawing settings</h3>
+            <h3>{t("Drawing settings")}</h3>
             {plan.source && (
               <>
                 <p className="muted">
-                  Source: {plan.source.file}
-                  {plan.source.page ? ` · page ${plan.source.page}` : ""}
+                  {t("Source: {file}", { file: plan.source.file })}
+                  {plan.source.page
+                    ? ` · ${t("page {number}", { number: plan.source.page })}`
+                    : ""}
                 </p>
                 {plan.source.notes.map((note, n) => (
                   <p className="notice" key={n}>
@@ -885,7 +913,7 @@ export default function Properties({
               </>
             )}
             <NumberField
-              label="Grid spacing"
+              label={t("Grid spacing")}
               value={plan.grid}
               min={1}
               max={1000}
@@ -893,29 +921,32 @@ export default function Properties({
               onChange={(v) => commit({ ...plan, grid: v })}
             />
             <div className="stat-row">
-              <span>Objects</span>
+              <span>{t("Objects")}</span>
               <strong>{plan.items.length.toLocaleString()}</strong>
             </div>
             <div className="stat-row">
-              <span>Floor</span>
-              <strong>01 · Ground floor</strong>
+              <span>{t("Floor")}</span>
+              <strong>{t("01 · Ground floor")}</strong>
             </div>
             <div className="stat-row">
-              <span>Units</span>
+              <span>{t("Units")}</span>
               <strong>
-                {plan.calibration.calibrated ? "Centimeters" : "Uncalibrated"}
+                {t(
+                  plan.calibration.calibrated ? "Centimeters" : "Uncalibrated",
+                )}
               </strong>
             </div>
           </div>
           <div className="panel-section tip-card">
             <Layers size={22} />
-            <h3>A little plan. A big possibility.</h3>
+            <h3>{t("A little plan. A big possibility.")}</h3>
             <p>
-              Start with walls, add openings, then make the space your own. All
-              dimensions can be edited precisely.
+              {t(
+                "Start with walls, add openings, then make the space your own. All dimensions can be edited precisely.",
+              )}
             </p>
             <button onClick={() => setTool("room")}>
-              Draw a room <span>↗</span>
+              {t("Draw a room")} <span>↗</span>
             </button>
           </div>
         </>

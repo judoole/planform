@@ -1,4 +1,11 @@
 import {
+  LanguagePicker,
+  LanguageProvider,
+  useLanguage,
+  useTranslation,
+  type MessageValues,
+} from "./i18n";
+import {
   lazy,
   Suspense,
   useState,
@@ -113,6 +120,7 @@ import {
   removeProposal,
   MAX_PROPOSALS,
   replaceActivePlan,
+  versionNames,
   type ProjectDrawing,
   type Project,
 } from "./project";
@@ -127,6 +135,17 @@ import {
 const BuildingViewport = lazy(() => import("./BuildingViewport"));
 const MapWorkspace = lazy(() => import("./MapWorkspace"));
 type ViewMode = "plan" | "3d" | "map";
+
+const itemTypes: Record<Item["type"], string> = {
+  wall: "Wall",
+  door: "Door",
+  window: "Window",
+  stairs: "Stairs",
+  furniture: "Furniture",
+  dimension: "Dimension",
+  text: "Label",
+  group: "Group",
+};
 
 const palette: {
   tool: Tool;
@@ -183,10 +202,15 @@ function currentShareHash() {
 
 export default function App() {
   const hash = useSyncExternalStore(subscribeToHash, currentShareHash);
-  return hash ? <SharedProject key={hash} hash={hash} /> : <Editor />;
+  return (
+    <LanguageProvider>
+      {hash ? <SharedProject key={hash} hash={hash} /> : <Editor />}
+    </LanguageProvider>
+  );
 }
 
 function SharedProject({ hash }: { hash: string }) {
+  const t = useTranslation();
   const [result, setResult] = useState<Project | "invalid" | null>(null);
   useEffect(() => {
     let active = true;
@@ -207,17 +231,19 @@ function SharedProject({ hash }: { hash: string }) {
   return (
     <main className="modal-backdrop">
       <section className="modal share-load">
+        <LanguagePicker />
         {result === "invalid" ? (
           <>
-            <h2>Couldn’t open this share link</h2>
+            <h2>{t("Couldn’t open this share link")}</h2>
             <p role="alert">
-              Check that you have the full link, or ask the sender for the
-              project file.
+              {t(
+                "Check that you have the full link, or ask the sender for the project file.",
+              )}
             </p>
-            <a href={localAddress()}>Open local editor</a>
+            <a href={localAddress()}>{t("Open local editor")}</a>
           </>
         ) : (
-          <p role="status">Opening shared plan…</p>
+          <p role="status">{t("Opening shared plan…")}</p>
         )}
       </section>
     </main>
@@ -225,6 +251,8 @@ function SharedProject({ hash }: { hash: string }) {
 }
 
 function Editor({ sharedProject }: { sharedProject?: Project }) {
+  const language = useLanguage();
+  const t = useTranslation();
   const [initial] = useState(() => startup(sharedProject));
   const [project, setProject] = useState<Project>(initial.project),
     [preview, setPreview] = useState<Plan | null>(null),
@@ -260,7 +288,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       "views",
     ),
     [help, setHelp] = useState(false),
-    [notice, setNotice] = useState(""),
+    [notice, setNotice] = useState<{
+      message: string;
+      values?: MessageValues;
+    } | null>(null),
     [shareOpen, setShareOpen] = useState(false),
     [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -302,6 +333,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   const version = activeDrawingId(project);
   const drawings = projectDrawings(project);
   const activeDrawing = drawings.find((d) => d.id === version)!;
+  const drawingName = (entry: ProjectDrawing) =>
+    entry.role === "existing" && entry.name === versionNames.existing
+      ? t(versionNames.existing)
+      : entry.name;
   const proposals = drawings.filter((d) => d.role === "proposal");
   const canAddProposal = proposals.length < MAX_PROPOSALS;
   const reference =
@@ -358,8 +393,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       };
     }
   }, [shown.items]);
-  const showNotice = useCallback((s: string) => {
-    setNotice(s);
+  const showNotice = useCallback((message: string, values?: MessageValues) => {
+    setNotice({ message, values });
   }, []);
   const updateProject = useCallback((next: Project) => {
     projectRef.current = next;
@@ -375,7 +410,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         if (blocked) {
           setPreview(null);
           showNotice(
-            `“${blocked.name}” is hidden or locked. Show and unlock it to make this edit.`,
+            "“{name}” is hidden or locked. Show and unlock it to make this edit.",
+            { name: blocked.name },
           );
           return;
         }
@@ -482,8 +518,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }, [project, sharedProject, saveRecovery]);
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(""), 7000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNotice(null), 7000);
+    return () => clearTimeout(timer);
   }, [notice]);
   function changeViewMode(next: ViewMode) {
     if (next === viewMode) return;
@@ -631,9 +667,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         histories.current.delete(expired.drawing.id);
       }
       setDeletedProposals(deleted);
-      showNotice(
-        `Deleted ${activeDrawing.name}. Use Restore last deleted to undo.`,
-      );
+      showNotice("Deleted {name}. Use Restore last deleted to undo.", {
+        name: activeDrawing.name,
+      });
     } catch (error) {
       showNotice((error as Error).message);
     }
@@ -689,7 +725,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     if (
       dimensions &&
       !window.confirm(
-        `Delete the selection and ${dimensions} attached dimension(s)? Undo will restore their attachments.`,
+        t(
+          "Delete the selection and {count} attached dimension(s)? Undo will restore their attachments.",
+          { count: dimensions },
+        ),
       )
     )
       return;
@@ -707,7 +746,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         isEditProtected(plan, item),
     );
     if (blocked) {
-      showNotice(`Unlock “${blocked.name}” before duplicating its wall.`);
+      showNotice("Unlock “{name}” before duplicating its wall.", {
+        name: blocked.name,
+      });
       return;
     }
     const r = duplicateItems(plan, ids);
@@ -731,9 +772,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           : i,
       ),
     );
-    showNotice(
-      `${visibleSelection.length} object(s) copied. Use Paste to place a copy.`,
-    );
+    showNotice("{count} object(s) copied. Use Paste to place a copy.", {
+      count: visibleSelection.length,
+    });
   }
   function paste() {
     if (!clipboard.current.length) {
@@ -817,7 +858,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               suggestedName: fileName,
               types: [
                 {
-                  description: "Planform project",
+                  description: t("Planform project"),
                   accept: { "application/json": [".planform.json", ".json"] },
                 },
               ],
@@ -1074,10 +1115,17 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       setPanelOpen(false);
   }
   const selected = shown.items.filter((i) => selection.includes(i.id));
+  const toolLabel = t(
+    tool === "calibrate"
+      ? "Calibrate scale"
+      : (palette.find((entry) => entry.tool === tool)?.label ?? "Select"),
+  );
   const matching = shown.items.filter(
     (i) =>
       !query ||
-      `${i.name} ${i.type}`.toLowerCase().includes(query.toLowerCase()),
+      `${i.name} ${i.type} ${t(itemTypes[i.type])}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
   return (
     <div className="app-shell">
@@ -1086,7 +1134,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           className="brand"
           href="#"
           onClick={(e) => e.preventDefault()}
-          aria-label="Planform home"
+          aria-label={t("Planform home")}
         >
           <span className="brand-mark">
             <span />
@@ -1098,7 +1146,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <span className="header-divider" />
         <div className="project-heading">
           <input
-            aria-label="Project name"
+            aria-label={t("Project name")}
             value={project.name}
             maxLength={200}
             onChange={(e) =>
@@ -1119,54 +1167,58 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               nameBefore.current = null;
             }}
           />
-          <span role="status">{autosave}</span>
+          <span role="status">{t(autosave)}</span>
           <span role="status">
             {project !== fileState.baseline
-              ? "File has unsaved edits"
+              ? t("File has unsaved edits")
               : fileState.hasFile
-                ? "Project file current"
-                : "No project file saved"}
+                ? t("Project file current")
+                : t("No project file saved")}
           </span>
         </div>
         <div className="header-actions">
-          <button onClick={requestNewProject} title="New empty project">
+          <button onClick={requestNewProject} title={t("New empty project")}>
             <FilePlus2 size={16} />
-            <span>New</span>
+            <span>{t("New")}</span>
           </button>
-          <button onClick={chooseProjectFile} title="Open Planform project">
+          <button
+            onClick={chooseProjectFile}
+            title={t("Open Planform project")}
+          >
             <FolderOpen size={16} />
-            <span>Open</span>
+            <span>{t("Open")}</span>
           </button>
           {!sharedProject && (
             <button
               onClick={showRecovery}
               className="recovery-button"
-              title="Local recovery history"
-              aria-label="Local recovery history"
+              title={t("Local recovery history")}
+              aria-label={t("Local recovery history")}
             >
               <HistoryIcon size={16} />
             </button>
           )}
-          <button onClick={() => save()} title="Download editable project">
+          <button onClick={() => save()} title={t("Download editable project")}>
             <Download size={16} />
-            <span>Save project</span>
+            <span>{t("Save project")}</span>
           </button>
           <button
-            aria-label="Share plan"
-            title="Share plan"
+            aria-label={t("Share plan")}
+            title={t("Share plan")}
             onClick={() => setShareOpen(true)}
           >
             <Link2 size={16} />
-            <span>Share</span>
+            <span>{t("Share")}</span>
           </button>
+          <LanguagePicker />
           <div className="drawing-export-action">
             <button className="primary" onClick={() => setExportOpen(true)}>
-              Export
+              {t("Export")}
             </button>
           </div>
           <button
             className="mobile-menu"
-            aria-label="Project menu"
+            aria-label={t("Project menu")}
             onClick={() => setMenu(!menu)}
           >
             <Menu size={20} />
@@ -1176,17 +1228,22 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       {sharedProject && (
         <div className="share-banner">
           <span>
-            Editing a shared copy. Download the project to keep your changes.
+            {t(
+              "Editing a shared copy. Download the project to keep your changes.",
+            )}
           </span>
-          <a href={localAddress()}>Open local editor</a>
+          <a href={localAddress()}>{t("Open local editor")}</a>
         </div>
       )}
       {menu && (
         <div className="mobile-project-menu">
-          <button onClick={requestNewProject}>New project</button>
-          <button onClick={chooseProjectFile}>Open project</button>
+          <LanguagePicker />
+          <button onClick={requestNewProject}>{t("New project")}</button>
+          <button onClick={chooseProjectFile}>{t("Open project")}</button>
           {!sharedProject && (
-            <button onClick={showRecovery}>Local recovery history</button>
+            <button onClick={showRecovery}>
+              {t("Local recovery history")}
+            </button>
           )}
           <button
             onClick={() => {
@@ -1194,7 +1251,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               setMenu(false);
             }}
           >
-            Save project
+            {t("Save project")}
           </button>
         </div>
       )}
@@ -1202,14 +1259,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         type="file"
         ref={fileRef}
         accept=".json,.planform.json"
-        aria-label="Project file"
+        aria-label={t("Project file")}
         hidden
         onChange={(e) => loadFile(e.currentTarget)}
       />
       <input
         type="file"
         ref={proposedFileRef}
-        aria-label="Proposed drawing file"
+        aria-label={t("Proposed drawing file")}
         accept=".json,.planform.json"
         hidden
         onChange={(e) => loadFile(e.currentTarget, "proposed")}
@@ -1218,22 +1275,22 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <div className="plan-toolbar-group">
           <div className="floor-badge">
             <Layers size={15} />
-            <span>Ground floor</span>
+            <span>{t("Ground floor")}</span>
             <small>01</small>
           </div>
           <div
             className="plan-versions"
             role="group"
-            aria-label="Plan versions"
+            aria-label={t("Plan versions")}
           >
             <select
-              aria-label="Active drawing"
+              aria-label={t("Active drawing")}
               value={version}
               onChange={(e) => switchVersion(e.target.value)}
             >
               {drawings.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.name}
+                  {drawingName(entry)}
                 </option>
               ))}
             </select>
@@ -1241,20 +1298,22 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               disabled={!canAddProposal}
               title={
                 canAddProposal
-                  ? "Copy the active drawing as a new proposal"
-                  : `Maximum of ${MAX_PROPOSALS} proposals reached`
+                  ? t("Copy the active drawing as a new proposal")
+                  : t("Maximum of {count} proposals reached", {
+                      count: MAX_PROPOSALS,
+                    })
               }
               onClick={() => duplicateAsProposal()}
             >
-              <Copy size={14} /> New proposal
+              <Copy size={14} /> {t("New proposal")}
             </button>
             <button
               onClick={() => {
-                setNotice("");
+                setNotice(null);
                 setManageOpen(true);
               }}
             >
-              Manage proposals{" "}
+              {t("Manage proposals")}{" "}
               <span className="proposal-count">
                 {proposals.length}/{MAX_PROPOSALS}
               </span>
@@ -1266,11 +1325,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                   aria-pressed={overlay}
                   onClick={() => setOverlay(!overlay)}
                 >
-                  <Layers size={14} /> Overlay
+                  <Layers size={14} /> {t("Overlay")}
                 </button>
                 {overlay && (
                   <select
-                    aria-label="Overlay drawing"
+                    aria-label={t("Overlay drawing")}
                     value={reference.id}
                     onChange={(e) => setOverlayId(e.target.value)}
                   >
@@ -1278,7 +1337,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       .filter((entry) => entry.id !== version)
                       .map((entry) => (
                         <option key={entry.id} value={entry.id}>
-                          {entry.name}
+                          {drawingName(entry)}
                         </option>
                       ))}
                   </select>
@@ -1289,16 +1348,16 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         </div>
         <div className="toolbar-separator" />
         <button
-          aria-label="Undo"
-          title="Undo · ⌘/Ctrl Z"
+          aria-label={t("Undo")}
+          title={t("Undo · ⌘/Ctrl Z")}
           disabled={!history.past.length}
           onClick={undo}
         >
           <Undo2 size={18} />
         </button>
         <button
-          aria-label="Redo"
-          title="Redo · ⌘/Ctrl Shift Z"
+          aria-label={t("Redo")}
+          title={t("Redo · ⌘/Ctrl Shift Z")}
           disabled={!history.future.length}
           onClick={redo}
         >
@@ -1306,8 +1365,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         </button>
         <div className="toolbar-separator" />
         <button
-          aria-label="Copy"
-          title="Copy"
+          aria-label={t("Copy")}
+          title={t("Copy")}
           hidden={viewMode === "map"}
           disabled={!selection.length}
           onClick={copy}
@@ -1316,15 +1375,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         </button>
         <button
           hidden={viewMode === "map"}
-          aria-label="Paste"
-          title="Paste"
+          aria-label={t("Paste")}
+          title={t("Paste")}
           onClick={paste}
         >
           <ClipboardPaste size={17} />
         </button>
         <button
-          aria-label="Delete"
-          title="Delete selected"
+          aria-label={t("Delete")}
+          title={t("Delete selected")}
           hidden={viewMode === "map"}
           disabled={!selection.length}
           onClick={del}
@@ -1335,13 +1394,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <div
           className="building-view-switch"
           role="group"
-          aria-label="Drawing view"
+          aria-label={t("Drawing view")}
         >
           <button
             aria-pressed={viewMode === "plan"}
             onClick={() => changeViewMode("plan")}
           >
-            Floor plan
+            {t("Floor plan")}
           </button>
           <button
             aria-pressed={viewMode === "3d"}
@@ -1353,7 +1412,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             aria-pressed={viewMode === "map"}
             onClick={() => changeViewMode("map")}
           >
-            Map
+            {t("Map")}
           </button>
         </div>
         <button
@@ -1361,24 +1420,24 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           className={snap ? "snap-toggle active" : "snap-toggle"}
           aria-pressed={snap}
           onClick={() => setSnap(!snap)}
-          title="Snap to grid, endpoints and alignments"
+          title={t("Snap to grid, endpoints and alignments")}
         >
           <Magnet size={16} />
-          <span>Snap {snap ? "on" : "off"}</span>
+          <span>{t(snap ? "Snap on" : "Snap off")}</span>
         </button>
         <button
           hidden={viewMode === "map"}
           className="cancel-button"
-          aria-label="Cancel"
+          aria-label={t("Cancel")}
           onClick={cancel}
         >
           <X size={15} />
-          <span>Cancel</span>
+          <span>{t("Cancel")}</span>
         </button>
         <button
           className="properties-toggle"
           hidden={viewMode === "map"}
-          aria-label="Toggle properties"
+          aria-label={t("Toggle properties")}
           aria-expanded={panelOpen}
           onClick={() => setPanelOpen(!panelOpen)}
         >
@@ -1388,29 +1447,29 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       <main className="workspace">
         <nav
           className="tool-palette"
-          aria-label="Drawing tools"
+          aria-label={t("Drawing tools")}
           hidden={viewMode === "map"}
         >
-          {palette.map(({ tool: t, label, icon: Icon, key }, idx) => (
+          {palette.map(({ tool: entryTool, label, icon: Icon, key }, idx) => (
             <button
-              key={t}
-              className={`${tool === t ? "selected " : ""}${idx === 3 || idx === 9 ? "tool-divider" : ""}`}
-              aria-label={label}
-              aria-pressed={tool === t}
-              title={`${label}${key ? " · " + key : ""}`}
-              onClick={() => chooseTool(t)}
+              key={entryTool}
+              className={`${tool === entryTool ? "selected " : ""}${idx === 3 || idx === 9 ? "tool-divider" : ""}`}
+              aria-label={t(label)}
+              aria-pressed={tool === entryTool}
+              title={`${t(label)}${key ? " · " + key : ""}`}
+              onClick={() => chooseTool(entryTool)}
             >
               <Icon size={21} strokeWidth={1.65} />
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </button>
           ))}
           <button
             className="help-tool"
-            aria-label="Help and shortcuts"
+            aria-label={t("Help and shortcuts")}
             onClick={() => setHelp(true)}
           >
             <HelpCircle size={21} />
-            <span>Help</span>
+            <span>{t("Help")}</span>
           </button>
         </nav>
         <section className="drawing-region">
@@ -1421,10 +1480,12 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           >
             <div className="drawing-topline">
               <span>
-                <span className="tiny-square" /> FLOOR PLAN{" "}
+                <span className="tiny-square" /> {t("FLOOR PLAN")}{" "}
                 <span className="muted">/</span>{" "}
                 <b className={ghost ? "plan-overlay-key" : undefined}>
-                  {ghost ? `${reference!.name} overlay` : "DESIGN MODE"}
+                  {ghost
+                    ? t("{name} overlay", { name: drawingName(reference!) })
+                    : t("DESIGN MODE")}
                 </b>
               </span>
               <button
@@ -1438,16 +1499,18 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 <ImageIcon size={14} />
                 <span>
                   {plan.traceReference
-                    ? "Tracing reference"
-                    : "Import reference"}
+                    ? t("Tracing reference")
+                    : t("Import reference")}
                 </span>
               </button>
             </div>
             {!plan.calibration.calibrated && (
               <div className="calibration-banner">
-                <span>Uncalibrated drawing · distances are drawing units</span>
+                <span>
+                  {t("Uncalibrated drawing · distances are drawing units")}
+                </span>
                 <button onClick={() => setTool("calibrate")}>
-                  <Ruler size={14} /> Calibrate scale
+                  <Ruler size={14} /> {t("Calibrate scale")}
                 </button>
               </div>
             )}
@@ -1458,33 +1521,33 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <div className="context-toolbar">
                 {tool === "furniture" ? (
                   <>
-                    <span>PLACE</span>
+                    <span>{t("PLACE")}</span>
                     <select
-                      aria-label="Furniture symbol"
+                      aria-label={t("Furniture symbol")}
                       value={kind}
                       onChange={(e) => setKind(e.target.value as FurnitureKind)}
                     >
                       {Object.entries(furniture).map(([k, { label }]) => (
                         <option key={k} value={k}>
-                          {label}
+                          {t(label)}
                         </option>
                       ))}
                     </select>
                   </>
                 ) : tool === "door" ? (
                   <>
-                    <span>PLACE</span>
+                    <span>{t("PLACE")}</span>
                     <DoorStyleSelect
-                      label="New door type"
+                      label={t("New door type")}
                       value={doorStyle}
                       onChange={setDoorStyle}
                     />
                   </>
                 ) : (
                   <>
-                    <span>WALL THICKNESS</span>
+                    <span>{t("WALL THICKNESS")}</span>
                     <input
-                      aria-label="New wall thickness"
+                      aria-label={t("New wall thickness")}
                       type="number"
                       min={1}
                       max={200}
@@ -1496,7 +1559,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       }
                     />
                     <small>
-                      {plan.calibration.calibrated ? "cm" : "units"}
+                      {plan.calibration.calibrated ? "cm" : t("units")}
                     </small>
                   </>
                 )}
@@ -1532,7 +1595,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <div className="canvas-bottom">
               <div className="canvas-bottom-left">
                 <span className="floor-chip">
-                  01 <span>Ground floor</span>
+                  01 <span>{t("Ground floor")}</span>
                 </span>
                 {overlap.length > 1 && (
                   <div className="dropdown-anchor">
@@ -1541,7 +1604,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                       onClick={() => setOverlapOpen(!overlapOpen)}
                     >
                       <Layers size={15} />
-                      {overlap.length} overlapping <ChevronDown size={12} />
+                      {t("{count} overlapping", { count: overlap.length })}{" "}
+                      <ChevronDown size={12} />
                     </button>
                     {overlapOpen && (
                       <div className="dropdown overlap-dropdown">
@@ -1564,17 +1628,20 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 )}
               </div>
               <div className="zoom-controls">
-                <button aria-label="Zoom out" onClick={() => zoom(1 / 1.25)}>
+                <button
+                  aria-label={t("Zoom out")}
+                  onClick={() => zoom(1 / 1.25)}
+                >
                   <Minus size={17} />
                 </button>
                 <span>{Math.round(camera.k * 100)}%</span>
-                <button aria-label="Zoom in" onClick={() => zoom(1.25)}>
+                <button aria-label={t("Zoom in")} onClick={() => zoom(1.25)}>
                   <Plus size={17} />
                 </button>
                 <span className="zoom-divider" />
                 <button
-                  aria-label="Fit drawing"
-                  title="Fit drawing · 0"
+                  aria-label={t("Fit drawing")}
+                  title={t("Fit drawing · 0")}
                   onClick={() => fit()}
                 >
                   <Maximize size={17} />
@@ -1587,7 +1654,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <Suspense
                 fallback={
                   <p className="building-view-loading" role="status">
-                    Loading 3D view…
+                    {t("Loading 3D view…")}
                   </p>
                 }
               >
@@ -1609,7 +1676,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <Suspense
                 fallback={
                   <p className="building-view-loading" role="status">
-                    Loading map…
+                    {t("Loading map…")}
                   </p>
                 }
               >
@@ -1633,7 +1700,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         {panelOpen && viewMode !== "map" && (
           <button
             className="drawer-scrim"
-            aria-label="Close properties"
+            aria-label={t("Close properties")}
             onClick={() => setPanelOpen(false)}
           />
         )}
@@ -1647,30 +1714,30 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onClick={() => setTab("properties")}
             >
               <SlidersHorizontal size={15} />
-              Properties
+              {t("Properties")}
             </button>
             <button
               className={tab === "objects" ? "active" : ""}
               onClick={() => setTab("objects")}
             >
               <Layers size={15} />
-              Objects
+              {t("Objects")}
             </button>
             <button
               className={tab === "layers" ? "active" : ""}
               onClick={() => setTab("layers")}
             >
-              Layers
+              {t("Layers")}
             </button>
             <button
               className={tab === "building" ? "active" : ""}
               onClick={() => setTab("building")}
             >
-              Building
+              {t("Building")}
             </button>
             <button
               className="drawer-close"
-              aria-label="Close properties panel"
+              aria-label={t("Close properties panel")}
               onClick={() => setPanelOpen(false)}
             >
               <X size={17} />
@@ -1680,7 +1747,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <Properties
               plan={plan}
               rooms={rooms}
-              roomError={roomError}
+              roomError={roomError && t(roomError)}
               exterior={exterior}
               selection={visibleSelection}
               commit={commit}
@@ -1712,20 +1779,23 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <label className="object-search">
                 <Search size={15} />
                 <input
-                  placeholder="Find objects…"
-                  aria-label="Find objects"
+                  placeholder={t("Find objects…")}
+                  aria-label={t("Find objects")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </label>
               <div className="objects-summary">
-                {matching.length.toLocaleString()} objects{" "}
+                {t(
+                  matching.length === 1 ? "{count} object" : "{count} objects",
+                  { count: matching.length.toLocaleString(language) },
+                )}{" "}
                 <button
                   onClick={() => {
                     setSelection(shown.items.map((i) => i.id));
                   }}
                 >
-                  Select all
+                  {t("Select all")}
                 </button>
               </div>
               <div className="object-list">
@@ -1746,7 +1816,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                     </span>
                     <span>
                       {i.name}
-                      <small>{i.type}</small>
+                      <small>
+                        {language === "en" ? i.type : t(itemTypes[i.type])}
+                      </small>
                     </span>
                     {isItemLocked(plan, i) && <LockKeyhole size={13} />}
                   </button>
@@ -1754,13 +1826,16 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               </div>
               {matching.length > 150 && (
                 <p className="notice">
-                  Showing first 150. Search an object name to find any element.
+                  {t(
+                    "Showing first 150. Search an object name to find any element.",
+                  )}
                 </p>
               )}
             </div>
           )}
           <div className="inspector-footer">
-            <span className="save-dot" /> One floor. Endless possibilities.
+            <span className="save-dot" />{" "}
+            {t("One floor. Endless possibilities.")}
           </div>
         </aside>
       </main>
@@ -1768,34 +1843,35 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <span>
           <span className="status-dot" />
           {viewMode === "map"
-            ? "Map"
+            ? t("Map")
             : viewMode === "3d" && !selected.length
-              ? "3D view"
+              ? t("3D view")
               : selected.length
-                ? `${selected.length} selected`
+                ? t("{count} selected", { count: selected.length })
                 : tool === "select"
-                  ? "Ready to design"
-                  : palette.find((p) => p.tool === tool)?.label || "Select"}
+                  ? t("Ready to design")
+                  : toolLabel}
         </span>
         {viewMode === "plan" && (
           <>
             <span className="navigation-hint">
-              Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
+              {t("Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch")}
             </span>
             <span className="coordinate-readout">
-              {coords} {plan.calibration.calibrated ? "cm" : "units"}
+              {coords} {plan.calibration.calibrated ? "cm" : t("units")}
               <span className="status-separator" />
-              Grid {plan.grid} {plan.calibration.calibrated ? "cm" : "units"}
+              {t("Grid")} {plan.grid}{" "}
+              {plan.calibration.calibrated ? "cm" : t("units")}
             </span>
           </>
         )}
       </footer>
       {notice && (
         <div role="status" className="toast">
-          {notice}
+          {t(notice.message, notice.values)}
           <button
-            aria-label="Dismiss notification"
-            onClick={() => setNotice("")}
+            aria-label={t("Dismiss notification")}
+            onClick={() => setNotice(null)}
           >
             <X size={15} />
           </button>
@@ -1805,8 +1881,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         <div className="modal-backdrop">
           <div className="modal">
             <div className="spinner" />
-            <h2>Preparing your drawing…</h2>
-            <p>Validating architectural objects and their relationships.</p>
+            <h2>{t("Preparing your drawing…")}</h2>
+            <p>
+              {t("Validating architectural objects and their relationships.")}
+            </p>
           </div>
         </div>
       )}
@@ -1816,7 +1894,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           drawing={activeDrawing}
           canAdd={canAddProposal}
           canRestore={canAddProposal && deletedProposals.length > 0}
-          notice={notice}
+          notice={notice ? t(notice.message, notice.values) : ""}
           onClose={() => setManageOpen(false)}
           onRename={renameActiveProposal}
           onDuplicate={() => duplicateAsProposal()}
@@ -1846,38 +1924,41 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           >
             <button
               className="modal-close"
-              aria-label="Close more drawings"
+              aria-label={t("Close more drawings")}
               onClick={() => setDrawingToolsOpen(false)}
             >
               <X size={16} />
             </button>
-            <h2 id="drawing-tools-title">More drawings and measurements</h2>
+            <h2 id="drawing-tools-title">
+              {t("More drawings and measurements")}
+            </h2>
             <p>
-              Open a side view, mark a site map or estimate building areas for a
-              simple rectangular building.
+              {t(
+                "Open a side view, mark a site map or estimate building areas for a simple rectangular building.",
+              )}
             </p>
             <div
               className="drawing-tools-tabs"
               role="group"
-              aria-label="Drawing tools"
+              aria-label={t("Drawing tools")}
             >
               <button
                 aria-pressed={drawingTool === "area"}
                 onClick={() => setDrawingTool("area")}
               >
-                Building areas
+                {t("Building areas")}
               </button>
               <button
                 aria-pressed={drawingTool === "views"}
                 onClick={() => setDrawingTool("views")}
               >
-                Section and elevations
+                {t("Section and elevations")}
               </button>
               <button
                 aria-pressed={drawingTool === "site"}
                 onClick={() => setDrawingTool("site")}
               >
-                Site plan
+                {t("Site plan")}
               </button>
             </div>
             {drawingTool === "area" ? (
@@ -1924,7 +2005,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       )}
       {replacement && (
         <ReplaceProjectDialog
-          action={replacement.action}
+          action={t(replacement.action)}
           onClose={() => setReplacement(null)}
           onContinue={continueReplacement}
         />
@@ -1953,7 +2034,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       )}
       {saveOpen && (
         <SaveDialog
-          initialName={projectRef.current.name || "Untitled"}
+          initialName={projectRef.current.name || t("Untitled")}
           onClose={() => setSaveOpen(false)}
           onSave={(filename) => void save(filename)}
         />
@@ -1964,11 +2045,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             className="modal"
             role="dialog"
             aria-modal="true"
-            aria-label={measure.calibrate ? "Calibrate scale" : "Measurement"}
+            aria-label={
+              measure.calibrate ? t("Calibrate scale") : t("Measurement")
+            }
           >
             <button
               className="modal-close"
-              aria-label="Close measurement"
+              aria-label={t("Close measurement")}
               onClick={() => setMeasure(null)}
             >
               <X size={20} />
@@ -1977,35 +2060,35 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <Ruler size={25} />
             </div>
             <span className="eyebrow">
-              {measure.calibrate ? "SET THE SCALE" : "POINT TO POINT"}
+              {measure.calibrate ? t("SET THE SCALE") : t("POINT TO POINT")}
             </span>
             <h2>
               {measure.calibrate
-                ? "One known distance."
-                : "A little more precise."}
+                ? t("One known distance.")
+                : t("A little more precise.")}
             </h2>
             <p className="measure-value">
               {dist(measure.a, measure.b).toFixed(2)}{" "}
               <small>
-                {plan.calibration.calibrated ? "cm" : "drawing units"}
+                {plan.calibration.calibrated ? "cm" : t("drawing units")}
               </small>
             </p>
             {measure.calibrate ? (
               <>
                 <p>
-                  Enter the real distance between your two points. This rescales
-                  the entire floor plan, including hidden and locked objects and
-                  any tracing reference. The site map keeps its own scale.
+                  {t(
+                    "Enter the real distance between your two points. This rescales the entire floor plan, including hidden and locked objects and any tracing reference. The site map keeps its own scale.",
+                  )}
                 </p>
                 <label className="field">
-                  <span>Real distance in centimeters</span>
+                  <span>{t("Real distance in centimeters")}</span>
                   <input
                     autoFocus
-                    aria-label="Real distance in centimeters"
+                    aria-label={t("Real distance in centimeters")}
                     type="number"
                     min="0.001"
                     step="any"
-                    placeholder="e.g. 500"
+                    placeholder={t("e.g. 500")}
                     value={realDistance}
                     onChange={(e) => setRealDistance(e.target.value)}
                   />
@@ -2031,7 +2114,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                     }
                   }}
                 >
-                  Apply scale <Check size={17} />
+                  {t("Apply scale")} <Check size={17} />
                 </button>
               </>
             ) : (
@@ -2041,7 +2124,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                     setMeasure({ ...measure, calibrate: true });
                   }}
                 >
-                  Use for calibration
+                  {t("Use for calibration")}
                 </button>
                 <button
                   className="primary"
@@ -2067,7 +2150,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                     setSelection([i.id]);
                   }}
                 >
-                  Add dimension
+                  {t("Add dimension")}
                 </button>
               </div>
             )}
@@ -2080,67 +2163,70 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             className="modal help-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Planform help"
+            aria-label={t("Planform help")}
           >
             <button
               className="modal-close"
-              aria-label="Close help"
+              aria-label={t("Close help")}
               onClick={() => setHelp(false)}
             >
               <X size={20} />
             </button>
-            <span className="eyebrow">A QUICK FIELD GUIDE</span>
-            <h2>Your next space starts here.</h2>
+            <span className="eyebrow">{t("A QUICK FIELD GUIDE")}</span>
+            <h2>{t("Your next space starts here.")}</h2>
             <p>
-              Draw walls by clicking connected corners, or drag a Room. Use
-              Finish or Cancel to stop. Doors and windows attach to walls.
+              {t(
+                "Draw walls by clicking connected corners, or drag a Room. Use Finish or Cancel to stop. Doors and windows attach to walls.",
+              )}
             </p>
             <p>
-              Drag selected objects to move them. Circular wall handles edit
-              shared corners. A square handle resizes symbols; the upper
-              circular handle rotates. Properties provides exact numbers.
+              {t(
+                "Drag selected objects to move them. Circular wall handles edit shared corners. A square handle resizes symbols; the upper circular handle rotates. Properties provides exact numbers.",
+              )}
             </p>
             <p>
-              Use Box select, Shift-click, Objects search, or the
-              overlapping-object picker for dense drawings. Lock objects from
-              Properties. Select two symbols and use Group in Properties.
+              {t(
+                "Use Box select, Shift-click, Objects search, or the overlapping-object picker for dense drawings. Lock objects from Properties. Select two symbols and use Group in Properties.",
+              )}
             </p>
             <p>
-              Scroll to pan; Ctrl/⌘ + scroll or pinch to zoom. Pan tool makes
-              navigation explicit. Every tool and edit action also has a visible
-              control.
+              {t(
+                "Scroll to pan; Ctrl/⌘ + scroll or pinch to zoom. Pan tool makes navigation explicit. Every tool and edit action also has a visible control.",
+              )}
             </p>
             <p>
-              Open Building to set floor heights and a roof. Switch to 3D to
-              inspect the building and select walls or openings.
+              {t(
+                "Open Building to set floor heights and a roof. Switch to 3D to inspect the building and select walls or openings.",
+              )}
             </p>
             <div className="shortcuts">
               <span>V / H / W / F / M</span>
-              <b>Select / Pan / Wall / Furniture / Measure</b>
+              <b>{t("Select / Pan / Wall / Furniture / Measure")}</b>
               <span>⌘/Ctrl Z / Shift Z</span>
-              <b>Undo / Redo</b>
+              <b>{t("Undo / Redo")}</b>
               <span>⌘/Ctrl C / V / D</span>
-              <b>Copy / Paste / Duplicate</b>
-              <span>Escape / 0</span>
-              <b>Cancel / Fit drawing</b>
+              <b>{t("Copy / Paste / Duplicate")}</b>
+              <span>{t("Escape / 0")}</span>
+              <b>{t("Cancel / Fit drawing")}</b>
             </div>
             <p className="notice">
-              Dimensions measure their own endpoints and do not attach to walls.
-              Project downloads preserve every editable object.
+              {t(
+                "Dimensions measure their own endpoints and do not attach to walls. Project downloads preserve every editable object.",
+              )}
             </p>
             <p className="github-help">
-              Planform is open source.{" "}
+              {t("Planform is open source.")}{" "}
               <a
                 href="https://github.com/judoole/planform"
                 target="_blank"
                 rel="noreferrer"
               >
-                View the project on GitHub
+                {t("View the project on GitHub")}
               </a>
               .
             </p>
             <button className="primary wide" onClick={() => setHelp(false)}>
-              Start planning <ChevronRight size={17} />
+              {t("Start planning")} <ChevronRight size={17} />
             </button>
           </section>
         </div>

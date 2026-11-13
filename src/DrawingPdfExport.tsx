@@ -1,3 +1,4 @@
+import { useLanguage, useTranslation } from "./i18n";
 import { useEffect, useMemo, useState } from "react";
 import {
   drawingPdfOptions,
@@ -28,9 +29,11 @@ export default function DrawingPdfExport({
   mapBackground: BackgroundId;
   parcels: ReturnType<typeof useParcelMap>;
 }) {
+  const t = useTranslation();
+  const language = useLanguage();
   const { pages, canRender3D } = useMemo(
-    () => drawingPdfPages(plan, parcels.data),
-    [plan, parcels.data],
+    () => drawingPdfPages(plan, parcels.data, language),
+    [plan, parcels.data, language],
   );
   const [options, setOptions] = useState<SheetOptions>({
     ...defaultSheetOptions,
@@ -41,6 +44,7 @@ export default function DrawingPdfExport({
   const [active, setActive] = useState<string>();
   const [snapshotResult, setSnapshotResult] = useState<{
     plan: Plan;
+    language: typeof language;
     pages: DrawingPdfPage[];
     error?: string;
   }>();
@@ -52,12 +56,17 @@ export default function DrawingPdfExport({
     void import("./buildingSnapshot")
       .then(({ buildingSnapshotPages }) => {
         if (current)
-          setSnapshotResult({ plan, pages: buildingSnapshotPages(plan) });
+          setSnapshotResult({
+            plan,
+            language,
+            pages: buildingSnapshotPages(plan, language),
+          });
       })
       .catch(() => {
         if (current)
           setSnapshotResult({
             plan,
+            language,
             pages: [],
             error:
               "The browser could not render the 3D views. The other pages can still be downloaded.",
@@ -66,9 +75,13 @@ export default function DrawingPdfExport({
     return () => {
       current = false;
     };
-  }, [canRender3D, plan]);
+  }, [canRender3D, plan, language]);
   const snapshots =
-    canRender3D && snapshotResult?.plan === plan ? snapshotResult : undefined;
+    canRender3D &&
+    snapshotResult?.plan === plan &&
+    snapshotResult.language === language
+      ? snapshotResult
+      : undefined;
   const snapshotLoading = canRender3D && !snapshots;
   const choices: DrawingPdfPage[] = [...pages];
   if (snapshots)
@@ -80,7 +93,7 @@ export default function DrawingPdfExport({
   function makePage(page: DrawingPdfPage) {
     const settings = drawingPdfOptions(
       page,
-      options,
+      { ...options, language },
       plan.calibration.calibrated,
     );
     return { drawing: page.drawing, options: settings };
@@ -119,11 +132,13 @@ export default function DrawingPdfExport({
         options={options}
         onChange={setOptions}
         allowFit
-        scaleLabel="Drawing scale"
+        scaleLabel={t("Drawing scale")}
         showScale={chosen.some((page) => page.scale === "drawing")}
       />
       <details className="pdf-page-choices">
-        <summary>Pages included ({chosen.length})</summary>
+        <summary>
+          {t("Pages included ({count})", { count: chosen.length })}
+        </summary>
         {choices.map((page) => (
           <label key={page.id}>
             <input
@@ -143,9 +158,9 @@ export default function DrawingPdfExport({
       </details>
       {chosen.length > 1 && (
         <label className="field">
-          <span>Preview page</span>
+          <span>{t("Preview page")}</span>
           <select
-            aria-label="Preview page"
+            aria-label={t("Preview page")}
             value={shown.id}
             onChange={(event) => setActive(event.target.value)}
           >
@@ -160,29 +175,35 @@ export default function DrawingPdfExport({
       {preview && (
         <img
           className="sheet-preview"
-          alt="PDF page preview"
+          alt={t("PDF page preview")}
           src={`data:image/svg+xml,${encodeURIComponent(preview)}`}
         />
       )}
       {includeMap && !backgrounds[mapBackground].exportable && (
         <p>
-          PDF background: {printBackground.label} (Kartverket). The{" "}
-          {backgrounds[mapBackground].label.toLowerCase()} background is for
-          on-screen use.
+          {t(
+            "PDF background: {print} (Kartverket). The {screen} background is for on-screen use.",
+            {
+              print: t(printBackground.label),
+              screen: t(backgrounds[mapBackground].label).toLowerCase(),
+            },
+          )}
         </p>
       )}
       {waitingForMap && (
-        <p role="status">Loading map boundaries for the PDF…</p>
+        <p role="status">{t("Loading map boundaries for the PDF…")}</p>
       )}
       {includeMap && !waitingForMap && !parcels.data.selected.length && (
-        <p>The selected parcel boundary is unavailable for this PDF.</p>
+        <p>{t("The selected parcel boundary is unavailable for this PDF.")}</p>
       )}
-      {snapshotLoading && <p role="status">Preparing the 3D views…</p>}
-      {snapshots?.error && <p role="status">{snapshots.error}</p>}
+      {snapshotLoading && <p role="status">{t("Preparing the 3D views…")}</p>}
+      {snapshots?.error && <p role="status">{t(snapshots.error)}</p>}
       {!choices.length && !snapshotLoading && (
-        <p>Add something to your drawing before exporting.</p>
+        <p>{t("Add something to your drawing before exporting.")}</p>
       )}
-      {(previewError || error) && <p role="alert">{previewError || error}</p>}
+      {(previewError || error) && (
+        <p role="alert">{t(previewError || error)}</p>
+      )}
       <button
         className="primary"
         disabled={
@@ -194,7 +215,7 @@ export default function DrawingPdfExport({
         }
         onClick={() => void save()}
       >
-        {saving ? "Preparing PDF…" : "Download PDF"}
+        {t(saving ? "Preparing PDF…" : "Download PDF")}
       </button>
     </div>
   );

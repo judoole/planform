@@ -1,3 +1,4 @@
+import { fixed, translate, type Language } from "./messages";
 import { renderToStaticMarkup } from "react-dom/server";
 import { pointsBox, type Plan, type Point } from "./model";
 import {
@@ -22,7 +23,15 @@ const colors = {
   parking: "#23747d",
 };
 
-export function SiteArtwork({ plan, site }: { plan: Plan; site: GarageSite }) {
+export function SiteArtwork({
+  plan,
+  site,
+  language = "en",
+}: {
+  plan: Plan;
+  site: GarageSite;
+  language?: Language;
+}) {
   const { width, height, dataUrl } = site.map;
   let garage: ReturnType<typeof siteGarageGeometry> | undefined;
   if (siteScale(site) && site.placement) {
@@ -108,7 +117,7 @@ export function SiteArtwork({ plan, site }: { plan: Plan; site: GarageSite }) {
               paintOrder="stroke"
               textAnchor="middle"
             >
-              {index + 1} · {distanceM.toFixed(2)} m
+              {index + 1} · {fixed(distanceM, 2, language)} m
             </text>
           </g>
         ))}
@@ -140,7 +149,12 @@ export function SiteArtwork({ plan, site }: { plan: Plan; site: GarageSite }) {
   );
 }
 
-export function sitePlanSheet(plan: Plan, propertyId: string): SheetDrawing {
+export function sitePlanSheet(
+  plan: Plan,
+  propertyId: string,
+  language: Language = "en",
+): SheetDrawing {
+  const t = translate(language);
   const site = plan.garage?.site;
   if (!site) throw Error("Import a map from your computer.");
   const problem = siteMapProblem(site);
@@ -159,19 +173,23 @@ export function sitePlanSheet(plan: Plan, propertyId: string): SheetDrawing {
     ]),
   );
   return {
-    title: "Site plan",
+    title: t("Site plan"),
     bounds: { x: -5, y: -5, w: width * scale + 10, h: height * scale + 10 },
     markup: renderToStaticMarkup(
       <g transform={`scale(${scale})`}>
-        <SiteArtwork plan={plan} site={site} />
+        <SiteArtwork plan={plan} site={site} language={language} />
       </g>,
     ),
     legend: [
-      ...(propertyId.trim() ? [`Property: ${propertyId.trim()}`] : []),
-      "Distances measured horizontally from the outside walls on the supplied map.",
+      ...(propertyId.trim()
+        ? [t("Property: {reference}", { reference: propertyId.trim() })]
+        : []),
+      t(
+        "Distances measured horizontally from the outside walls on the supplied map.",
+      ),
       ...site.features.map((feature, i) => {
         const distance = distances.get(i);
-        return `${i + 1}. ${feature.name || siteFeatureNames[feature.kind]}${distance !== undefined ? ` - ${distance.toFixed(2)} m` : ""}${feature.correction ? ` - ${feature.correction}` : ""}`;
+        return `${i + 1}. ${feature.name || t(siteFeatureNames[feature.kind])}${distance !== undefined ? ` - ${fixed(distance, 2, language)} m` : ""}${feature.correction ? ` - ${feature.correction}` : ""}`;
       }),
     ],
   };

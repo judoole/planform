@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useState, type MouseEvent } from "react";
 import type { GarageDetails } from "./garage";
 import { SiteArtwork, sitePlanSheet } from "./garageSite";
@@ -25,6 +26,7 @@ export default function GarageSitePanel({
   plan: Plan;
   onChange: (details: GarageDetails) => void;
 }) {
+  const t = useTranslation();
   const [choose, setChoose] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
   const [points, setPoints] = useState<Point[]>([]);
@@ -137,14 +139,15 @@ export default function GarageSitePanel({
 
   return (
     <>
-      <h3>Site plan</h3>
+      <h3>{t("Site plan")}</h3>
       <p>
-        Import a local map, calibrate its scale bar and place the building. Map
-        calibration uses a separate scale from the floor plan.
+        {t(
+          "Import a local map, calibrate its scale bar and place the building. Map calibration uses a separate scale from the floor plan.",
+        )}
       </p>
       <div className="sheet-fields">
         <button onClick={() => setChoose(true)}>
-          {site ? "Replace map" : "Import map"}
+          {t(site ? "Replace map" : "Import map")}
         </button>
         {site && (
           <button
@@ -153,17 +156,17 @@ export default function GarageSitePanel({
               start("idle");
             }}
           >
-            Remove map
+            {t("Remove map")}
           </button>
         )}
         {site && (
           <button onClick={() => start("calibrate")}>
-            {scale ? "Recalibrate map" : "Calibrate map"}
+            {t(scale ? "Recalibrate map" : "Calibrate map")}
           </button>
         )}
         {site && (
           <button disabled={!scale} onClick={() => start("place")}>
-            {site.placement ? "Move building" : "Place building"}
+            {t(site.placement ? "Move building" : "Place building")}
           </button>
         )}
         {site && (
@@ -171,11 +174,11 @@ export default function GarageSitePanel({
             disabled={site.features.length >= 15}
             onClick={() => start("feature")}
           >
-            Mark map feature
+            {t("Mark map feature")}
           </button>
         )}
         {mode !== "idle" && (
-          <button onClick={() => start("idle")}>Cancel map edit</button>
+          <button onClick={() => start("idle")}>{t("Cancel map edit")}</button>
         )}
       </div>
       {choose && (
@@ -195,27 +198,33 @@ export default function GarageSitePanel({
         <>
           <p>
             {site.map.name}
-            {site.map.page ? ` · Page ${site.map.page}` : ""} ·{" "}
-            {scale ? "Calibrated" : "Awaiting calibration"} · Locked map
+            {site.map.page
+              ? ` · ${t("Page {number}", { number: site.map.page })}`
+              : ""}{" "}
+            · {t(scale ? "Calibrated" : "Awaiting calibration")}
+            {" · "}
+            {t("Locked map")}
           </p>
           {mode === "calibrate" && (
             <p>
-              Select the two ends of the scale bar, then enter the known
-              distance.
+              {t(
+                "Select the two ends of the scale bar, then enter the known distance.",
+              )}
             </p>
           )}
           {mode === "place" && (
-            <p>Click the centre of the proposed building.</p>
+            <p>{t("Click the centre of the proposed building.")}</p>
           )}
           {mode === "feature" && (
             <p>
-              Click points along the map feature. For parking, mark at least
-              three corners.
+              {t(
+                "Click points along the map feature. For parking, mark at least three corners.",
+              )}
             </p>
           )}
           <svg
             className={`garage-site-map ${mode === "idle" ? "" : "marking"}`}
-            aria-label="Site map"
+            aria-label={t("Site map")}
             role="img"
             viewBox={`0 0 ${site.map.width} ${site.map.height}`}
             onClick={clickMap}
@@ -242,7 +251,7 @@ export default function GarageSitePanel({
           {mode !== "idle" && (
             <div className="sheet-fields">
               <label>
-                Map X (pixels)
+                {t("Map X (pixels)")}
                 <input
                   id="site-map-x"
                   type="number"
@@ -251,7 +260,7 @@ export default function GarageSitePanel({
                 />
               </label>
               <label>
-                Map Y (pixels)
+                {t("Map Y (pixels)")}
                 <input
                   id="site-map-y"
                   type="number"
@@ -283,14 +292,14 @@ export default function GarageSitePanel({
                   addPoint({ x, y });
                 }}
               >
-                Add map point
+                {t("Add map point")}
               </button>
             </div>
           )}
           {mode === "calibrate" && (
             <div className="sheet-fields">
               <label>
-                Known distance (m)
+                {t("Known distance (m)")}
                 <input
                   type="number"
                   min={0.01}
@@ -301,27 +310,27 @@ export default function GarageSitePanel({
                 />
               </label>
               <button disabled={points.length !== 2} onClick={calibrate}>
-                Apply map calibration
+                {t("Apply map calibration")}
               </button>
             </div>
           )}
           {mode === "feature" && (
             <div className="sheet-fields">
               <label>
-                Feature type
+                {t("Feature type")}
                 <select
                   value={kind}
                   onChange={(e) => setKind(e.target.value as SiteFeatureKind)}
                 >
                   {Object.entries(siteFeatureNames).map(([value, label]) => (
                     <option key={value} value={value}>
-                      {label}
+                      {t(label)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                Feature label
+                {t("Feature label")}
                 <input
                   maxLength={36}
                   value={name}
@@ -329,7 +338,7 @@ export default function GarageSitePanel({
                 />
               </label>
               <label>
-                Distance correction or basis
+                {t("Distance correction or basis")}
                 <input
                   maxLength={60}
                   value={correction}
@@ -340,19 +349,19 @@ export default function GarageSitePanel({
                 disabled={points.length < (kind === "parking" ? 3 : 2)}
                 onClick={addFeature}
               >
-                Save feature
+                {t("Save feature")}
               </button>
             </div>
           )}
           <div className="sheet-fields">
             <AngleField
-              label="North direction from map up (degrees clockwise)"
+              label={t("North direction from map up (degrees clockwise)")}
               angle={site.northDegrees}
               onAngle={(northDegrees) => update({ ...site, northDegrees })}
             />
             {site.placement && (
               <AngleField
-                label="Building rotation (degrees clockwise)"
+                label={t("Building rotation (degrees clockwise)")}
                 angle={site.placement.rotation}
                 onAngle={(rotation) =>
                   update({
@@ -363,14 +372,14 @@ export default function GarageSitePanel({
               />
             )}
           </div>
-          {error && <p role="alert">{error}</p>}
-          {garageProblem && <p role="alert">{garageProblem}</p>}
+          {error && <p role="alert">{t(error)}</p>}
+          {garageProblem && <p role="alert">{t(garageProblem)}</p>}
           {site.features.length > 0 && (
             <ol className="site-features">
               {site.features.map((feature, index) => (
                 <li key={index}>
                   <strong>
-                    {feature.name || siteFeatureNames[feature.kind]}
+                    {feature.name || t(siteFeatureNames[feature.kind])}
                   </strong>
                   {distances.has(index) &&
                     ` · ${distances.get(index)!.toFixed(2)} m`}
@@ -383,19 +392,19 @@ export default function GarageSitePanel({
                       })
                     }
                   >
-                    Remove feature {index + 1}
+                    {t("Remove feature {number}", { number: index + 1 })}
                   </button>
                 </li>
               ))}
             </ol>
           )}
           <p>
-            Distances are horizontal measurements from the outside faces on the
-            supplied map. Record any survey or roof projection corrections with
-            the feature.
+            {t(
+              "Distances are horizontal measurements from the outside faces on the supplied map. Record any survey or roof projection corrections with the feature.",
+            )}
           </p>
           <label className="field">
-            <span>Property reference (optional)</span>
+            <span>{t("Property reference (optional)")}</span>
             <input
               value={propertyId}
               maxLength={120}
@@ -411,7 +420,7 @@ export default function GarageSitePanel({
             />
           </label>
           <SheetExport
-            build={() => sitePlanSheet(plan, propertyId)}
+            build={({ language }) => sitePlanSheet(plan, propertyId, language)}
             name={plan.name}
             initialScale={500}
           />

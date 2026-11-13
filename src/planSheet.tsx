@@ -1,3 +1,5 @@
+import { LanguageScope } from "./i18n";
+import { translate, type Language } from "./messages";
 import { renderToStaticMarkup } from "react-dom/server";
 import { exteriorWallLengthSummary } from "./exterior";
 import { traceForExport } from "./reference";
@@ -8,8 +10,9 @@ import type { SheetDrawing } from "./sheets";
 
 export function floorPlanSheet(
   input: Plan,
-  { fit = false } = {},
+  { fit = false, language = "en" }: { fit?: boolean; language?: Language } = {},
 ): SheetDrawing {
+  const t = translate(language);
   const visible = visiblePlan(input);
   const plan = {
     ...visible,
@@ -23,12 +26,12 @@ export function floorPlanSheet(
     throw Error("Add drawing objects before exporting a floor plan.");
   const b = planArtworkBounds(plan, undefined, false);
   const pad = 12;
-  const exteriorLengths = exteriorWallLengthSummary(plan);
+  const exteriorLengths = exteriorWallLengthSummary(plan, language);
   return {
-    title: "Floor plan - Ground floor",
+    title: t("Floor plan - Ground floor"),
     bounds: { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad },
     legend: [
-      ...phaseLegend(plan),
+      ...phaseLegend(plan, language),
       ...(exteriorLengths ? [exteriorLengths] : []),
     ],
     legendSwatches: phaseLegendStyles(plan)?.entries.map((entry, index) => ({
@@ -38,7 +41,9 @@ export function floorPlanSheet(
       dashed: "dash" in entry,
     })),
     markup: renderToStaticMarkup(
-      <PlanArtwork plan={plan} showScalePrompt={false} />,
+      <LanguageScope language={language}>
+        <PlanArtwork plan={plan} showScalePrompt={false} />
+      </LanguageScope>,
     ),
   };
 }

@@ -1,3 +1,4 @@
+import { translate, type Language } from "./messages";
 import {
   Color,
   DirectionalLight,
@@ -18,7 +19,11 @@ const views = [
 ];
 
 /** Capture both illustrations from the same geometry as the interactive view. */
-export function buildingSnapshotPages(input: Plan): DrawingPdfPage[] {
+export function buildingSnapshotPages(
+  input: Plan,
+  language: Language = "en",
+): DrawingPdfPage[] {
+  const t = translate(language);
   const plan = visiblePlan(input);
   const building = buildScene(plan);
   let renderer: WebGLRenderer | undefined;
@@ -51,8 +56,9 @@ export function buildingSnapshotPages(input: Plan): DrawingPdfPage[] {
       span * 20 + 1000,
     );
     const middle = building.height * 0.43;
-    const dimensions = exteriorWallLengthSummary(plan);
+    const dimensions = exteriorWallLengthSummary(plan, language);
     return views.map(({ id, label, direction }) => {
+      const title = t(label);
       camera.position.set(
         direction * span * 1.15,
         middle + span * 0.83,
@@ -65,13 +71,13 @@ export function buildingSnapshotPages(input: Plan): DrawingPdfPage[] {
         throw Error("The browser could not capture the rendered model.");
       return {
         id,
-        label,
+        label: title,
         scale: "fit",
         drawing: {
-          title: label,
+          title,
           bounds: { x: 0, y: 0, w: width, h: height },
           markup: `<image href="${jpeg}" width="${width}" height="${height}" />`,
-          fitLabel: "3D illustration - Not to scale",
+          fitLabel: t("3D illustration - Not to scale"),
           legend: dimensions ? [dimensions] : undefined,
         },
       };

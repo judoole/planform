@@ -1,3 +1,5 @@
+import { fixed, translate, type Language } from "./messages";
+import { useTranslation } from "./i18n";
 import { renderToStaticMarkup } from "react-dom/server";
 import { garageFootprint } from "./garage";
 import { exteriorDimensionSegments } from "./exterior";
@@ -109,6 +111,7 @@ export function garageSectionBounds(plan: Plan) {
 }
 
 export function GarageSectionMark({ plan }: { plan: Plan }) {
+  const t = useTranslation();
   const stations = sectionStations(plan);
   if (!stations) return null;
   const [a, b] = stations;
@@ -118,7 +121,11 @@ export function GarageSectionMark({ plan }: { plan: Plan }) {
   const start = { x: a.x - x * 25, y: a.y - y * 25 };
   const end = { x: b.x + x * 25, y: b.y + y * 25 };
   return (
-    <g pointerEvents="none" aria-label="Section A-A" data-section-line="true">
+    <g
+      pointerEvents="none"
+      aria-label={t("Section A-A")}
+      data-section-line="true"
+    >
       <line
         x1={start.x}
         y1={start.y}
@@ -153,7 +160,6 @@ const elevationEdge: Record<Exclude<GarageView, "section">, number> = {
   rear: 2,
   left: 3,
 };
-const m = (cm: number) => `${(cm / 100).toFixed(2)} m`;
 
 function svgPoints(points: Point[]) {
   return points.map(({ x, y }) => `${x},${y}`).join(" ");
@@ -214,13 +220,25 @@ function nearestWallOnSide(
     );
 }
 
-export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
+export function garageViewSheet(
+  plan: Plan,
+  view: GarageView,
+  language: Language = "en",
+): SheetDrawing {
+  const t = translate(language);
+  const m = (cm: number) => `${fixed(cm / 100, 2, language)} m`;
+  const viewName = t(garageViewNames[view]);
+  const number = (value: number) =>
+    String(value).replace(".", language === "nb" ? "," : ".");
   const footprint = garageFootprint(plan);
   const model = buildingGeometry(plan);
   const { floorLevel: floor, roof } = model;
   if (!roof)
     throw Error(
-      `Incomplete ${garageViewNames[view].toLowerCase()}. Set a roof in Building and close the exterior walls.`,
+      t(
+        "Incomplete {view}. Set a roof in Building and close the exterior walls.",
+        { view: viewName.toLowerCase() },
+      ),
     );
 
   const edges = exteriorDimensionSegments(footprint.corners);
@@ -240,14 +258,26 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
   const missing: string[] = [];
   for (const kind of ["existing", "proposed"] as const) {
     const profile = terrain?.[kind];
-    if (!profile || profile.length < 2) missing.push(`${kind} terrain profile`);
+    if (!profile || profile.length < 2)
+      missing.push(
+        t(
+          kind === "existing"
+            ? "existing terrain profile"
+            : "proposed terrain profile",
+        ),
+      );
     else if (
       profile[0].x > 0 ||
       profile.at(-1)!.x < span - epsilon ||
       profile.some((p, index) => index > 0 && profile[index - 1].x >= p.x)
     ) {
       missing.push(
-        `${kind} terrain spanning stations 0 to ${m(span)} in ascending order`,
+        t(
+          kind === "existing"
+            ? "existing terrain spanning stations 0 to {span} in ascending order"
+            : "proposed terrain spanning stations 0 to {span} in ascending order",
+          { span: m(span) },
+        ),
       );
     }
   }
@@ -280,14 +310,19 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
       if (!touchesCut) return [];
       if (!item.fits)
         missing.push(
-          `${item.opening.name || item.opening.type} opening within the wall height`,
+          t("{name} opening within the wall height", {
+            name: item.opening.name || t(item.opening.type),
+          }),
         );
       return [{ ...item, wall, x: position - item.opening.width / 2 }];
     }),
   );
   if (missing.length)
     throw Error(
-      `Incomplete ${garageViewNames[view].toLowerCase()}. Enter ${missing.join(", ")}.`,
+      t("Incomplete {view}. Enter {details}.", {
+        view: viewName.toLowerCase(),
+        details: missing.join(", "),
+      }),
     );
 
   const base = -floor;
@@ -366,14 +401,18 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
       });
 
   return {
-    title: garageViewNames[view],
+    title: viewName,
     bounds: { x: left, y: top, w: right - left, h: bottom - top },
     legend: [
       ...(plan.showExteriorDimensions !== false
-        ? [`${cut ? "Section width" : "Exterior wall length"}: ${m(span)}`]
+        ? [
+            t(cut ? "Section width: {span}" : "Exterior wall length: {span}", {
+              span: m(span),
+            }),
+          ]
         : []),
-      "Existing terrain (dashed brown)",
-      "Proposed terrain (solid green)",
+      t("Existing terrain (dashed brown)"),
+      t("Proposed terrain (solid green)"),
     ],
     markup: renderToStaticMarkup(
       <g
@@ -412,21 +451,26 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
               strokeWidth={4}
             />
             <text x={span / 2} y={base - 38} textAnchor="middle">
-              Ground floor
+              {t("Ground floor")}
             </text>
             <text x={span / 2} y={-high - 17} textAnchor="middle">
-              Roof pitch {roof.pitch}° · Roof thickness {roof.thickness} cm
+              {t("Roof pitch {pitch}° · Roof thickness {thickness} cm", {
+                pitch: number(roof.pitch),
+                thickness: number(roof.thickness),
+              })}
             </text>
             <text x={span / 2} y={base - 16} textAnchor="middle">
-              Wall thickness {sideWalls[0].wall.thickness} /{" "}
-              {sideWalls[1].wall.thickness} cm
+              {t("Wall thickness {left} / {right} cm", {
+                left: number(sideWalls[0].wall.thickness),
+                right: number(sideWalls[1].wall.thickness),
+              })}
             </text>
             <Measure
               x1={station(cut.innerFrom.point) + 32}
               x2={station(cut.innerFrom.point) + 32}
               y1={base - clear}
               y2={base}
-              label={`Clear height ${m(clear)}`}
+              label={t("Clear height {height}", { height: m(clear) })}
               vertical
             />
           </>
@@ -486,7 +530,12 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
           x2={span + 32}
           y1={-low}
           y2={base}
-          label={`${roof.type === "flat" ? "Roof top" : "Eaves"} ${m(low - floor)} above floor`}
+          label={t(
+            roof.type === "flat"
+              ? "Roof top {height} above floor"
+              : "Eaves {height} above floor",
+            { height: m(low - floor) },
+          )}
           vertical
         />
         {roof.type !== "flat" && (
@@ -495,12 +544,17 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
             x2={span + 75}
             y1={-high}
             y2={base}
-            label={`${roof.type === "gable" ? "Ridge" : "High edge"} ${m(high - floor)} above floor`}
+            label={t(
+              roof.type === "gable"
+                ? "Ridge {height} above floor"
+                : "High edge {height} above floor",
+              { height: m(high - floor) },
+            )}
             vertical
           />
         )}
         <text x={-10} y={base - 5} textAnchor="end">
-          Floor {m(floor)}
+          {t("Floor {elevation}", { elevation: m(floor) })}
         </text>
       </g>,
     ),

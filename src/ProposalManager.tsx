@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { MAX_PROPOSALS, type ProjectDrawing } from "./project";
@@ -29,6 +30,7 @@ export default function ProposalManager({
   onDelete: () => void;
   onRestore: () => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState(drawing.name);
   useEffect(() => {
@@ -48,33 +50,37 @@ export default function ProposalManager({
     >
       <button
         className="modal-close"
-        aria-label="Close proposals"
+        aria-label={t("Close proposals")}
         onClick={onClose}
       >
         <X size={20} />
       </button>
-      <h2 id="proposals-title">Manage proposals</h2>
+      <h2 id="proposals-title">{t("Manage proposals")}</h2>
       <p>
-        Active drawing: <strong>{drawing.name}</strong>. Keep up to{" "}
-        {MAX_PROPOSALS} independent proposals alongside Existing.
+        {t(
+          "Active drawing: {name}. Keep up to {count} independent proposals alongside Existing.",
+          { name: drawing.name, count: MAX_PROPOSALS },
+        )}
       </p>
       {!canAdd && (
         <p className="notice">
-          Maximum of {MAX_PROPOSALS} proposals reached. Delete a proposal to
-          make room for another.
+          {t(
+            "Maximum of {count} proposals reached. Delete a proposal to make room for another.",
+            { count: MAX_PROPOSALS },
+          )}
         </p>
       )}
       <div className="proposal-actions">
         <button disabled={!canAdd} onClick={onDuplicate}>
-          Copy active as new proposal
+          {t("Copy active as new proposal")}
         </button>
         {drawing.role === "proposal" && (
           <button disabled={!canAdd} onClick={onDuplicateExisting}>
-            Copy Existing as new proposal
+            {t("Copy Existing as new proposal")}
           </button>
         )}
         <button disabled={!canAdd} onClick={onImport}>
-          Import new proposal
+          {t("Import new proposal")}
         </button>
       </div>
       {drawing.role === "proposal" && (
@@ -86,9 +92,9 @@ export default function ProposalManager({
             }}
           >
             <label className="field">
-              <span>Proposal name</span>
+              <span>{t("Proposal name")}</span>
               <input
-                aria-label="Proposal name"
+                aria-label={t("Proposal name")}
                 value={name}
                 maxLength={200}
                 required
@@ -96,23 +102,23 @@ export default function ProposalManager({
               />
             </label>
             <button type="submit" disabled={!name.trim()}>
-              Rename proposal
+              {t("Rename proposal")}
             </button>
           </form>
           <div className="proposal-actions">
             <button onClick={onReplace}>
-              Replace active proposal from file
+              {t("Replace active proposal from file")}
             </button>
-            <button onClick={onDelete}>Delete active proposal</button>
+            <button onClick={onDelete}>{t("Delete active proposal")}</button>
           </div>
         </>
       )}
       <div className="modal-actions">
         <button disabled={!canRestore} onClick={onRestore}>
-          Restore last deleted
+          {t("Restore last deleted")}
         </button>
         <button className="primary" onClick={onClose}>
-          Done
+          {t("Done")}
         </button>
       </div>
       {notice && <p role="status">{notice}</p>}
