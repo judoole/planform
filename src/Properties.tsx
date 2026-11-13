@@ -38,6 +38,7 @@ import {
 import { type Room, formatRoomArea } from "./rooms";
 import type { ExteriorContour } from "./exterior";
 import WallJunctionControls from "./WallJunctionControls";
+import { dimensionEndpoints, mapDimensionAnchors } from "./dimensions";
 
 const exteriorMessages = {
   open: "Close the wall loop to show exterior dimensions.",
@@ -179,6 +180,8 @@ export default function Properties({
   );
   const statuses = new Set(items.map((item) => renovationStatus(plan, item)));
   const units = plan.calibration.calibrated ? "cm" : "units";
+  const endpoints =
+    item?.type === "dimension" ? dimensionEndpoints(item, plan.items) : null;
   function patch(changes: Partial<Item>) {
     if (!item || itemProtected) return;
     commit(
@@ -674,11 +677,12 @@ export default function Properties({
               )}
             </>
           )}
-          {item.type === "dimension" && (
+          {item.type === "dimension" && endpoints && (
             <div className="panel-section">
               <h3>Dimension</h3>
               <p className="measure-value">
-                {dist(item.a, item.b).toFixed(1)} <small>{units}</small>
+                {dist(endpoints.a, endpoints.b).toFixed(1)}{" "}
+                <small>{units}</small>
               </p>
               <NumberField
                 label="Annotation offset"
@@ -686,22 +690,65 @@ export default function Properties({
                 value={item.offset}
                 onChange={(v) => patch({ offset: v })}
               />
-              {(["a", "b"] as const).map((end, n) => (
-                <div className="field-grid" key={end}>
-                  <NumberField
-                    label={`${n ? "End" : "Start"} X`}
-                    unit={units}
-                    value={item[end].x}
-                    onChange={(v) => patch({ [end]: { ...item[end], x: v } })}
-                  />
-                  <NumberField
-                    label={`${n ? "End" : "Start"} Y`}
-                    unit={units}
-                    value={item[end].y}
-                    onChange={(v) => patch({ [end]: { ...item[end], y: v } })}
-                  />
-                </div>
-              ))}
+              {(["a", "b"] as const).map((end, n) => {
+                const anchor = item.anchors?.[end];
+                const label = n ? "End" : "Start";
+                const target =
+                  anchor && plan.items.find((i) => i.id === anchor.itemId);
+                if (anchor && target) {
+                  const point =
+                    anchor.point === "a"
+                      ? "start"
+                      : anchor.point === "b"
+                        ? "end"
+                        : "center";
+                  return (
+                    <div key={end} className="field">
+                      <span>
+                        {label} attached to {target.name || target.id} {point}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const updated = mapDimensionAnchors(
+                            item,
+                            plan.items,
+                            (candidate) =>
+                              candidate === anchor ? undefined : candidate,
+                          );
+                          commit({
+                            ...plan,
+                            items: plan.items.map((i) =>
+                              i.id === item.id ? updated : i,
+                            ),
+                          });
+                        }}
+                      >
+                        Detach {label.toLowerCase()}
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="field-grid" key={end}>
+                    <NumberField
+                      label={`${label} X`}
+                      unit={units}
+                      value={endpoints[end].x}
+                      onChange={(v) =>
+                        patch({ [end]: { ...endpoints[end], x: v } })
+                      }
+                    />
+                    <NumberField
+                      label={`${label} Y`}
+                      unit={units}
+                      value={endpoints[end].y}
+                      onChange={(v) =>
+                        patch({ [end]: { ...endpoints[end], y: v } })
+                      }
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </>

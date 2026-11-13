@@ -5,6 +5,7 @@ import {
   renovationStatus,
   renovationStyles,
 } from "./layers";
+import { dimensionEndpoints } from "./dimensions";
 import { type Room, formatRoomArea } from "./rooms";
 import {
   dimensionFontSize,
@@ -556,12 +557,13 @@ export const DrawItem = memo(
         </g>
       );
     } else if (i.type === "dimension") {
+      const { a, b } = dimensionEndpoints(i, plan.items);
       shape = (
         <DimensionMark
-          a={i.a}
-          b={i.b}
+          a={a}
+          b={b}
           offset={i.offset}
-          label={`${dist(i.a, i.b).toFixed(1)} ${plan.calibration.calibrated ? "cm" : "units"}`}
+          label={`${dist(a, b).toFixed(1)} ${plan.calibration.calibrated ? "cm" : "units"}`}
           interactive={interactive}
         />
       );
@@ -608,6 +610,7 @@ export const DrawItem = memo(
       a.plan.calibration.calibrated === b.plan.calibration.calibrated) &&
     ((a.item.type !== "wall" &&
       a.item.type !== "door" &&
-      a.item.type !== "window") ||
+      a.item.type !== "window" &&
+      !(a.item.type === "dimension" && a.item.anchors)) ||
       a.plan === b.plan),
 );

@@ -14,6 +14,7 @@ import {
   type Wall,
   type Box,
   type DoorStyle,
+  type DimensionAnchor,
   uid,
   dist,
   angle,
@@ -35,6 +36,7 @@ import {
   RenovationLegend,
   RoomLabels,
 } from "./Drawing";
+import { findDimensionAnchor } from "./dimensions";
 import type { ExteriorContour } from "./exterior";
 import { furniture, type FurnitureKind } from "./furniture";
 import type { Room } from "./rooms";
@@ -70,7 +72,8 @@ const toolHelp: Record<Tool, string> = {
   window: "Click a wall to attach a window",
   stairs: "Click to place stairs · edit size and steps in Properties",
   furniture: "Choose a symbol, then click to place it",
-  dimension: "Choose two points to add a dimension",
+  dimension:
+    "Choose endpoints or object centers to attach · Alt or turn off Snap for free points",
   measure: "Choose two points to measure their distance",
   calibrate: "Choose two points with a known real-world distance",
   text: "Click to add a label · edit its text in Properties",
@@ -135,6 +138,9 @@ export default function Canvas({
   const wrapper = useRef<HTMLDivElement>(null),
     [size, setSize] = useState({ w: 1000, h: 700 }),
     [anchor, setAnchor] = useState<Point | null>(null),
+    [dimensionAnchor, setDimensionAnchor] = useState<
+      DimensionAnchor | undefined
+    >(),
     [cursor, setCursor] = useState<Point | null>(null),
     [snapKind, setSnapKind] = useState(""),
     [marquee, setMarquee] = useState<Box | null>(null);
@@ -154,6 +160,7 @@ export default function Canvas({
   }, []);
   useEffect(() => {
     setAnchor(null);
+    setDimensionAnchor(undefined);
     setMarquee(null);
     setSnapKind("");
     if (gesture.current) setPreview(null);
@@ -206,6 +213,21 @@ export default function Canvas({
     setSnapKind(r.kind);
     return r.point;
   };
+  function measurementPoint(point: Point, free: boolean) {
+    const result =
+      tool === "dimension" && snap && !free
+        ? findDimensionAnchor(point, shown.items, 8 / camera.k)
+        : undefined;
+    if (result) {
+      setSnapKind(`Attach to ${result.name}`);
+      return result;
+    }
+    if (tool === "dimension" && free) {
+      setSnapKind("");
+      return { point, anchor: undefined };
+    }
+    return { point: snapped(point), anchor: undefined };
+  }
   function targetId(e: ReactPointerEvent) {
     let el = (e.target as Element).closest("[data-item-id]");
     while (el?.parentElement?.closest("[data-item-id]"))
@@ -258,7 +280,7 @@ export default function Canvas({
       cam: camera,
     };
     if (tool === "pan" || e.button === 1) g = { ...base, kind: "pan" };
-    else if (handle && selection.length === 1) {
+    else if (tool === "select" && handle && selection.length === 1) {
       const selected = plan.items.find((i) => i.id === selection[0]);
       if (selected && isEditProtected(plan, selected)) return;
       g = {
@@ -322,7 +344,7 @@ export default function Canvas({
         anchor ||
         ["wall", "room", "dimension", "measure", "calibrate"].includes(tool)
       )
-        setCursor(snapped(p));
+        setCursor(measurementPoint(p, e.altKey).point);
       onStatus(`${p.x.toFixed(1)}, ${p.y.toFixed(1)}`);
       return;
     }
@@ -490,10 +512,12 @@ export default function Canvas({
       !canPlace()
     )
       return;
-    const q = snapped(p);
+    const chosen = measurementPoint(p, e.altKey);
+    const q = chosen.point;
     if (["wall", "dimension", "measure", "calibrate"].includes(tool)) {
       if (!anchor) {
         setAnchor(q);
+        if (tool === "dimension") setDimensionAnchor(chosen.anchor);
         return;
       }
       if (dist(anchor, q) < 0.001) return;
@@ -521,6 +545,14 @@ export default function Canvas({
             a: anchor,
             b: q,
             offset: -30,
+            ...(dimensionAnchor || chosen.anchor
+              ? {
+                  anchors: {
+                    ...(dimensionAnchor ? { a: dimensionAnchor } : {}),
+                    ...(chosen.anchor ? { b: chosen.anchor } : {}),
+                  },
+                }
+              : {}),
           };
           commit({
             ...plan,

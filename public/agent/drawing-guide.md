@@ -31,7 +31,7 @@ Every item requires `id`, `name`, `type`. Optional `locked` and `evidence: { "ba
 - Furniture: `{ "id":"sofa", "name":"Sofa", "type":"furniture", "x":50,"y":50,"w":210,"h":90,"rotation":0,"kind":"sofa" }`. Kinds: sofa, table, chair, bed, cabinet, counter, toilet, shower, `fireplace-rounded`, `fireplace-square`. At zero rotation the fireplace front faces positive Y.
 - Stairs: same x/y/w/h/rotation fields, `type:"stairs"`, `steps:12` (integer 2–100). Stair arrow points from local +Y toward -Y before rotation.
 - Text: same x/y/w/h/rotation fields, `type:"text"`, `text:"Kitchen"`, `fontSize:18`. Size fields define the selection box, not text wrapping. Allow sufficient width/height for the actual label; text renders at (0, fontSize) in local coordinates.
-- Dimension: `type:"dimension"`, `a`, `b`, `offset` in cm. An annotation measures centerline endpoint distance, not clear room width unless its points are placed on inner faces. It is independent and does not follow walls.
+- Dimension: `type:"dimension"`, `a`, `b`, `offset` in cm. Free points measure their saved positions. Optional `anchors: {a?, b?}` makes either endpoint live; each reference contains `itemId` and `point` equal to `"a"` or `"b"` for a wall endpoint, or `"center"` for an opening, symbol, or group. Attached endpoints resolve from current geometry. The required saved `a` and `b` points are used for free endpoints.
 - Group: same x/y/w/h/rotation fields, `type:"group"`, `sourceBox:{x,y,w,h}`, `children:[...]`. Children retain coordinates in the sourceBox coordinate system; group scales it into w/h, then rotates around x/y. Prefer flat items for generation. Walls, openings and dimensions cannot be grouped.
 
 Rectangle x/y is the unrotated upper-left anchor, and rotation is around that anchor. All rectangle sizes and font sizes must be positive. Coordinates and sizes are bounded to 10,000,000 cm in magnitude. Projects allow 15 MB, 50,000 total objects and 15 group levels.
@@ -61,7 +61,7 @@ For file-based updates, return the complete project and keep existing IDs. Alter
 }
 ```
 
-Operations: `add` with `items`; `opening` with center `offset` in centimeters (not t); `corner` with `wallId`, `end:"a"|"b"`, `point`; `update` with `id` and `changes`; `delete` with `ids` and optional `cascade:true` for hosted openings. Update cannot change IDs, types, endpoints or group structure. Use corner for shared endpoint edits. Object commands target top-level objects. Locked objects require a separate unlock operation (`update` with only `locked:false`) first. Connected locked walls block a corner edit.
+Operations: `add` with `items`; `opening` with center `offset` in centimeters (not t); `corner` with `wallId`, `end:"a"|"b"`, `point`; `update` with `id` and `changes`; `delete` with `ids` and optional `cascade:true` for hosted openings and dimensions attached to deleted objects. Update cannot change IDs, types, endpoints or group structure. Use corner for shared endpoint edits. Object commands target top-level objects. Locked objects require a separate unlock operation (`update` with only `locked:false`) first. Connected locked walls block a corner edit.
 
 Use `splitWall` with `wallId`, `offset` from its start (a), a fresh `segmentId` and a fresh `junctionId`. The wall segment containing the original start retains the original ID. Wall properties and opening positions and widths are preserved. Splits through openings fail.
 
@@ -69,7 +69,7 @@ Use `joinWalls` with `sourceWallId`, `sourceEnd:"a"|"b"`, `targetWallId`, `targe
 
 Use `{ "op": "setExteriorDimensions", "show": true }` to show exterior wall labels for the drawing, or set `show` to false to hide them.
 
-Batches are atomic, apply in order, and validate the final result. Invalid openings are rejected, never silently moved/shrunk/deleted. A wall resize retains opening t, so center distance changes proportionally; update t as part of the same batch if a fixed distance is needed. Dependent objects may be added later in the same batch. If shrinking a wall, fix its openings in that batch. Deleting a host wall requires explicitly including its openings or `cascade:true`; deleted IDs are reported.
+Batches are atomic, apply in order, and validate the final result. Invalid openings are rejected, never silently moved/shrunk/deleted. A wall resize retains opening t, so center distance changes proportionally; update t as part of the same batch if a fixed distance is needed. Dependent objects may be added later in the same batch. If shrinking a wall, fix its openings in that batch. Deleting an anchor object requires explicitly including its attached dimensions or `cascade:true`; deleting a wall also removes hosted openings, including any dimensions attached to those openings. Deleted IDs are reported.
 
 Run: `npm run plan -- apply drawing.planform.json edits.json --out revised.planform.json`. Then render and inspect the revised drawing. In the browser, use **AI drawings → Edits to the current drawing → Validate & preview → Apply edits**. A complete drawing can be pasted or opened as a downloaded project. Each accepted import/batch is one undoable edit.
 

@@ -1,3 +1,4 @@
+import { dimensionEndpoints } from "./dimensions";
 import type { Box, Item, Plan } from "./model";
 
 export type Layer = {
@@ -170,9 +171,22 @@ export function isItemLocked(plan: Plan, item: Item): boolean {
 export function isEditProtected(plan: Plan, item: Item): boolean {
   return (
     !isLayerVisible(plan, item) ||
+    !anchorsVisible(plan, item) ||
     !showRenovationStatus(plan.renovationView, renovationStatus(plan, item)) ||
     isItemLocked(plan, item)
   );
+}
+
+function anchorsVisible(plan: Plan, item: Item) {
+  if (item.type !== "dimension" || !item.anchors) return true;
+  return Object.values(item.anchors).every((anchor) => {
+    const target = plan.items.find((entry) => entry.id === anchor.itemId);
+    return (
+      target &&
+      isLayerVisible(plan, target) &&
+      showRenovationStatus(plan.renovationView, renovationStatus(plan, target))
+    );
+  });
 }
 
 export function visiblePlan(plan: Plan): Plan {
@@ -203,7 +217,16 @@ export function visiblePlan(plan: Plan): Plan {
     )
       byLayer[index].push(item);
   }
-  const items = byLayer.flat();
+  const ordered = byLayer.flat();
+  const visibleIds = new Set(ordered.map((item) => item.id));
+  const items = ordered.filter(
+    (item) =>
+      item.type !== "dimension" ||
+      !item.anchors ||
+      Object.values(item.anchors).every((anchor) =>
+        visibleIds.has(anchor.itemId),
+      ),
+  );
   return items.length === plan.items.length &&
     items.every((item, i) => item === plan.items[i])
     ? plan
@@ -288,6 +311,20 @@ export function blockedDrawingEdit(
         JSON.stringify(updated)
       )
         return true;
+    }
+    if (
+      item.type === "dimension" &&
+      updated.type === "dimension" &&
+      item.anchors
+    ) {
+      const oldEnds = dimensionEndpoints(item, before.items);
+      const newEnds = dimensionEndpoints(updated, after.items);
+      return (
+        oldEnds.a.x !== newEnds.a.x ||
+        oldEnds.a.y !== newEnds.a.y ||
+        oldEnds.b.x !== newEnds.b.x ||
+        oldEnds.b.y !== newEnds.b.y
+      );
     }
     if (item.type === "door" || item.type === "window") {
       const host = before.items.find((entry) => entry.id === item.hostId);

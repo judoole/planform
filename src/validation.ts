@@ -141,7 +141,8 @@ function validateRelationships(plan: Plan, path: string) {
             : "Object must reference an existing layer.",
         );
       if (
-        (item.type === "wall" || item.type === "dimension") &&
+        (item.type === "wall" ||
+          (item.type === "dimension" && !item.anchors)) &&
         length(item as Wall) < 0.001
       )
         issue(
@@ -168,17 +169,12 @@ function validateRelationships(plan: Plan, path: string) {
     });
   }
   walk(plan.items, path + "/items");
-  const walls = new Map(
-    plan.items
-      .filter((i): i is Wall => i.type === "wall")
-      .map((w) => [w.id, w]),
-  );
+  const topLevel = new Map(plan.items.map((item) => [item.id, item]));
   const occupied = new Map<
     string,
     { start: number; end: number; id: string }[]
   >();
   plan.items.forEach((item, n) => {
-    if (item.type !== "door" && item.type !== "window") return;
     const fail = (field: string, code: string, message: string) =>
       issues.push({
         path: `${path}/items/${n}/${field}`,
@@ -186,8 +182,34 @@ function validateRelationships(plan: Plan, path: string) {
         message,
         objectId: item.id,
       });
-    const wall = walls.get(item.hostId);
-    if (!wall) {
+    if (item.type === "dimension") {
+      for (const end of wallEnds) {
+        const anchor = item.anchors?.[end];
+        if (!anchor) continue;
+        const target = topLevel.get(anchor.itemId);
+        const valid =
+          anchor.point === "center"
+            ? target && target.type !== "wall" && target.type !== "dimension"
+            : target?.type === "wall";
+        if (!valid)
+          fail(
+            `anchors/${end}`,
+            "invalid_anchor",
+            `Anchor "${anchor.itemId}" must identify a top-level wall endpoint or object center.`,
+          );
+      }
+      const { a, b } = item.anchors ?? {};
+      if (a && b && a.itemId === b.itemId && a.point === b.point)
+        fail(
+          "anchors/b",
+          "duplicate_anchor",
+          "Choose a different second anchor.",
+        );
+      return;
+    }
+    if (item.type !== "door" && item.type !== "window") return;
+    const wall = topLevel.get(item.hostId);
+    if (!wall || wall.type !== "wall") {
       fail(
         "hostId",
         "missing_host",

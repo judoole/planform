@@ -4,6 +4,7 @@ import commandSchema from "../public/agent/commands.schema.json";
 import {
   clone,
   dist,
+  deletionIds,
   setCorner,
   type Evidence,
   type Item,
@@ -209,17 +210,15 @@ export function applyCommands(
     } else if (op.op === "setExteriorDimensions") {
       plan.showExteriorDimensions = op.show;
     } else {
-      const ids = new Set(op.ids);
+      const requested = new Set(op.ids);
+      const ids = deletionIds(plan, op.ids);
       op.ids.forEach(editable);
       const dependents = plan.items.filter(
-        (i) =>
-          (i.type === "door" || i.type === "window") &&
-          ids.has(i.hostId) &&
-          !ids.has(i.id),
+        (i) => ids.has(i.id) && !requested.has(i.id),
       );
       if (dependents.length && !op.cascade)
         fail(
-          `Deletion would remove attached openings: ${dependents.map((i) => i.id).join(", ")}. Include their IDs or set cascade: true.`,
+          `Deletion would remove attached openings or dimensions: ${dependents.map((i) => i.id).join(", ")}. Include their IDs or set cascade: true.`,
         );
       dependents.forEach((i) => {
         editable(i.id);

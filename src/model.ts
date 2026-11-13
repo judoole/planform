@@ -8,6 +8,12 @@ import {
 import { readProject } from "./validation";
 import type { GarageDetails } from "./garage";
 import {
+  detachRemovedAnchors,
+  dimensionDependsOn,
+  dimensionEndpoints,
+  mapDimensionAnchors,
+} from "./dimensions";
+import {
   checkWallEdits,
   connectedEndpoints,
   wallEnds,
@@ -56,11 +62,13 @@ export type RectItem = Base &
     sourceBox?: Box;
     children?: Item[];
   };
+export type DimensionAnchor = { itemId: string; point: WallEnd | "center" };
 export type Dimension = Base & {
   type: "dimension";
   a: Point;
   b: Point;
   offset: number;
+  anchors?: Partial<Record<WallEnd, DimensionAnchor>>;
 };
 export type Item = Wall | Opening | RectItem | Dimension;
 export type Plan = {
@@ -192,16 +200,23 @@ export function normalizeOpenings(plan: Plan): Plan {
     occupied.set(w.id, spans);
     return true;
   });
+  const remaining = new Set(p.items.map((item) => item.id));
+  const removed = new Set(
+    plan.items.filter((item) => !remaining.has(item.id)).map((item) => item.id),
+  );
+  if (removed.size)
+    p.items = p.items.filter((item) => !dimensionDependsOn(item, removed));
   return p;
 }
 export function bounds(i: Item, items: Item[]): Box {
   if (i.type === "wall" || i.type === "dimension") {
     const pad = i.type === "wall" ? i.thickness / 2 : Math.abs(i.offset) + 10;
+    const { a, b } = i.type === "wall" ? i : dimensionEndpoints(i, items);
     return {
-      x: Math.min(i.a.x, i.b.x) - pad,
-      y: Math.min(i.a.y, i.b.y) - pad,
-      w: Math.abs(i.b.x - i.a.x) + 2 * pad,
-      h: Math.abs(i.b.y - i.a.y) + 2 * pad,
+      x: Math.min(a.x, b.x) - pad,
+      y: Math.min(a.y, b.y) - pad,
+      w: Math.abs(b.x - a.x) + 2 * pad,
+      h: Math.abs(b.y - a.y) + 2 * pad,
     };
   }
   if (i.type === "door" || i.type === "window") {
@@ -321,8 +336,22 @@ export function translate(
     }
     if (!ids.includes(i.id)) return i;
     if (isRect(i)) return { ...i, x: i.x + delta.x, y: i.y + delta.y };
-    if (i.type === "dimension")
-      return { ...i, a: add(i.a, delta), b: add(i.b, delta) };
+    if (i.type === "dimension") {
+      if (!i.anchors) return { ...i, a: add(i.a, delta), b: add(i.b, delta) };
+      if (
+        wallEnds.some((end) => {
+          const anchor = i.anchors?.[end];
+          return anchor && ids.includes(anchor.itemId);
+        })
+      )
+        return i;
+      const { a, b } = dimensionEndpoints(i, plan.items);
+      const length = dist(a, b);
+      const extra = length
+        ? ((b.x - a.x) * delta.y - (b.y - a.y) * delta.x) / length
+        : 0;
+      return { ...i, offset: i.offset + extra };
+    }
     const w = plan.items.find((x) => x.id === i.hostId) as Wall;
     const f = openingFrame(i, plan.items);
     return f && !ids.includes(w.id)
@@ -331,14 +360,24 @@ export function translate(
   });
   return normalizeOpenings({ ...plan, items });
 }
+export function deletionIds(plan: Plan, ids: readonly string[]): Set<string> {
+  const removed = new Set(ids);
+  for (const item of plan.items) {
+    if (
+      (item.type === "door" || item.type === "window") &&
+      removed.has(item.hostId)
+    )
+      removed.add(item.id);
+  }
+  for (const item of plan.items) {
+    if (dimensionDependsOn(item, removed)) removed.add(item.id);
+  }
+  return removed;
+}
+
 export function removeItems(plan: Plan, ids: string[]): Plan {
-  const p = clone(plan);
-  p.items = p.items.filter(
-    (i) =>
-      !ids.includes(i.id) &&
-      !((i.type === "door" || i.type === "window") && ids.includes(i.hostId)),
-  );
-  return p;
+  const removed = deletionIds(plan, ids);
+  return { ...plan, items: plan.items.filter((item) => !removed.has(item.id)) };
 }
 export function duplicateItems(
   plan: Plan,
@@ -359,7 +398,13 @@ export function duplicateItems(
   }
   source.forEach(assign);
   function remap(i: Item): Item {
-    const c = clone(i);
+    const c =
+      i.type === "dimension"
+        ? mapDimensionAnchors(clone(i), plan.items, (anchor) => {
+            const id = map.get(anchor.itemId);
+            return id ? { ...anchor, itemId: id } : undefined;
+          })
+        : clone(i);
     c.id = map.get(i.id)!;
     if ((c.type === "door" || c.type === "window") && map.has(c.hostId))
       c.hostId = map.get(c.hostId)!;
@@ -378,7 +423,7 @@ export function duplicateItems(
   const copies = source
     .map(remap)
     .map((item) =>
-      item.type === "wall"
+      item.type === "wall" || (item.type === "dimension" && item.anchors)
         ? { ...item, a: add(item.a, delta), b: add(item.b, delta) }
         : item,
     );
@@ -386,6 +431,7 @@ export function duplicateItems(
   const moved = copies.filter(
     (item) =>
       item.type !== "wall" &&
+      !(item.type === "dimension" && item.anchors) &&
       !(
         (item.type === "door" || item.type === "window") &&
         copiedIds.has(item.hostId)
@@ -447,11 +493,13 @@ export function snapPoint(
   const candidates = plan.items
     .filter((i) => !exclude.includes(i.id))
     .flatMap((i) =>
-      i.type === "wall" || i.type === "dimension"
-        ? [i.a, i.b]
-        : isRect(i)
-          ? [{ x: i.x, y: i.y }]
-          : [],
+      i.type === "dimension"
+        ? Object.values(dimensionEndpoints(i, plan.items))
+        : i.type === "wall"
+          ? [i.a, i.b]
+          : isRect(i)
+            ? [{ x: i.x, y: i.y }]
+            : [],
     );
   const end = candidates.find((c) => dist(c, p) < tolerance);
   if (end) return { point: { ...end }, kind: "Endpoint" };
@@ -496,7 +544,7 @@ export function groupItems(plan: Plan, ids: string[]): Plan {
   const first = p.items.findIndex((i) => i.id === children[0].id);
   p.items = p.items.filter((i) => !ids.includes(i.id));
   p.items.splice(first, 0, group);
-  return p;
+  return detachRemovedAnchors(plan, p);
 }
 export function ungroupItems(plan: Plan, id: string): Plan {
   const p = clone(plan),
@@ -527,7 +575,7 @@ export function ungroupItems(plan: Plan, id: string): Plan {
     return i;
   });
   p.items.splice(p.items.indexOf(g), 1, ...children);
-  return p;
+  return detachRemovedAnchors(plan, p);
 }
 export function serialize(project: Project) {
   return JSON.stringify(project, null, 2);

@@ -108,6 +108,21 @@ export function splitWall(
   };
   const items = plan.items.flatMap((item): Item[] => {
     if (item.id === wall.id) return [first, second];
+    if (item.type === "dimension" && item.anchors) {
+      const bTarget = (end: WallEnd) =>
+        item.anchors?.[end]?.itemId === wallId &&
+        item.anchors[end]?.point === "b";
+      if (!wallEnds.some(bTarget)) return [item];
+      if (protectedItem(item))
+        throw Error(
+          `Dimension "${item.name || item.id}" is locked or hidden. Unlock or show it before splitting its wall.`,
+        );
+      const anchors = { ...item.anchors };
+      for (const end of wallEnds) {
+        if (bTarget(end)) anchors[end] = { itemId: segmentId, point: "b" };
+      }
+      return [{ ...item, anchors }];
+    }
     if (
       (item.type !== "door" && item.type !== "window") ||
       item.hostId !== wall.id

@@ -488,6 +488,19 @@
           "type": "number",
           "minimum": -10000000,
           "maximum": 10000000
+        },
+        "anchors": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/dimensionAnchor"
+            },
+            "b": {
+              "$ref": "#/$defs/dimensionAnchor"
+            }
+          }
         }
       },
       "required": ["id", "name", "type", "a", "b", "offset"]
@@ -798,6 +811,21 @@
         "propertyName": "type"
       },
       "type": "object"
+    },
+    "dimensionAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "itemId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "point": {
+          "enum": ["a", "b", "center"]
+        }
+      },
+      "required": ["itemId", "point"]
     }
   }
 }

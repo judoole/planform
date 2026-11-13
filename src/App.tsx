@@ -54,6 +54,7 @@ import {
   clone,
   normalizeOpenings,
   removeItems,
+  deletionIds,
   duplicateItems,
   History,
   calibrate,
@@ -69,6 +70,7 @@ import GarageViewsPanel from "./GarageViewsPanel";
 import { planArtworkBounds } from "./preview";
 import SheetExport from "./SheetExport";
 import { floorPlanSheet } from "./planSheet";
+import { mapDimensionAnchors } from "./dimensions";
 import { download, exportSvg, exportPng } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
@@ -564,6 +566,24 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   function del() {
     const ids = editableSelection();
     if (!ids.length) return;
+    const removed = deletionIds(plan, ids);
+    const dependent = plan.items.filter(
+      (i) => removed.has(i.id) && !ids.includes(i.id),
+    );
+    if (dependent.some((i) => isEditProtected(plan, i))) {
+      showNotice(
+        "Show and unlock the attached objects before deleting this selection.",
+      );
+      return;
+    }
+    const dimensions = dependent.filter((i) => i.type === "dimension").length;
+    if (
+      dimensions &&
+      !window.confirm(
+        `Delete the selection and ${dimensions} attached dimension(s)? Undo will restore their attachments.`,
+      )
+    )
+      return;
     commit(removeItems(plan, ids));
     setSelection([]);
   }
@@ -587,11 +607,19 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }
   function copy() {
     const ids = new Set(visibleSelection);
+    const copied = shown.items.filter(
+      (i) =>
+        ids.has(i.id) ||
+        ((i.type === "door" || i.type === "window") && ids.has(i.hostId)),
+    );
+    const copiedIds = new Set(copied.map((i) => i.id));
     clipboard.current = clone(
-      shown.items.filter(
-        (i) =>
-          ids.has(i.id) ||
-          ((i.type === "door" || i.type === "window") && ids.has(i.hostId)),
+      copied.map((i) =>
+        i.type === "dimension"
+          ? mapDimensionAnchors(i, plan.items, (anchor) =>
+              copiedIds.has(anchor.itemId) ? anchor : undefined,
+            )
+          : i,
       ),
     );
     showNotice(
