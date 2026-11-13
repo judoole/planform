@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useState,
   useRef,
   useEffect,
@@ -66,6 +68,7 @@ import { furniture, type FurnitureKind } from "./furniture";
 import { download, exportSvg, exportPng } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
+import BuildingSettingsPanel from "./BuildingSettingsPanel";
 import ProposalManager from "./ProposalManager";
 import { isShareHash, readShareHash } from "./share";
 import {
@@ -91,6 +94,8 @@ import {
   createExteriorContourReader,
   visibleExteriorContour,
 } from "./exterior";
+const BuildingViewport = lazy(() => import("./BuildingViewport"));
+
 const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
@@ -203,7 +208,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [wallThickness, setWallThickness] = useState(15),
     [camera, setCamera] = useState<Camera>({ x: 100, y: 100, k: 0.8 }),
     [panelOpen, setPanelOpen] = useState(false),
-    [tab, setTab] = useState<"properties" | "objects">("properties"),
+    [tab, setTab] = useState<"properties" | "objects" | "building">(
+      "properties",
+    ),
+    [viewMode, setViewMode] = useState<"plan" | "3d">("plan"),
+    [opened3D, setOpened3D] = useState(false),
     [query, setQuery] = useState(""),
     [overlap, setOverlap] = useState<string[]>([]),
     [overlapOpen, setOverlapOpen] = useState(false),
@@ -360,6 +369,17 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     const t = setTimeout(() => setNotice(""), 7000);
     return () => clearTimeout(t);
   }, [notice]);
+  function changeViewMode(next: "plan" | "3d") {
+    if (next === viewMode) return;
+    cancel();
+    setMeasure(null);
+    setViewMode(next);
+    if (next === "3d") {
+      setOpened3D(true);
+      if (!selection.length) setTab("building");
+    }
+  }
+
   function cancel() {
     setPreview(null);
     setCancelToken((v) => v + 1);
@@ -738,8 +758,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         return;
       }
       const t = palette.find((t) => t.key?.toLowerCase() === k);
-      if (t) setTool(t.tool);
-      if (k === "0") fit();
+      if (viewMode === "plan" && t) setTool(t.tool);
+      if (viewMode === "plan" && k === "0") fit();
     }
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -756,6 +776,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     });
   }
   function chooseTool(t: Tool) {
+    if (viewMode === "3d") changeViewMode("plan");
     setTool(t);
     if ((t === "furniture" || t === "door") && window.innerWidth < 760)
       setPanelOpen(false);
@@ -1013,7 +1034,26 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           <Trash2 size={17} />
         </button>
         <div className="toolbar-spacer" />
+        <div
+          className="building-view-switch"
+          role="group"
+          aria-label="Drawing view"
+        >
+          <button
+            aria-pressed={viewMode === "plan"}
+            onClick={() => changeViewMode("plan")}
+          >
+            2D
+          </button>
+          <button
+            aria-pressed={viewMode === "3d"}
+            onClick={() => changeViewMode("3d")}
+          >
+            3D
+          </button>
+        </div>
         <button
+          hidden={viewMode === "3d"}
           className={snap ? "snap-toggle active" : "snap-toggle"}
           aria-pressed={snap}
           onClick={() => setSnap(!snap)}
@@ -1060,153 +1100,182 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           </button>
         </nav>
         <section className="drawing-region">
-          <div className="drawing-topline">
-            <span>
-              <span className="tiny-square" /> FLOOR PLAN{" "}
-              <span className="muted">/</span>{" "}
-              <b className={ghost ? "plan-overlay-key" : undefined}>
-                {ghost ? `${reference!.name} overlay` : "DESIGN MODE"}
-              </b>
-            </span>
-            <span className="private-badge">
-              {sharedProject ? "SHARED COPY" : "LOCAL & PRIVATE"}
-            </span>
-          </div>
-          {!plan.calibration.calibrated && (
-            <div className="calibration-banner">
-              <span>Uncalibrated drawing · distances are drawing units</span>
-              <button onClick={() => setTool("calibrate")}>
-                <Ruler size={14} /> Calibrate scale
-              </button>
-            </div>
-          )}
-          {(tool === "furniture" ||
-            tool === "door" ||
-            tool === "wall" ||
-            tool === "room") && (
-            <div className="context-toolbar">
-              {tool === "furniture" ? (
-                <>
-                  <span>PLACE</span>
-                  <select
-                    aria-label="Furniture symbol"
-                    value={kind}
-                    onChange={(e) => setKind(e.target.value as FurnitureKind)}
-                  >
-                    {Object.entries(furniture).map(([k, { label }]) => (
-                      <option key={k} value={k}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              ) : tool === "door" ? (
-                <>
-                  <span>PLACE</span>
-                  <DoorStyleSelect
-                    label="New door type"
-                    value={doorStyle}
-                    onChange={setDoorStyle}
-                  />
-                </>
-              ) : (
-                <>
-                  <span>WALL THICKNESS</span>
-                  <input
-                    aria-label="New wall thickness"
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={wallThickness}
-                    onChange={(e) =>
-                      setWallThickness(
-                        Math.max(1, Math.min(200, Number(e.target.value))),
-                      )
-                    }
-                  />
-                  <small>{plan.calibration.calibrated ? "cm" : "units"}</small>
-                </>
-              )}
-            </div>
-          )}
-          <Canvas
-            plan={plan}
-            ghost={ghost}
-            rooms={rooms}
-            exterior={visibleExterior}
-            setPreview={setPreview}
-            commit={commit}
-            selection={selection}
-            setSelection={setSelection}
-            tool={tool}
-            setTool={setTool}
-            snap={snap}
-            kind={kind}
-            doorStyle={doorStyle}
-            wallThickness={wallThickness}
-            camera={camera}
-            setCamera={setCamera}
-            svgRef={svgRef}
-            onMeasure={(a, b, calibrate) => {
-              setMeasure({ a, b, calibrate });
-              setRealDistance("");
-            }}
-            onStatus={(s) => (s.length > 40 ? showNotice(s) : setCoords(s))}
-            onOverlap={setOverlap}
-            cancelToken={cancelToken}
-          />
-          <div className="canvas-bottom">
-            <div className="canvas-bottom-left">
-              <span className="floor-chip">
-                01 <span>Ground floor</span>
+          <div
+            className="plan-view"
+            inert={viewMode === "3d"}
+            aria-hidden={viewMode === "3d"}
+          >
+            <div className="drawing-topline">
+              <span>
+                <span className="tiny-square" /> FLOOR PLAN{" "}
+                <span className="muted">/</span>{" "}
+                <b className={ghost ? "plan-overlay-key" : undefined}>
+                  {ghost ? `${reference!.name} overlay` : "DESIGN MODE"}
+                </b>
               </span>
-              {overlap.length > 1 && (
-                <div className="dropdown-anchor">
-                  <button
-                    className="overlap-button"
-                    onClick={() => setOverlapOpen(!overlapOpen)}
-                  >
-                    <Layers size={15} />
-                    {overlap.length} overlapping <ChevronDown size={12} />
-                  </button>
-                  {overlapOpen && (
-                    <div className="dropdown overlap-dropdown">
-                      {overlap.slice(0, 40).map((id) => (
-                        <button
-                          key={id}
-                          onClick={() => {
-                            setSelection([id]);
-                            setOverlapOpen(false);
-                            setPanelOpen(true);
-                          }}
-                        >
-                          {plan.items.find((i) => i.id === id)?.name || id}
-                          {selection.includes(id) && <Check size={14} />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <span className="private-badge">
+                {sharedProject ? "SHARED COPY" : "LOCAL & PRIVATE"}
+              </span>
             </div>
-            <div className="zoom-controls">
-              <button aria-label="Zoom out" onClick={() => zoom(1 / 1.25)}>
-                <Minus size={17} />
-              </button>
-              <span>{Math.round(camera.k * 100)}%</span>
-              <button aria-label="Zoom in" onClick={() => zoom(1.25)}>
-                <Plus size={17} />
-              </button>
-              <span className="zoom-divider" />
-              <button
-                aria-label="Fit drawing"
-                title="Fit drawing · 0"
-                onClick={() => fit()}
-              >
-                <Maximize size={17} />
-              </button>
+            {!plan.calibration.calibrated && (
+              <div className="calibration-banner">
+                <span>Uncalibrated drawing · distances are drawing units</span>
+                <button onClick={() => setTool("calibrate")}>
+                  <Ruler size={14} /> Calibrate scale
+                </button>
+              </div>
+            )}
+            {(tool === "furniture" ||
+              tool === "door" ||
+              tool === "wall" ||
+              tool === "room") && (
+              <div className="context-toolbar">
+                {tool === "furniture" ? (
+                  <>
+                    <span>PLACE</span>
+                    <select
+                      aria-label="Furniture symbol"
+                      value={kind}
+                      onChange={(e) => setKind(e.target.value as FurnitureKind)}
+                    >
+                      {Object.entries(furniture).map(([k, { label }]) => (
+                        <option key={k} value={k}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : tool === "door" ? (
+                  <>
+                    <span>PLACE</span>
+                    <DoorStyleSelect
+                      label="New door type"
+                      value={doorStyle}
+                      onChange={setDoorStyle}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <span>WALL THICKNESS</span>
+                    <input
+                      aria-label="New wall thickness"
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={wallThickness}
+                      onChange={(e) =>
+                        setWallThickness(
+                          Math.max(1, Math.min(200, Number(e.target.value))),
+                        )
+                      }
+                    />
+                    <small>
+                      {plan.calibration.calibrated ? "cm" : "units"}
+                    </small>
+                  </>
+                )}
+              </div>
+            )}
+            <Canvas
+              plan={plan}
+              ghost={ghost}
+              rooms={rooms}
+              exterior={visibleExterior}
+              setPreview={setPreview}
+              commit={commit}
+              selection={selection}
+              setSelection={setSelection}
+              tool={tool}
+              setTool={setTool}
+              snap={snap}
+              kind={kind}
+              doorStyle={doorStyle}
+              wallThickness={wallThickness}
+              camera={camera}
+              setCamera={setCamera}
+              svgRef={svgRef}
+              onMeasure={(a, b, calibrate) => {
+                setMeasure({ a, b, calibrate });
+                setRealDistance("");
+              }}
+              onStatus={(s) => (s.length > 40 ? showNotice(s) : setCoords(s))}
+              onOverlap={setOverlap}
+              cancelToken={cancelToken}
+            />
+            <div className="canvas-bottom">
+              <div className="canvas-bottom-left">
+                <span className="floor-chip">
+                  01 <span>Ground floor</span>
+                </span>
+                {overlap.length > 1 && (
+                  <div className="dropdown-anchor">
+                    <button
+                      className="overlap-button"
+                      onClick={() => setOverlapOpen(!overlapOpen)}
+                    >
+                      <Layers size={15} />
+                      {overlap.length} overlapping <ChevronDown size={12} />
+                    </button>
+                    {overlapOpen && (
+                      <div className="dropdown overlap-dropdown">
+                        {overlap.slice(0, 40).map((id) => (
+                          <button
+                            key={id}
+                            onClick={() => {
+                              setSelection([id]);
+                              setOverlapOpen(false);
+                              setPanelOpen(true);
+                            }}
+                          >
+                            {plan.items.find((i) => i.id === id)?.name || id}
+                            {selection.includes(id) && <Check size={14} />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="zoom-controls">
+                <button aria-label="Zoom out" onClick={() => zoom(1 / 1.25)}>
+                  <Minus size={17} />
+                </button>
+                <span>{Math.round(camera.k * 100)}%</span>
+                <button aria-label="Zoom in" onClick={() => zoom(1.25)}>
+                  <Plus size={17} />
+                </button>
+                <span className="zoom-divider" />
+                <button
+                  aria-label="Fit drawing"
+                  title="Fit drawing · 0"
+                  onClick={() => fit()}
+                >
+                  <Maximize size={17} />
+                </button>
+              </div>
             </div>
           </div>
+          {opened3D && (
+            <div className="building-view" hidden={viewMode !== "3d"}>
+              <Suspense
+                fallback={
+                  <p className="building-view-loading" role="status">
+                    Loading 3D view…
+                  </p>
+                }
+              >
+                <BuildingViewport
+                  plan={plan}
+                  selection={selection}
+                  onSelect={(id) => {
+                    setSelection([id]);
+                    setTab("properties");
+                    setPanelOpen(true);
+                  }}
+                />
+              </Suspense>
+            </div>
+          )}
         </section>
         {panelOpen && (
           <button
@@ -1232,6 +1301,12 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               Objects
             </button>
             <button
+              className={tab === "building" ? "active" : ""}
+              onClick={() => setTab("building")}
+            >
+              Building
+            </button>
+            <button
               className="drawer-close"
               aria-label="Close properties panel"
               onClick={() => setPanelOpen(false)}
@@ -1253,6 +1328,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onDelete={del}
               onError={showNotice}
               onShowExteriorDimensions={setExteriorDimensions}
+            />
+          ) : tab === "building" ? (
+            <BuildingSettingsPanel
+              plan={plan}
+              onChange={(building) =>
+                commit({ ...drawing, building }, undefined, true)
+              }
             />
           ) : (
             <div className="objects-panel">
