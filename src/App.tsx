@@ -64,6 +64,8 @@ import {
 } from "./model";
 import { furniture, type FurnitureKind } from "./furniture";
 import GarageArea from "./GarageArea";
+import GarageViewsPanel from "./GarageViewsPanel";
+import { planArtworkBounds } from "./preview";
 import SheetExport from "./SheetExport";
 import { floorPlanSheet } from "./planSheet";
 import { download, exportSvg, exportPng } from "./exports";
@@ -90,7 +92,6 @@ import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
 import {
-  annotatedPlanBounds,
   createExteriorContourReader,
   visibleExteriorContour,
 } from "./exterior";
@@ -214,6 +215,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [exportMenu, setExportMenu] = useState(false),
     [sheetOpen, setSheetOpen] = useState(false),
     [garageOpen, setGarageOpen] = useState(false),
+    [garageTab, setGarageTab] = useState<"area" | "views">("area"),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
     [shareOpen, setShareOpen] = useState(false),
@@ -298,10 +300,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     (p: Plan = activePlan(projectRef.current)) => {
       const svg = svgRef.current;
       if (!svg) return;
-      const box = annotatedPlanBounds(
-          p,
-          visibleExteriorContour(p, readExterior),
-        ),
+      const box = planArtworkBounds(p, visibleExteriorContour(p, readExterior)),
         b = svg.getBoundingClientRect(),
         pad = Math.min(90, b.width * 0.12),
         k = Math.min(
@@ -673,7 +672,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     try {
       const svg = exportSvg(
         svgRef.current!,
-        annotatedPlanBounds(plan, visibleExterior),
+        planArtworkBounds(plan, visibleExterior),
       );
       const name =
         project.version !== 2
@@ -1420,13 +1419,40 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <X size={16} />
             </button>
             <h2 id="garage-title">Garage permit</h2>
-            <h3>Building areas</h3>
-            <GarageArea
-              plan={drawing}
-              onChange={(garage) =>
-                commit({ ...drawing, garage }, undefined, true)
-              }
-            />
+            <div
+              className="permit-tabs"
+              role="group"
+              aria-label="Garage permit section"
+            >
+              <button
+                aria-pressed={garageTab === "area"}
+                onClick={() => setGarageTab("area")}
+              >
+                Building areas
+              </button>
+              <button
+                aria-pressed={garageTab === "views"}
+                onClick={() => setGarageTab("views")}
+              >
+                Section and elevations
+              </button>
+            </div>
+            {garageTab === "area" ? (
+              <GarageArea
+                plan={drawing}
+                onChange={(garage) =>
+                  commit({ ...drawing, garage }, undefined, true)
+                }
+              />
+            ) : (
+              <GarageViewsPanel
+                key={version}
+                plan={drawing}
+                onChange={(garage) =>
+                  commit({ ...drawing, garage }, undefined, true)
+                }
+              />
+            )}
           </section>
         </div>
       )}

@@ -27,6 +27,7 @@ import {
   snapPoint,
   rotate,
 } from "./model";
+import { GarageSectionMark } from "./garageViews";
 import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
 import type { ExteriorContour } from "./exterior";
 import { furniture, type FurnitureKind } from "./furniture";
@@ -658,6 +659,7 @@ export default function Canvas({
               calibrated={plan.calibration.calibrated}
             />
             <ExteriorDimensions contour={exterior} />
+            <GarageSectionMark plan={plan} />
           </g>
           <g className="selection-overlay">
             {box && (

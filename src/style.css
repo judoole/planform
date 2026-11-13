@@ -1737,3 +1737,22 @@ button svg {
   height: min(240px, 35vh);
   margin: 12px auto;
 }
+
+.permit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #d1dbd5;
+}
+.permit-tabs button[aria-pressed="true"] {
+  background: #dfece5;
+  color: #1c513f;
+}
+.sheet-fields textarea {
+  border: 1px solid #b7c3bb;
+  border-radius: 5px;
+  padding: 6px 8px;
+  min-width: 170px;
+}

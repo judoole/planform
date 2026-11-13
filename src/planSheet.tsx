@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { annotatedPlanBounds, visibleExteriorContour } from "./exterior";
 import type { Plan } from "./model";
-import { PlanArtwork } from "./preview";
+import { PlanArtwork, planArtworkBounds } from "./preview";
 import type { SheetDrawing } from "./sheets";
 
 export function floorPlanSheet(plan: Plan): SheetDrawing {
@@ -11,7 +10,7 @@ export function floorPlanSheet(plan: Plan): SheetDrawing {
     );
   if (!plan.items.length)
     throw Error("Add drawing objects before exporting a floor plan.");
-  const b = annotatedPlanBounds(plan, visibleExteriorContour(plan));
+  const b = planArtworkBounds(plan);
   const pad = 12;
   return {
     title: "Floor plan - Ground floor",

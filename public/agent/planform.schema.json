@@ -29,6 +29,65 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "structure": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "floor": {
+              "type": "number",
+              "minimum": -1000000,
+              "maximum": 1000000
+            },
+            "wallHeight": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 5000
+            },
+            "roofPitch": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 75
+            },
+            "roofThickness": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 500
+            },
+            "ridge": { "enum": ["long", "short"] },
+            "openings": {
+              "type": "object",
+              "maxProperties": 500,
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sill": { "type": "number", "minimum": 0, "maximum": 5000 },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 5000
+                  }
+                }
+              }
+            },
+            "terrain": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "section": { "$ref": "#/$defs/terrainProfile" },
+                "front": { "$ref": "#/$defs/terrainProfile" },
+                "right": { "$ref": "#/$defs/terrainProfile" },
+                "rear": { "$ref": "#/$defs/terrainProfile" },
+                "left": { "$ref": "#/$defs/terrainProfile" }
+              }
+            }
+          }
+        },
         "area": {
           "type": "object",
           "additionalProperties": false,
@@ -107,6 +166,20 @@
   },
   "required": ["format", "version", "name", "units", "items"],
   "$defs": {
+    "terrainProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existing": { "$ref": "#/$defs/terrainStations" },
+        "proposed": { "$ref": "#/$defs/terrainStations" }
+      }
+    },
+    "terrainStations": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 150,
+      "items": { "$ref": "#/$defs/point" }
+    },
     "point": {
       "type": "object",
       "additionalProperties": false,

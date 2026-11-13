@@ -1,7 +1,9 @@
+import type { GarageStructure } from "./garageViews";
 import { deriveExteriorContour, exteriorDimensionSegments } from "./exterior";
 import { dist, type Plan, type Point } from "./model";
 
 export type GarageDetails = {
+  structure?: GarageStructure;
   area?: {
     clearFloor?: boolean;
     loft?: boolean;

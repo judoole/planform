@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { GarageSectionMark, garageSectionBounds } from "./garageViews";
+import { unionBoxes } from "./model";
 import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
 import { annotatedPlanBounds, visibleExteriorContour } from "./exterior";
 import { findRooms } from "./rooms";
@@ -9,7 +11,7 @@ import { validateProject } from "./validation";
 export function renderPlanSvg(input: Plan): string {
   const plan = validateProject(input),
     exterior = visibleExteriorContour(plan),
-    b = annotatedPlanBounds(plan, exterior);
+    b = planArtworkBounds(plan, exterior);
   const pad = Math.max(b.w, b.h) * 0.025 + 30;
   const x = b.x - pad,
     y = b.y - pad,
@@ -44,6 +46,16 @@ export function PlanArtwork({ plan }: { plan: Plan }) {
         calibrated={plan.calibration.calibrated}
       />
       <ExteriorDimensions contour={visibleExteriorContour(plan)} />
+      <GarageSectionMark plan={plan} />
     </>
   );
+}
+
+export function planArtworkBounds(
+  plan: Plan,
+  exterior = visibleExteriorContour(plan),
+) {
+  const bounds = annotatedPlanBounds(plan, exterior);
+  const section = garageSectionBounds(plan);
+  return section ? unionBoxes([bounds, section]) : bounds;
 }
