@@ -350,6 +350,7 @@ export default function Properties({
                   <input
                     key={walls.map((wall) => wall.id).join(",")}
                     name="height"
+                    aria-label="Height for selected walls"
                     type="number"
                     step="any"
                     min={1}
