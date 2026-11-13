@@ -12,100 +12,150 @@ import {
   type Wall,
 } from "./model";
 
-type ExteriorCorners = [Point, Point, Point, Point];
+const tolerance = 1e-6;
+const subtract = (a: Point, b: Point): Point => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
+});
+const cross = (a: Point, b: Point) => a.x * b.y - a.y * b.x;
+const dot = (a: Point, b: Point) => a.x * b.x + a.y * b.y;
+
 export type ExteriorContour =
   | { status: "uncalibrated" | "open" | "unsupported" }
-  | { status: "ready"; corners: ExteriorCorners };
+  | { status: "ready"; corners: Point[] };
 
 function wallLoop(walls: Wall[]) {
-  const [first, ...remaining] = walls;
+  const key = ({ x, y }: Point) => `${x},${y}`;
+  const byEndpoint = new Map<string, Wall[]>();
+  for (const wall of walls) {
+    for (const point of [wall.a, wall.b]) {
+      const id = key(point);
+      const adjacent = byEndpoint.get(id) ?? [];
+      adjacent.push(wall);
+      byEndpoint.set(id, adjacent);
+    }
+  }
+
+  const [first, ...rest] = walls;
+  const remaining = new Set(rest);
   const loop = [first];
   let end = first.b;
-  while (remaining.length) {
-    const index = remaining.findIndex(
-      (wall) => same(wall.a, end) || same(wall.b, end),
-    );
-    if (index === -1) return;
-    const [wall] = remaining.splice(index, 1);
-    const next = same(wall.a, end) ? wall : { ...wall, a: wall.b, b: wall.a };
+  while (remaining.size) {
+    if (same(end, first.a)) return { status: "unsupported" } as const;
+    const exact = byEndpoint
+      .get(key(end))
+      ?.filter((wall) => remaining.has(wall));
+    // Match the editor's tolerance for imported endpoints that nearly coincide.
+    const matches = exact?.length
+      ? exact
+      : [...remaining].filter((wall) => same(wall.a, end) || same(wall.b, end));
+    if (matches.length > 1) return { status: "unsupported" } as const;
+    const [wall] = matches;
+    if (!wall) return { status: "open" } as const;
+    const next = same(wall.a, end) ? wall : reverseWall(wall);
+    remaining.delete(wall);
     loop.push(next);
     end = next.b;
   }
-  if (same(end, first.a)) return loop;
+  return same(end, first.a)
+    ? ({ status: "closed", loop } as const)
+    : ({ status: "open" } as const);
 }
 
-/** The four clockwise intersections of neighboring outside wall faces, in cm.
- * The first edge points most nearly right, then down on a tie. Openings and
- * drawn join fills do not interrupt or extend these measurement planes.
+const reverseWall = (wall: Wall): Wall => ({ ...wall, a: wall.b, b: wall.a });
+
+function wallFace(wall: Wall) {
+  const delta = subtract(wall.b, wall.a);
+  const length = dist(wall.a, wall.b);
+  const direction = { x: delta.x / length, y: delta.y / length };
+  return {
+    ...wall,
+    direction,
+    // Clockwise in the drawing's Y-down coordinates.
+    outward: {
+      x: (direction.y * wall.thickness) / 2,
+      y: (-direction.x * wall.thickness) / 2,
+    },
+  };
+}
+
+function offsetCorners(faces: ReturnType<typeof wallFace>[], side: 1 | -1) {
+  return faces.map((face, i) => {
+    const previous = faces[(i + faces.length - 1) % faces.length];
+    const start = add(face.a, {
+      x: side * face.outward.x,
+      y: side * face.outward.y,
+    });
+    const end = add(previous.b, {
+      x: side * previous.outward.x,
+      y: side * previous.outward.y,
+    });
+    // Intersect the two supporting lines at the shared corner.
+    const t =
+      cross(subtract(end, start), previous.direction) /
+      cross(face.direction, previous.direction);
+    return add(start, { x: t * face.direction.x, y: t * face.direction.y });
+  });
+}
+
+/** Intersections of neighboring outside wall faces, in clockwise order in cm.
+ * The first edge points most nearly right, then down on a tie. Each edge
+ * corresponds to one wall in a single convex loop of straight walls.
  */
 export function deriveExteriorContour(plan: Plan): ExteriorContour {
   if (!plan.calibration.calibrated) return { status: "uncalibrated" };
   const walls = plan.items.filter((item): item is Wall => item.type === "wall");
   if (walls.length < 3) return { status: "open" };
-  if (walls.length > 4) return { status: "unsupported" };
-  let loop = wallLoop(walls);
-  if (!loop) return { status: "open" };
-  if (loop.length !== 4) return { status: "unsupported" };
+  if (walls.some((wall) => same(wall.a, wall.b)))
+    return { status: "unsupported" };
+  const path = wallLoop(walls);
+  if (path.status !== "closed") return { status: path.status };
 
-  const [first, second] = loop;
-  const cross =
-    (first.b.x - first.a.x) * (second.b.y - second.a.y) -
-    (first.b.y - first.a.y) * (second.b.x - second.a.x);
-  if (cross < 0)
-    loop = loop.reverse().map((wall) => ({ ...wall, a: wall.b, b: wall.a }));
+  let faces = path.loop.map(wallFace);
+  const turns = faces.map(({ direction }, i) => {
+    const next = faces[(i + 1) % faces.length].direction;
+    return Math.atan2(cross(direction, next), dot(direction, next));
+  });
+  const winding = Math.sign(turns[0]);
+  const totalTurn = turns.reduce((sum, turn) => sum + turn, 0);
+  // A convex loop turns in one direction and winds exactly once.
+  if (
+    turns.some(
+      (turn) =>
+        turn * winding <= tolerance || Math.abs(turn) >= Math.PI - tolerance,
+    ) ||
+    Math.abs(Math.abs(totalTurn) - 2 * Math.PI) > tolerance
+  )
+    return { status: "unsupported" };
+  if (winding < 0)
+    faces = path.loop.reverse().map((wall) => wallFace(reverseWall(wall)));
 
-  const directionX = (wall: Wall) =>
-    (wall.b.x - wall.a.x) / dist(wall.a, wall.b);
-  const topIndex = loop.indexOf(
-    loop.reduce((best, wall) => {
-      const difference = directionX(wall) - directionX(best);
-      return difference > 0 || (difference === 0 && wall.b.y > wall.a.y)
-        ? wall
+  const first = faces.indexOf(
+    faces.reduce((best, face) => {
+      const difference = face.direction.x - best.direction.x;
+      return difference > 0 ||
+        (difference === 0 && face.direction.y > best.direction.y)
+        ? face
         : best;
     }),
   );
-  const [top, right, bottom, left] = [
-    ...loop.slice(topIndex),
-    ...loop.slice(0, topIndex),
-  ];
-  const width = dist(top.a, top.b);
-  const ux = directionX(top);
-  const uy = (top.b.y - top.a.y) / width;
-  const height = -(left.a.x - top.a.x) * uy + (left.a.y - top.a.y) * ux;
-  const point = (x: number, y: number) => ({
-    x: top.a.x + x * ux - y * uy,
-    y: top.a.y + x * uy + y * ux,
-  });
-  if (
-    !(
-      width > (left.thickness + right.thickness) / 2 &&
-      height > (top.thickness + bottom.thickness) / 2
-    ) ||
-    !same(point(width, height), bottom.a) ||
-    !same(point(0, height), left.a)
-  )
-    return { status: "unsupported" };
+  faces = [...faces.slice(first), ...faces.slice(0, first)];
 
-  const x1 = -left.thickness / 2;
-  const x2 = width + right.thickness / 2;
-  const y1 = -top.thickness / 2;
-  const y2 = height + bottom.thickness / 2;
-  return {
-    status: "ready",
-    corners: [point(x1, y1), point(x2, y1), point(x2, y2), point(x1, y2)],
-  };
+  const corners = offsetCorners(faces, 1);
+  const forwardEdges = (points: Point[]) =>
+    exteriorDimensionSegments(points).every(
+      ([a, b], i) => dot(subtract(b, a), faces[i].direction) > tolerance,
+    );
+  // Extreme thickness differences can make an offset edge disappear, and
+  // excessive thickness can fill the enclosure entirely.
+  if (!forwardEdges(corners) || !forwardEdges(offsetCorners(faces, -1)))
+    return { status: "unsupported" };
+  return { status: "ready", corners };
 }
 
 export const exteriorDimensionOffset = -36;
-export const exteriorDimensionSegments = ([a, b, c, d]: ExteriorCorners): [
-  Point,
-  Point,
-][] => [
-  [a, b],
-  [b, c],
-  [c, d],
-  [d, a],
-];
+export const exteriorDimensionSegments = (corners: Point[]): [Point, Point][] =>
+  corners.map((point, i) => [point, corners[(i + 1) % corners.length]]);
 export const exteriorDimensionLabel = (a: Point, b: Point) =>
   `${(dist(a, b) / 100).toFixed(2)} m`;
 

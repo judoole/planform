@@ -23,7 +23,7 @@
     },
     "showExteriorDimensions": {
       "type": "boolean",
-      "description": "Show the live outside-face length of each wall in a calibrated, closed rectangular footprint. Omitted means hidden."
+      "description": "Show the live outside-face length of each wall in a calibrated, closed convex footprint. Omitted means hidden."
     },
     "grid": {
       "type": "number",

@@ -31,7 +31,8 @@ import type { ExteriorContour } from "./exterior";
 
 const exteriorMessages = {
   open: "Close the wall loop to show exterior dimensions.",
-  unsupported: "Exterior dimensions require one rectangle made of four walls.",
+  unsupported:
+    "Use one convex wall loop with distinct corners and room inside the walls.",
   uncalibrated: "Calibrate scale to show exterior dimensions in meters.",
 };
 

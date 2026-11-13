@@ -7,7 +7,8 @@ Planform now uses architectural project schema v2. SVG import, raw SVG content, 
 ## Garage exterior dimensions
 
 - Chrome verified a garage drawn with 580 × 680 cm centerline spans and 20 cm walls. Turning on **Show exterior wall lengths** in Properties labeled all four sides, with two at 6.00 m and two at 7.00 m. Changing one wall to 40 cm updated both adjoining side labels to 7.10 m, and dragging the right wall 50 cm outward updated the top and bottom labels to 6.50 m during and after the drag. Undo restored the original readings.
-- Verified that open, skewed and uncalibrated drawings explain the missing dimensions in Properties. Closing the loop through undo or applying calibration restored the marks with the setting still enabled. A downloaded project reopened in a fresh browser context with the setting and an independent 200.0 cm free-point dimension, which remained editable.
+- Dragged a corner on port 5173 to make a trapezoid. All four labels remained visible during the drag and read 6.10 m, 8.75 m, 0.85 m and 7.00 m. The browser SVG paths measured 610, 875, 85 and 700 cm in model coordinates. The PNG, CLI previews and reopened file showed the same labels, and undo restored the rectangular dimensions.
+- Verified that open, concave and uncalibrated drawings explain the missing dimensions in Properties. Closing the loop through undo or applying calibration restored the marks with the setting still enabled. A downloaded project reopened in a fresh browser context with the setting and an independent 200.0 cm free-point dimension, which remained editable.
 - Inspected all four labels in the browser and CLI PNGs. Checked the four exported browser SVG dimension paths independently against its 580 × 680 cm wall centerlines and 20 cm wall thickness. The bundled 29-object example passed CLI validation and rendered to PNG. Physical-scale PDF sheets are tracked in issue #15.
 
 ## Multiple proposals

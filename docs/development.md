@@ -53,7 +53,7 @@ The shared command/validation layer can be exposed through MCP later. This versi
 - `src/Drawing.tsx`, `src/Canvas.tsx`: architectural rendering and pointer interactions.
 - `src/Properties.tsx`, `src/App.tsx`: object/source editors and editor shell.
 - `src/rooms.ts`: enclosed floor detection, wall footprint subtraction, room areas and interior label placement.
-- `src/exterior.ts`: rectangular exterior contour and annotation bounds. `deriveExteriorContour(plan)` returns either four clockwise outside-face intersections in centimeters or a status explaining why the footprint is unavailable. The contour is independent of annotation visibility and is the geometry input for the garage area and site plan features.
+- `src/exterior.ts`: convex exterior contour and annotation bounds. `deriveExteriorContour(plan)` returns clockwise outside-face intersections in centimeters or a status explaining why the footprint is unavailable. Each edge corresponds to one wall. The contour is independent of annotation visibility and is the geometry input for the garage area and site plan features.
 - `src/exports.ts`: browser downloads and SVG/PNG exports.
 
 ## Schemas and examples

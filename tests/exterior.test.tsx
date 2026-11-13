@@ -11,6 +11,7 @@ import {
   emptyPlan,
   rotate,
   serialize,
+  setCorner,
   translate,
   type Dimension,
   type Plan,
@@ -20,21 +21,26 @@ import { renderPlanSvg } from "../src/preview";
 import { addProposal, activePlan } from "../src/project";
 import { readProjectFile } from "../src/validation";
 
-function garage(turn = 0) {
-  const corners = [
-    { x: 10, y: 10 },
-    { x: 590, y: 10 },
-    { x: 590, y: 690 },
-    { x: 10, y: 690 },
-  ].map((point) => rotate(point, turn));
-  const walls: Wall[] = corners.map((a, i) => ({
+function wallLoop(corners: { x: number; y: number }[]): Wall[] {
+  return corners.map((a, i) => ({
     id: `wall-${i}`,
     type: "wall",
     name: `Wall ${i + 1}`,
     a,
-    b: corners[(i + 1) % 4],
+    b: corners[(i + 1) % corners.length],
     thickness: 20,
   }));
+}
+
+function garage(turn = 0) {
+  const walls = wallLoop(
+    [
+      { x: 10, y: 10 },
+      { x: 590, y: 10 },
+      { x: 590, y: 690 },
+      { x: 10, y: 690 },
+    ].map((point) => rotate(point, turn)),
+  );
   return { plan: { ...emptyPlan(), items: walls }, walls };
 }
 
@@ -120,19 +126,55 @@ describe("garage exterior contour", () => {
     expect(spans(history.undo(firstUndo))).toEqual([600, 700]);
   });
 
+  it("intersects offset wall faces at acute and obtuse corners after a corner edit", () => {
+    const { plan, walls } = garage();
+    const angled = setCorner(plan, walls[1].id, "b", { x: 80, y: 690 });
+    // The sloped centerline follows a 3-4-5 direction. Its outer face
+    // intersects y=0 at x=610 and y=700 at x=85.
+    expect(deriveExteriorContour(angled)).toEqual({
+      status: "ready",
+      corners: [
+        { x: 0, y: 0 },
+        { x: 610, y: 0 },
+        { x: 85, y: 700 },
+        { x: 0, y: 700 },
+      ],
+    });
+    const svg = renderPlanSvg({ ...angled, showExteriorDimensions: true });
+    const markup = new DOMParser().parseFromString(svg, "image/svg+xml");
+    expect(
+      [...markup.querySelectorAll("[data-exterior-dimensions] text")].map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(["6.10 m", "8.75 m", "0.85 m", "7.00 m"]);
+  });
+
+  it("provides an outside-face segment for every wall in a clipped-corner footprint", () => {
+    const { plan } = garage();
+    const clipped = wallLoop([
+      { x: 10, y: 10 },
+      { x: 490, y: 10 },
+      { x: 590, y: 110 },
+      { x: 590, y: 690 },
+      { x: 10, y: 690 },
+    ]);
+    const contour = deriveExteriorContour({ ...plan, items: clipped });
+    expect(contour.status).toBe("ready");
+    if (contour.status !== "ready") throw Error(contour.status);
+    expect(contour.corners).toHaveLength(5);
+    expect(contour.corners[1].x).toBeCloseTo(480 + 10 * Math.SQRT2);
+    expect(contour.corners[2].y).toBeCloseTo(120 - 10 * Math.SQRT2);
+  });
+
   it("reports open, unsupported, and uncalibrated geometry without claiming a size", () => {
     const { plan, walls } = garage();
     expect(
       deriveExteriorContour({ ...plan, items: walls.slice(0, 3) }),
     ).toEqual({ status: "open" });
-    const corner = { x: 530, y: 690 };
-    const skewed = [
-      walls[0],
-      { ...walls[1], b: corner },
-      { ...walls[2], a: corner },
-      walls[3],
-    ];
-    expect(deriveExteriorContour({ ...plan, items: skewed })).toEqual({
+    const concave = setCorner(plan, walls[1].id, "b", { x: 160, y: 180 });
+    expect(deriveExteriorContour(concave)).toEqual({ status: "unsupported" });
+    const bowTie = wallLoop([walls[0].a, walls[2].a, walls[1].a, walls[3].a]);
+    expect(deriveExteriorContour({ ...plan, items: bowTie })).toEqual({
       status: "unsupported",
     });
     expect(
