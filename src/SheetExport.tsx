@@ -11,12 +11,15 @@ import {
 export default function SheetExport({
   build,
   name,
+  initialScale = defaultSheetOptions.scale,
 }: {
   build: () => SheetDrawing;
   name: string;
+  initialScale?: SheetOptions["scale"];
 }) {
   const [options, setOptions] = useState<SheetOptions>({
     ...defaultSheetOptions,
+    scale: initialScale,
     name,
   });
   const [exporting, setExporting] = useState(false);

@@ -352,13 +352,17 @@ export default function Canvas({
       const b = bounds(item, g.base.items),
         raw = { x: b.x + p.x - g.start.x, y: b.y + p.y - g.start.y },
         q = snapped(raw, g.ids);
-      return translate(g.base, g.ids, { x: q.x - b.x, y: q.y - b.y });
+      return translate(g.base, g.ids, { x: q.x - b.x, y: q.y - b.y }, (item) =>
+        isEditProtected(g.base, item),
+      );
     } else if (g.kind === "endpoint" && item.type === "wall") {
       return setCorner(
         g.base,
         item.id,
         g.handle as "a" | "b",
         snapped(p, g.ids),
+        true,
+        (item) => isEditProtected(g.base, item),
       );
     } else if (isRect(item)) {
       const i = { ...item },

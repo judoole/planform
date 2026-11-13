@@ -182,7 +182,13 @@ export default function Properties({
     }
   }
   function moveCorner(wall: Wall, end: "a" | "b", point: Wall["a"]) {
-    action(() => commit(setCorner(plan, wall.id, end, point)));
+    action(() =>
+      commit(
+        setCorner(plan, wall.id, end, point, true, (item) =>
+          isEditProtected(plan, item),
+        ),
+      ),
+    );
   }
   return (
     <div className="properties-content">
@@ -444,6 +450,7 @@ export default function Properties({
                 key={item.id}
                 plan={plan}
                 wall={item}
+                protectedItem={(item) => isEditProtected(plan, item)}
                 onCommit={(p) => commit(p, undefined, true)}
                 onError={onError}
               />
