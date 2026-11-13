@@ -5,6 +5,8 @@ import { garageViews, garageViewNames, garageViewSheet } from "./garageViews";
 import { visiblePlan } from "./layers";
 import type { Plan } from "./model";
 import { floorPlanSheet } from "./planSheet";
+import { propertyMapSheet } from "./PropertyMapArtwork";
+import type { ParcelMap } from "./propertyMap";
 import type { SheetDrawing, SheetOptions } from "./sheets";
 
 export type DrawingPdfPage = {
@@ -14,7 +16,10 @@ export type DrawingPdfPage = {
   drawing: SheetDrawing;
 };
 
-export function drawingPdfPages(input: Plan) {
+export function drawingPdfPages(
+  input: Plan,
+  parcels: ParcelMap = { selected: [], nearby: [] },
+) {
   const plan = visiblePlan(input);
   const pages: DrawingPdfPage[] = [];
   function add(
@@ -37,6 +42,16 @@ export function drawingPdfPages(input: Plan) {
     add(view, garageViewNames[view], "drawing", () =>
       garageViewSheet(plan, view),
     );
+  }
+  if (plan.propertyMap?.placement) {
+    const drawing = propertyMapSheet(plan, plan.propertyMap, parcels);
+    if (drawing)
+      pages.push({
+        id: "property-map",
+        label: drawing.title,
+        scale: 500,
+        drawing,
+      });
   }
   if (plan.garage?.site)
     add("site", "Site plan", 500, () =>

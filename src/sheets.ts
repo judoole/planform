@@ -7,6 +7,7 @@ export type SheetDrawing = {
   markup: string;
   fitLabel?: string;
   legend?: string[];
+  legendLinks?: Record<number, string>;
   legendSwatches?: {
     index: number;
     fill: string;
@@ -184,9 +185,14 @@ async function drawPdfSheet(
       pdf.rect(page.margin, y - 2.6, 5, 2.5, "FD");
       pdf.setLineDashPattern([], 0);
     }
-    pdf.text(entry, page.margin + (swatch ? 7 : 0), y, {
-      maxWidth: page.width - page.margin * 2 - (swatch ? 7 : 0),
-    });
+    const x = page.margin + (swatch ? 7 : 0);
+    const maxWidth = page.width - page.margin - x;
+    pdf.text(entry, x, y, { maxWidth });
+    const url = drawing.legendLinks?.[index];
+    if (url)
+      pdf.link(x, y - 3, Math.min(maxWidth, pdf.getTextWidth(entry)), 4, {
+        url,
+      });
   });
 }
 

@@ -1877,6 +1877,11 @@ button svg {
 }
 
 .workspace-toolbar > button[hidden] {
+  display: none !important;
+}
+
+.tool-palette[hidden],
+.inspector[hidden] {
   display: none;
 }
 
@@ -1905,4 +1910,11 @@ button svg {
   align-items: center;
   gap: 8px;
   margin: 7px 0;
+}
+
+@media (max-width: 420px) {
+  .building-view-switch button {
+    padding-inline: 5px;
+    font-size: 11px;
+  }
 }
