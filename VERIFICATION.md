@@ -1,4 +1,18 @@
-# Verification - 7 November 2026
+# Verification - 13 November 2026
+
+## General building model and 3D
+
+The integration started at `origin/main` commit `80792e43`. The separate permit draft builds on this branch and remains available for review.
+
+| Change                | Worktree branch and integrated commit              | Evidence                                                                                                                                                                                                              |
+| --------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared building model | `feat/building-model-contract`, `f84a688`          | Tests cover inherited and explicit wall heights, hosted opening dimensions, one outer shell with interior partitions, flat, shed and gable roofs, validation and the CLI building operation.                          |
+| Interactive 3D        | `feat/building-3d-viewer`, `81cf788`               | Chrome rendered a house, its roof-off interior, and a detached garage. Viewer checks covered pointer and keyboard orbit, zoom and reset, selection and the WebGL fallback. Mesh tests check the actual opening holes. |
+| Editor controls       | `feat/building-model-3d`, `d3e5302` and follow-ups | Chrome checked a floor-wide height change, undo and redo, retained overrides, a multi-wall edit, reset to the floor default, and new walls inheriting the default. Roof and window edits survived Save and Open.      |
+
+`npm test` passed 101 tests. The production build, required Prettier check, CLI example validation and PNG rendering passed. The synthetic house has interior rooms and an exterior window. The synthetic garage measures 6 × 7 m. These fixtures verify editing and geometry.
+
+## Earlier verification
 
 ## Current implementation
 
