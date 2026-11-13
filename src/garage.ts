@@ -1,7 +1,7 @@
 import { wallHeight } from "./building";
 import type { GarageSite } from "./siteMap";
 import type { GarageStructure } from "./garageViews";
-import { deriveExteriorContour, exteriorDimensionSegments } from "./exterior";
+import { deriveSingleLoopContour, exteriorDimensionSegments } from "./exterior";
 import { dist, type Plan, type Point } from "./model";
 
 export type GarageDetails = {
@@ -34,7 +34,7 @@ export type GarageDetails = {
 
 /** The permit workflow supports a detached garage with one rectangular footprint. */
 export function garageFootprint(plan: Plan) {
-  const contour = deriveExteriorContour(plan);
+  const contour = deriveSingleLoopContour(plan);
   if (contour.status === "uncalibrated")
     throw Error("Calibrate the floor plan before preparing these drawings.");
   if (contour.status !== "ready" || contour.corners.length !== 4)

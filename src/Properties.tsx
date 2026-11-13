@@ -44,7 +44,7 @@ import { dimensionEndpoints, mapDimensionAnchors } from "./dimensions";
 const exteriorMessages = {
   open: "Close the wall loop to show exterior dimensions.",
   unsupported:
-    "Use one convex wall loop with no extra walls, including partitions or stubs. Keep corners distinct and leave space inside the walls.",
+    "Exterior lengths need one closed outer outline with straight walls and no inward corners.",
   uncalibrated: "Calibrate scale to show exterior dimensions in meters.",
 };
 
@@ -520,7 +520,7 @@ export default function Properties({
         <label className="property-checkbox">
           <input
             type="checkbox"
-            checked={Boolean(plan.showExteriorDimensions)}
+            checked={plan.showExteriorDimensions !== false}
             onChange={(event) => onShowExteriorDimensions(event.target.checked)}
           />
           Show exterior wall lengths

@@ -369,6 +369,9 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
     title: garageViewNames[view],
     bounds: { x: left, y: top, w: right - left, h: bottom - top },
     legend: [
+      ...(plan.showExteriorDimensions !== false
+        ? [`${cut ? "Section width" : "Exterior wall length"}: ${m(span)}`]
+        : []),
       "Existing terrain (dashed brown)",
       "Proposed terrain (solid green)",
     ],

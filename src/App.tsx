@@ -333,7 +333,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   const ghostPlan = overlay ? reference?.plan : undefined;
   const ghost = useMemo(() => ghostPlan && visiblePlan(ghostPlan), [ghostPlan]);
   const [readExterior] = useState(createExteriorContourReader);
-  const exterior = readExterior(plan);
+  const exterior = readExterior(shown);
   const visibleExterior = visibleExteriorContour(shown, readExterior);
   const { rooms, roomError } = useMemo(() => {
     try {

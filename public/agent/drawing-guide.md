@@ -14,11 +14,11 @@ You are creating a single-floor, 2D architectural drawing. Return a downloadable
 ## Project envelope
 
 Required: `format: "planform"`, `version: 2`, `name`, `units: "cm"`, `items`.
-Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrated": true, "imported": false, "factor": 1 }`), `showExteriorDimensions` (boolean; hidden when omitted), `building` (vertical dimensions and roof, described below), `source: { "file": "house.pdf", "page": 1, "notes": ["..."] }`, `$schema`.
+Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrated": true, "imported": false, "factor": 1 }`), `showExteriorDimensions` (boolean; shown when omitted), `building` (vertical dimensions and roof, described below), `source: { "file": "house.pdf", "page": 1, "notes": ["..."] }`, `$schema`.
 
 `calibration.factor` is cumulative scaling history; changing this number does not scale geometry. All stored coordinates are already in centimeters. Set `imported: true` for reconstructed source drawings. Never claim unknown dimensions are measured.
 
-Set `showExteriorDimensions` to true to annotate a calibrated, convex loop of connected straight walls. The editor and rendered exports label each exterior wall between the intersections of adjoining outside faces, including angled corners. For a 600 × 700 cm rectangular exterior with 20 cm walls, draw the centerlines 580 × 680 cm apart.
+Exterior dimensions appear when the drawing is calibrated and has a closed, convex outline. Interior walls can remain inside the outline. Set `showExteriorDimensions` to false to hide the labels. The editor and rendered exports label each exterior wall between the intersections of adjoining outside faces, including angled corners. For a 600 × 700 cm rectangular exterior with 20 cm walls, draw the centerlines 580 × 680 cm apart.
 
 Every item requires `id`, `name`, `type`. Optional `locked` and `evidence: { "basis": "measured" | "estimated", "note": "Source dimension or explicit assumption" }`. IDs are unique across the entire document, including groups. Unknown properties and arbitrary SVG markup are rejected.
 

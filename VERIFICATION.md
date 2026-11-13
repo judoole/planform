@@ -1,5 +1,9 @@
 # Verification - 13 November 2026
 
+## Exterior wall measurements
+
+Chrome opened the partitioned house without a saved exterior-dimension preference and showed its 10.00 m and 8.00 m sides in 2D and 3D. PDF text inspection confirmed the four floor-plan marks, both PDF page summaries, the elevation width, and that turning the option off removed the automatic labels. The shared shell calculation supports interior partitions and refuses an open or unsupported outline. All 131 tests, the build, formatting, and CLI example validation and rendering passed.
+
 ## Combined drawing PDF
 
 Chrome downloaded one PDF with the floor plan, 3D illustration, section, four elevations, site plan and building areas. The same dialog produced eight pages after deselecting 3D and one page from an uncalibrated sketch. Rendered all nine pages and independently measured the 60 × 70 mm floor plan at 1:100 and the 12 × 14 mm site plan at 1:500. The 3D page contains a still image with its own scale label.

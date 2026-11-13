@@ -119,3 +119,14 @@
     max-width: calc(100% - 20px);
   }
 }
+
+.building-viewport-dimensions {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  right: 20px;
+  margin: 0;
+  color: #31463b;
+  font-size: 12px;
+  pointer-events: none;
+}

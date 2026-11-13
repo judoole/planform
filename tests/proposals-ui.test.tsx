@@ -68,7 +68,7 @@ const selected = () =>
   host.querySelector<HTMLSelectElement>('[aria-label="Active drawing"]')!.value;
 
 it("keeps exterior visibility out of geometry undo and redo", async () => {
-  const initial = emptyPlan();
+  const initial = { ...emptyPlan(), showExteriorDimensions: false };
   initial.items = [
     {
       id: "wall",

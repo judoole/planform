@@ -129,6 +129,28 @@ describe("scaled sheets", () => {
     ).toBe(10);
   });
 
+  it("includes exterior measurements by default even when a house has a partition", () => {
+    const plan = garage();
+    const partition: Wall = {
+      id: "partition",
+      type: "wall",
+      name: "Partition",
+      a: { x: 300, y: 10 },
+      b: { x: 300, y: 690 },
+      thickness: 12,
+    };
+    const house = {
+      ...plan,
+      showExteriorDimensions: undefined,
+      items: [...plan.items, partition],
+    };
+    expect(floorPlanSheet(house).markup).toContain("6.00 m");
+    expect(floorPlanSheet(house).markup).toContain("7.00 m");
+    expect(
+      floorPlanSheet({ ...house, showExteriorDimensions: false }).markup,
+    ).not.toContain("data-exterior-dimensions");
+  });
+
   it("exports an uncalibrated sketch fitted to paper without a scale claim", () => {
     const plan = garage();
     plan.calibration.calibrated = false;

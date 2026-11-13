@@ -26,7 +26,7 @@
     },
     "showExteriorDimensions": {
       "type": "boolean",
-      "description": "Show the live outside-face length of each wall in a calibrated, closed convex footprint. Omitted means hidden."
+      "description": "Show live outside-face lengths for a calibrated, closed convex building outline. Omitted means shown."
     },
     "garage": {
       "type": "object",

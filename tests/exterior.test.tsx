@@ -129,6 +129,28 @@ describe("garage exterior contour", () => {
     }
   });
 
+  it("uses the outside faces with interior walls, but never bridges a gap", () => {
+    const { plan, walls } = garage();
+    const partition: Wall = {
+      ...walls[1],
+      id: "partition",
+      a: { x: 300, y: 10 },
+      b: { x: 300, y: 690 },
+      thickness: 12,
+    };
+    const withPartition = { ...plan, items: [...walls, partition] };
+    expect(deriveExteriorContour(withPartition)).toEqual(
+      deriveExteriorContour(plan),
+    );
+    expect(renderPlanSvg(withPartition)).toContain("7.00 m");
+    expect(
+      deriveExteriorContour({
+        ...withPartition,
+        items: [walls[0], walls[1], walls[2], partition],
+      }).status,
+    ).not.toBe("ready");
+  });
+
   it("matches nearly coincident endpoints without snapping stored coordinates", () => {
     const { plan, walls } = garage();
     walls[1].a = { ...walls[1].a, y: walls[1].a.y + 0.0000005 };
@@ -228,20 +250,12 @@ describe("garage exterior contour", () => {
     expect(deriveExteriorContour({ ...plan, items: bowTie })).toEqual({
       status: "unsupported",
     });
-    const extraWalls: Wall[] = [
-      { ...walls[1], id: "duplicate" },
-      {
-        ...walls[1],
-        id: "partition",
-        a: { x: 300, y: 10 },
-        b: { x: 300, y: 690 },
-      },
-      { ...walls[1], id: "stub", a: walls[1].a, b: { x: 300, y: 150 } },
-    ];
-    for (const wall of extraWalls)
-      expect(
-        deriveExteriorContour({ ...plan, items: [...walls, wall] }),
-      ).toEqual({ status: "unsupported" });
+    expect(
+      deriveExteriorContour({
+        ...plan,
+        items: [...walls, { ...walls[1], id: "duplicate" }],
+      }),
+    ).toEqual({ status: "unsupported" });
     const filled = walls.map((wall) => ({ ...wall, thickness: 600 }));
     expect(deriveExteriorContour({ ...plan, items: filled })).toEqual({
       status: "unsupported",
@@ -294,7 +308,10 @@ describe("exterior dimensions in saved drawings and exports", () => {
 
   it("uses the same marks for browser exports and CLI previews, with room for their labels", () => {
     const { plan, walls } = garage();
-    expect(renderPlanSvg(plan)).not.toContain("data-exterior-dimensions");
+    expect(renderPlanSvg(plan)).toContain("data-exterior-dimensions");
+    expect(
+      renderPlanSvg({ ...plan, showExteriorDimensions: false }),
+    ).not.toContain("data-exterior-dimensions");
     const show = {
       ...plan,
       showExteriorDimensions: true,

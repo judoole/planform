@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { exteriorWallLengthSummary } from "./exterior";
 import { traceForExport } from "./reference";
 import { phaseLegend, phaseLegendStyles, visiblePlan } from "./layers";
 import type { Plan } from "./model";
@@ -22,10 +23,14 @@ export function floorPlanSheet(
     throw Error("Add drawing objects before exporting a floor plan.");
   const b = planArtworkBounds(plan, undefined, false);
   const pad = 12;
+  const exteriorLengths = exteriorWallLengthSummary(plan);
   return {
     title: "Floor plan - Ground floor",
     bounds: { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad },
-    legend: phaseLegend(plan),
+    legend: [
+      ...phaseLegend(plan),
+      ...(exteriorLengths ? [exteriorLengths] : []),
+    ],
     legendSwatches: phaseLegendStyles(plan)?.entries.map((entry, index) => ({
       index: index + 1,
       fill: entry.fill,

@@ -6,6 +6,7 @@ import {
   Scene,
   WebGLRenderer,
 } from "three";
+import { exteriorWallLengthSummary } from "./exterior";
 import { buildScene } from "./buildingScene";
 import type { Plan } from "./model";
 import type { SheetDrawing } from "./sheets";
@@ -50,11 +51,13 @@ export function buildingSnapshot(plan: Plan): SheetDrawing {
     const jpeg = renderer.domElement.toDataURL("image/jpeg", 0.92);
     if (!jpeg.startsWith("data:image/jpeg;base64,"))
       throw Error("The browser could not capture the rendered model.");
+    const dimensions = exteriorWallLengthSummary(plan);
     return {
       title: "3D view",
       bounds: { x: 0, y: 0, w: width, h: height },
       markup: `<image href="${jpeg}" width="${width}" height="${height}" />`,
       fitLabel: "3D illustration - Not to scale",
+      legend: dimensions ? [dimensions] : undefined,
     };
   } finally {
     building.dispose();
