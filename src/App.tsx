@@ -1401,20 +1401,26 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       <footer className="statusbar">
         <span>
           <span className="status-dot" />
-          {selected.length
-            ? `${selected.length} selected`
-            : tool === "select"
-              ? "Ready to design"
-              : palette.find((p) => p.tool === tool)?.label || "Select"}
+          {viewMode === "3d" && !selected.length
+            ? "3D view"
+            : selected.length
+              ? `${selected.length} selected`
+              : tool === "select"
+                ? "Ready to design"
+                : palette.find((p) => p.tool === tool)?.label || "Select"}
         </span>
-        <span className="navigation-hint">
-          Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
-        </span>
-        <span className="coordinate-readout">
-          {coords} {plan.calibration.calibrated ? "cm" : "units"}
-          <span className="status-separator" />
-          Grid {plan.grid} {plan.calibration.calibrated ? "cm" : "units"}
-        </span>
+        {viewMode === "plan" && (
+          <>
+            <span className="navigation-hint">
+              Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
+            </span>
+            <span className="coordinate-readout">
+              {coords} {plan.calibration.calibrated ? "cm" : "units"}
+              <span className="status-separator" />
+              Grid {plan.grid} {plan.calibration.calibrated ? "cm" : "units"}
+            </span>
+          </>
+        )}
       </footer>
       {notice && (
         <div role="status" className="toast">

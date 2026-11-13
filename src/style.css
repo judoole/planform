@@ -1740,3 +1740,6 @@ button svg {
 .wall-height-batch > button {
   justify-self: start;
 }
+.workspace-toolbar > button[hidden] {
+  display: none;
+}
