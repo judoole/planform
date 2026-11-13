@@ -1,3 +1,4 @@
+import type { BuildingSettings } from "./building";
 import { readProject } from "./validation";
 import type { Project } from "./project";
 import type { FurnitureKind } from "./furniture";
@@ -10,6 +11,7 @@ export type Wall = Base & {
   a: Point;
   b: Point;
   thickness: number;
+  height?: number;
 };
 export type DoorStyle = "hinged" | "sliding";
 export type Opening = Base & {
@@ -17,6 +19,8 @@ export type Opening = Base & {
   hostId: string;
   t: number;
   width: number;
+  height?: number;
+  sill?: number;
   hinge: number;
   swing: number;
   style?: DoorStyle;
@@ -47,6 +51,7 @@ export type Plan = {
   units: "cm";
   items: Item[];
   showExteriorDimensions?: boolean;
+  building?: BuildingSettings;
   calibration: {
     calibrated: boolean;
     imported: boolean;

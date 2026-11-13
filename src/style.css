@@ -1696,3 +1696,59 @@ button svg {
 .share-load a {
   color: #1c5e49;
 }
+
+.building-view-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #cddbd1;
+  border-radius: 7px;
+  flex: 0 0 auto;
+}
+.building-view-switch button {
+  min-height: 26px;
+  height: auto;
+  padding: 2px 9px;
+}
+.building-view-switch button[aria-pressed="true"] {
+  background: #e3eee6;
+  color: #1b523e;
+}
+.plan-view {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.plan-view[inert] {
+  visibility: hidden;
+}
+.building-view {
+  position: absolute;
+  inset: 0;
+}
+.building-view-loading {
+  margin: 24px;
+}
+.wall-height-batch {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wall-height-batch > button {
+  justify-self: start;
+}
+.workspace-toolbar > button[hidden] {
+  display: none;
+}
+
+.optional-floor-settings {
+  margin-top: 16px;
+}
+.optional-floor-settings summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #426752;
+}

@@ -1,4 +1,5 @@
 import Ajv from "ajv";
+import type { BuildingSettings } from "./building";
 import projectSchema from "../public/agent/planform.schema.json";
 import commandSchema from "../public/agent/commands.schema.json";
 import {
@@ -25,6 +26,8 @@ type Operation =
       hostId: string;
       offset: number;
       width: number;
+      height?: number;
+      sill?: number;
       hinge?: number;
       swing?: number;
       style?: Opening["style"];
@@ -34,6 +37,7 @@ type Operation =
   | { op: "corner"; wallId: string; end: "a" | "b"; point: Point }
   | { op: "update"; id: string; changes: Record<string, unknown> }
   | { op: "setExteriorDimensions"; show: boolean }
+  | { op: "setBuilding"; building: BuildingSettings | null }
   | { op: "delete"; ids: string[]; cascade?: boolean };
 export type CommandBatch = {
   format: "planform-commands";
@@ -92,6 +96,8 @@ export function applyCommands(
         hostId: wall.id,
         t: op.offset / length,
         width: op.width,
+        ...(op.height === undefined ? {} : { height: op.height }),
+        ...(op.sill === undefined ? {} : { sill: op.sill }),
         hinge: op.hinge ?? 1,
         swing: op.swing ?? 1,
         ...(op.style === undefined ? {} : { style: op.style }),
@@ -125,11 +131,14 @@ export function applyCommands(
       if (item.locked && !(keys.length === 1 && op.changes.locked === false))
         fail(`Object "${item.id}" is locked. Unlock it explicitly first.`);
       plan.items = plan.items.map((i) =>
-        i.id === item.id ? ({ ...i, ...op.changes } as Item) : i,
+        i.id === item.id ? updateItem(i, op.changes) : i,
       );
       changed.add(item.id);
     } else if (op.op === "setExteriorDimensions") {
       plan.showExteriorDimensions = op.show;
+    } else if (op.op === "setBuilding") {
+      if (op.building) plan.building = op.building;
+      else delete plan.building;
     } else {
       const ids = new Set(op.ids);
       op.ids.forEach(editable);
@@ -161,4 +170,17 @@ export function applyCommands(
     changedIds: [...changed],
     deletedIds: [...deleted],
   };
+}
+
+function updateItem(item: Item, changes: Record<string, unknown>): Item {
+  const next = { ...item, ...changes } as Item;
+  if (next.type === "wall" || next.type === "door" || next.type === "window") {
+    if (changes.height === null) delete next.height;
+    if (
+      (next.type === "door" || next.type === "window") &&
+      changes.sill === null
+    )
+      delete next.sill;
+  }
+  return next;
 }

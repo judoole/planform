@@ -73,6 +73,10 @@
                 "minimum": 1,
                 "maximum": 10000000
               },
+              "height": {
+                "$ref": "planform.schema.json#/$defs/buildingHeight"
+              },
+              "sill": { "$ref": "planform.schema.json#/$defs/openingSill" },
               "hinge": {
                 "enum": [-1, 1]
               },
@@ -149,6 +153,20 @@
               }
             },
             "required": ["op", "show"]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "op": { "const": "setBuilding" },
+              "building": {
+                "anyOf": [
+                  { "$ref": "planform.schema.json#/$defs/building" },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "required": ["op", "building"]
           },
           {
             "type": "object",
