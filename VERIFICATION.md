@@ -1,5 +1,11 @@
 # Verification - 13 November 2026
 
+## Sketch-first export
+
+Chrome verified that an uncalibrated house exports a fit-to-page PDF directly from **Export**, with the sketch’s scale status on the page. Verified that selecting a fixed scale still requires calibration. The 6 × 7 m example still measures 60 × 70 mm at 1:100 and 12 × 14 mm at 1:500. The site sheet can be saved without a property reference. Chrome also checked the optional floor elevation and the Layers explanation. All 128 tests, the production build and formatting checks passed.
+
+The checklist and application ZIP in the earlier verification describe the previous draft. The current editor focuses on individual drawings and measurements and opens saved drawings from that draft.
+
 ## Garage permit after the 3D pivot
 
 The permit draft reads roof, wall and opening geometry from the same model as 3D. Old permit-only height fields are retained in the source metadata and copied into the shared model when opening an older draft. Terrain and property details stay with the permit workflow.
