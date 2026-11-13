@@ -21,6 +21,10 @@
     "units": {
       "const": "cm"
     },
+    "showExteriorDimensions": {
+      "type": "boolean",
+      "description": "Show live overall dimensions for a calibrated, closed rectangular footprint. Omitted means hidden."
+    },
     "grid": {
       "type": "number",
       "minimum": 1,

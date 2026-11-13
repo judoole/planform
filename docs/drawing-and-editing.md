@@ -22,3 +22,9 @@ Enclosed architectural walls automatically produce numbered room labels with are
 Areas are measured inside wall faces, excluding wall thickness and internal wall footprints. Sloping walls, concave rooms and nested enclosures are supported. Rounded shared corners use a 64-segment approximation. Doors and windows preserve room boundaries; furniture does not define rooms. Uncalibrated plans show **Set scale** until calibration supplies real-world dimensions.
 
 Room labels are included in browser SVG/PNG exports and agent CLI previews. Rooms are derived from walls rather than saved as separate objects, so existing project files need no migration.
+
+## Overall exterior dimensions
+
+In **Properties**, turn on **Show overall exterior dimensions** for a calibrated drawing containing one rectangular loop of four walls. The marks show the distances between opposite outside wall faces, using half of each wall’s thickness. A garage with 580 × 680 cm centerline spans and 20 cm walls measures 6.00 × 7.00 m outside. Openings and rounded corner fills do not affect the measurement.
+
+The setting is saved per drawing. The editor and SVG/PNG exports recalculate the marks from the current walls, including after undo and reopening. Properties explains when the drawing needs calibration, when the loop is open, and when the wall layout is unsupported. Free-point dimensions remain editable with the **Dimension** tool and Properties.

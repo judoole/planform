@@ -18,6 +18,7 @@ import { RoomLabels } from "../src/Drawing";
 import Properties from "../src/Properties";
 import { exportSvg } from "../src/exports";
 import { renderPlanSvg } from "../src/preview";
+import { deriveExteriorContour } from "../src/exterior";
 
 function wall(a: Point, b: Point, thickness = 20): Wall {
   return {
@@ -249,6 +250,7 @@ describe("room area presentation", () => {
       <Properties
         plan={p}
         rooms={findRooms(p.items)}
+        exterior={deriveExteriorContour(p)}
         selection={selection}
         commit={() => {}}
         setSelection={() => {}}
@@ -256,6 +258,7 @@ describe("room area presentation", () => {
         onDuplicate={() => {}}
         onDelete={() => {}}
         onError={() => {}}
+        onShowExteriorDimensions={() => {}}
       />,
     );
   }

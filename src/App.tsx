@@ -55,7 +55,6 @@ import {
   removeItems,
   duplicateItems,
   History,
-  planBounds,
   calibrate,
   dist,
   serialize,
@@ -87,6 +86,7 @@ import { checkJsonSize, readProjectFile } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
+import { annotatedPlanBounds, deriveExteriorContour } from "./exterior";
 const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
@@ -251,6 +251,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }
   const history = drawingHistory(version);
   const ghost = overlay ? reference?.plan : undefined;
+  const exterior = useMemo(() => deriveExteriorContour(plan), [plan]);
+  const visibleExterior = plan.showExteriorDimensions ? exterior : undefined;
   const { rooms, roomError } = useMemo(() => {
     try {
       return { rooms: findRooms(plan.items), roomError: undefined };
@@ -285,7 +287,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   const fit = useCallback((p: Plan = activePlan(projectRef.current)) => {
     const svg = svgRef.current;
     if (!svg) return;
-    const box = planBounds(p),
+    const box = annotatedPlanBounds(p),
       b = svg.getBoundingClientRect(),
       pad = Math.min(90, b.width * 0.12),
       k = Math.min(
@@ -641,7 +643,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   async function exporting(png: boolean) {
     setExportMenu(false);
     try {
-      const svg = exportSvg(svgRef.current!, planBounds(plan));
+      const svg = exportSvg(
+        svgRef.current!,
+        annotatedPlanBounds(plan, visibleExterior),
+      );
       const name =
         project.version !== 2
           ? `${project.name} - ${activeDrawing.name}`
@@ -1105,6 +1110,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             plan={plan}
             ghost={ghost}
             rooms={rooms}
+            exterior={visibleExterior}
             setPreview={setPreview}
             commit={commit}
             selection={selection}
@@ -1215,6 +1221,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               plan={plan}
               rooms={rooms}
               roomError={roomError}
+              exterior={exterior}
               selection={selection}
               commit={commit}
               setSelection={setSelection}
@@ -1222,6 +1229,13 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onDuplicate={duplicate}
               onDelete={del}
               onError={showNotice}
+              onShowExteriorDimensions={(show) =>
+                commit(
+                  { ...drawing, showExteriorDimensions: show },
+                  undefined,
+                  true,
+                )
+              }
             />
           ) : (
             <div className="objects-panel">

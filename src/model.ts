@@ -46,6 +46,7 @@ export type Plan = {
   name: string;
   units: "cm";
   items: Item[];
+  showExteriorDimensions?: boolean;
   calibration: {
     calibrated: boolean;
     imported: boolean;

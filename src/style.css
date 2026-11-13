@@ -754,6 +754,17 @@ button svg {
   min-width: 0;
   margin: 9px 0;
 }
+.property-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #54684a;
+  font-size: 12px;
+}
+.property-checkbox input {
+  margin: 0;
+  accent-color: #27846b;
+}
 .stat-row {
   display: flex;
   justify-content: space-between;

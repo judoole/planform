@@ -4,6 +4,12 @@
 
 Planform now uses architectural project schema v2. SVG import, raw SVG content, reference pages and vector-node editing are removed. SVG is retained for internal rendering and export. Agent interaction is through files and atomic command batches; no live MCP endpoint or in-app model is included.
 
+## Garage exterior dimensions
+
+- Chrome verified a garage drawn with 580 × 680 cm centerline spans and 20 cm walls. Enabling the Properties checkbox displayed 6.00 × 7.00 m. Changing one wall to 40 cm displayed 7.10 m along that axis, and dragging the right wall 50 cm outward displayed 6.50 m during and after the drag. Undo restored the original readings.
+- Verified that open, skewed and uncalibrated drawings explain the missing dimensions in Properties. Closing the loop through undo or applying calibration restored the marks with the setting still enabled. A downloaded project reopened in a fresh browser context with the setting and an independent 200.0 cm free-point dimension, which remained editable.
+- Inspected the browser and CLI PNGs. Checked the exported browser SVG dimension paths independently against its 580 × 680 cm wall centerlines and 20 cm wall thickness. Both browser and CLI SVGs displayed 6.00 m and 7.00 m. The bundled 29-object example passed CLI validation and rendered to PNG. Physical-scale PDF sheets are tracked in issue #15.
+
 ## Multiple proposals
 
 - Project schema v4 holds exactly one Existing drawing and up to ten named proposals, with stable drawing IDs and an active ID. Every nested drawing uses schema v2. The shared validator checks drawing IDs, the active reference, roles and all inactive geometry. Validated v3 files and historical share links migrate without changing their drawing data; single v1/v2 architectural files remain supported.

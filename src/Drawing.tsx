@@ -1,8 +1,15 @@
 import { Fragment, memo } from "react";
 import { type Room, formatRoomArea } from "./rooms";
 import {
+  exteriorDimensionLabel,
+  exteriorDimensionOffset,
+  exteriorDimensionSegments,
+  type ExteriorContour,
+} from "./exterior";
+import {
   type Item,
   type Plan,
+  type Point,
   type RectItem,
   type Wall,
   dist,
@@ -12,6 +19,86 @@ import {
 } from "./model";
 const ink = "#34443f",
   light = "#e5ebe5";
+
+function DimensionMark({
+  a,
+  b,
+  offset: d,
+  label,
+  interactive = false,
+  keepLabelUpright = false,
+}: {
+  a: Point;
+  b: Point;
+  offset: number;
+  label: string;
+  interactive?: boolean;
+  keepLabelUpright?: boolean;
+}) {
+  const l = dist(a, b);
+  const rotation = angle(a, b);
+  const end = d + (d < 0 ? -8 : 8);
+  return (
+    <g
+      transform={`translate(${a.x} ${a.y}) rotate(${rotation})`}
+      stroke="#647d71"
+      strokeWidth={1}
+      fill="none"
+    >
+      <path
+        d={`M 0 0 V ${end} M ${l} 0 V ${end} M 0 ${d} H ${l} M -4 ${d - 5} l 8 10 M ${l - 4} ${d - 5} l 8 10`}
+      />
+      <text
+        x={l / 2}
+        y={d - 6}
+        textAnchor="middle"
+        fontSize={15}
+        fontFamily="Arial, sans-serif"
+        fill="#52685d"
+        stroke="white"
+        strokeWidth={5}
+        paintOrder="stroke"
+        transform={
+          keepLabelUpright && Math.abs(rotation) > 90
+            ? `rotate(180 ${l / 2} ${d - 11})`
+            : undefined
+        }
+      >
+        {label}
+      </text>
+      {interactive && (
+        <path
+          data-hit="true"
+          d={`M 0 ${d} H ${l}`}
+          stroke="transparent"
+          strokeWidth={18}
+        />
+      )}
+    </g>
+  );
+}
+
+export function ExteriorDimensions({ contour }: { contour?: ExteriorContour }) {
+  if (contour?.status !== "ready") return null;
+  return (
+    <g
+      data-exterior-dimensions="true"
+      pointerEvents="none"
+      aria-label="Overall exterior dimensions"
+    >
+      {exteriorDimensionSegments(contour.corners).map(([a, b], index) => (
+        <DimensionMark
+          key={index}
+          a={a}
+          b={b}
+          offset={exteriorDimensionOffset}
+          label={exteriorDimensionLabel(a, b)}
+          keepLabelUpright
+        />
+      ))}
+    </g>
+  );
+}
 
 export function RoomLabels({
   rooms,
@@ -396,41 +483,14 @@ export const DrawItem = memo(
         </g>
       );
     } else if (i.type === "dimension") {
-      const a = angle(i.a, i.b),
-        l = dist(i.a, i.b),
-        d = i.offset;
       shape = (
-        <g
-          transform={`translate(${i.a.x} ${i.a.y}) rotate(${a})`}
-          stroke="#647d71"
-          strokeWidth={1}
-          fill="none"
-        >
-          <path
-            d={`M 0 0 V ${d + 8} M ${l} 0 V ${d + 8} M 0 ${d} H ${l} M -4 ${d - 5} l 8 10 M ${l - 4} ${d - 5} l 8 10`}
-          />
-          <text
-            x={l / 2}
-            y={d - 6}
-            textAnchor="middle"
-            fontSize={15}
-            fontFamily="Arial, sans-serif"
-            fill="#52685d"
-            stroke="white"
-            strokeWidth={5}
-            paintOrder="stroke"
-          >
-            {l.toFixed(1)} {plan.calibration.calibrated ? "cm" : "units"}
-          </text>
-          {interactive && (
-            <path
-              data-hit="true"
-              d={`M 0 ${d} H ${l}`}
-              stroke="transparent"
-              strokeWidth={18}
-            />
-          )}
-        </g>
+        <DimensionMark
+          a={i.a}
+          b={i.b}
+          offset={i.offset}
+          label={`${dist(i.a, i.b).toFixed(1)} ${plan.calibration.calibrated ? "cm" : "units"}`}
+          interactive={interactive}
+        />
       );
     } else if (isRect(i)) {
       const b = i.sourceBox;
@@ -466,6 +526,8 @@ export const DrawItem = memo(
   (a, b) =>
     a.interactive === b.interactive &&
     a.item === b.item &&
+    (a.item.type !== "dimension" ||
+      a.plan.calibration.calibrated === b.plan.calibration.calibrated) &&
     ((a.item.type !== "wall" &&
       a.item.type !== "door" &&
       a.item.type !== "window") ||
