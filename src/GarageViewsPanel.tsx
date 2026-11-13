@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import type { GarageDetails } from "./garage";
 import {
   garageViewNames,
@@ -9,48 +9,6 @@ import {
 } from "./garageViews";
 import type { Plan, Point } from "./model";
 import SheetExport from "./SheetExport";
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value?: number;
-  min: number;
-  max: number;
-  onChange: (value: number | undefined) => void;
-}) {
-  const [text, setText] = useState(value?.toString() ?? "");
-  const valid =
-    !text.trim() ||
-    (Number.isFinite(Number(text)) &&
-      Number(text) >= min &&
-      Number(text) <= max);
-  return (
-    <label>
-      {label}
-      <input
-        type="number"
-        step="any"
-        min={min}
-        max={max}
-        value={text}
-        onFocus={() => setText(value?.toString() ?? "")}
-        onChange={(e) => {
-          setText(e.target.value);
-          if (e.target.validity.valid)
-            onChange(
-              e.target.value === "" ? undefined : Number(e.target.value),
-            );
-        }}
-        aria-invalid={!valid}
-      />
-    </label>
-  );
-}
 
 function TerrainField({
   label,
@@ -102,7 +60,6 @@ function TerrainField({
             setError(
               "Enter 2–150 lines of station, height in cm, in ascending station order.",
             );
-            onChange(undefined);
             return;
           }
           setError("");
@@ -128,78 +85,14 @@ export default function GarageViewsPanel({
     onChange({ ...plan.garage, structure: next });
   }
   const terrain = structure.terrain?.[view];
-  const fields = [
-    ["floor", "Finished floor level (cm)", -1000000, 1000000],
-    ["wallHeight", "Clear wall height (cm)", 0.01, 5000],
-    ["roofPitch", "Roof pitch (degrees)", 0.01, 75],
-    ["roofThickness", "Roof thickness (cm)", 0.01, 500],
-  ] as const;
-  const openingFields: ReactNode[] = [];
-  for (const item of plan.items) {
-    if (item.type !== "door" && item.type !== "window") continue;
-    const values = Object.hasOwn(structure.openings ?? {}, item.id)
-      ? structure.openings?.[item.id]
-      : undefined;
-    for (const [field, defaultValue] of [
-      ["sill", item.type === "door" ? 0 : undefined],
-      ["height", undefined],
-    ] as const) {
-      openingFields.push(
-        <NumberField
-          key={`${item.id}-${field}`}
-          label={`${item.name || item.type} ${field} (cm)`}
-          min={field === "sill" ? 0 : 0.01}
-          max={5000}
-          value={values?.[field] ?? defaultValue}
-          onChange={(value) =>
-            update({
-              ...structure,
-              openings: {
-                ...structure.openings,
-                [item.id]: { ...values, [field]: value },
-              },
-            })
-          }
-        />,
-      );
-    }
-  }
 
   return (
     <>
       <h3>Section and elevations</h3>
       <p>
-        Use the same height datum for the floor and terrain. Wall height runs
-        from finished floor to the roof underside.
+        Set heights and the roof in Building, and opening dimensions in
+        Properties.
       </p>
-      <div className="sheet-fields">
-        {fields.map(([field, label, min, max]) => (
-          <NumberField
-            key={field}
-            label={label}
-            min={min}
-            max={max}
-            value={structure[field]}
-            onChange={(value) => update({ ...structure, [field]: value })}
-          />
-        ))}
-        <label>
-          Ridge direction
-          <select
-            value={structure.ridge ?? "long"}
-            onChange={(e) =>
-              update({
-                ...structure,
-                ridge: e.target.value as GarageStructure["ridge"],
-              })
-            }
-          >
-            <option value="long">Parallel to longer walls</option>
-            <option value="short">Parallel to shorter walls</option>
-          </select>
-        </label>
-        {openingFields}
-      </div>
       <div className="sheet-fields">
         <label>
           Drawing view

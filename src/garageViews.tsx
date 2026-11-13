@@ -2,13 +2,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { garageFootprint } from "./garage";
 import { exteriorDimensionSegments } from "./exterior";
 import {
-  dist,
-  openingFrame,
-  pointsBox,
-  type Plan,
-  type Point,
-  type Wall,
-} from "./model";
+  buildingGeometry,
+  roofHeightAt,
+  wallTopAt,
+  type BuildingRoof,
+  type BuildingWall,
+} from "./building";
+import { dist, pointsBox, rotate, type Plan, type Point } from "./model";
 import type { SheetDrawing } from "./sheets";
 
 export const garageViewNames = {
@@ -31,34 +31,70 @@ export type GarageStructure = {
   terrain?: Partial<Record<GarageView, TerrainProfile>>;
 };
 
-const midpoint = (a: Point, b: Point) => ({
-  x: (a.x + b.x) / 2,
-  y: (a.y + b.y) / 2,
+const epsilon = 1e-6;
+const difference = (a: Point, b: Point): Point => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
 });
+const scale = (p: Point, k: number): Point => ({ x: p.x * k, y: p.y * k });
+const offset = (p: Point, v: Point): Point => ({ x: p.x + v.x, y: p.y + v.y });
+const dot = (a: Point, b: Point) => a.x * b.x + a.y * b.y;
+const cross = (a: Point, b: Point) => a.x * b.y - a.y * b.x;
 
-function garageGeometry(plan: Plan) {
-  const footprint = garageFootprint(plan);
-  const edges = exteriorDimensionSegments(footprint.corners);
-  const ridge = plan.garage?.structure?.ridge ?? "long";
-  const firstIsLongest = dist(...edges[0]) >= dist(...edges[1]);
-  const ridgeEdge = firstIsLongest === (ridge === "long") ? 0 : 1;
-  return { footprint, edges, ridgeEdge };
+function lineHits(origin: Point, direction: Point, edges: [Point, Point][]) {
+  return edges
+    .flatMap(([a, b], edge) => {
+      const side = difference(b, a);
+      const denominator = cross(direction, side);
+      if (Math.abs(denominator) < epsilon) return [];
+      const t = cross(difference(a, origin), side) / denominator;
+      const u = cross(difference(a, origin), direction) / denominator;
+      if (u < -epsilon || u > 1 + epsilon) return [];
+      return [{ point: offset(origin, scale(direction, t)), t, edge }];
+    })
+    .sort((a, b) => a.t - b.t);
 }
 
-export function garageRidgeAngle(plan: Plan) {
-  const { edges, ridgeEdge } = garageGeometry(plan);
-  const [a, b] = edges[ridgeEdge];
-  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+function sectionCut(
+  footprint: ReturnType<typeof garageFootprint>,
+  roof: BuildingRoof,
+) {
+  const { corners } = footprint;
+  const origin = scale(offset(corners[0], corners[2]), 0.5);
+  const shortSide =
+    dist(corners[0], corners[1]) <= dist(corners[1], corners[2])
+      ? difference(corners[1], corners[0])
+      : difference(corners[2], corners[1]);
+  const direction =
+    roof.type === "flat"
+      ? scale(shortSide, 1 / Math.hypot(shortSide.x, shortSide.y))
+      : rotate(
+          { x: 1, y: 0 },
+          roof.direction + (roof.type === "gable" ? 90 : 0),
+        );
+  const outer = lineHits(origin, direction, exteriorDimensionSegments(corners));
+  const inner = lineHits(
+    origin,
+    direction,
+    exteriorDimensionSegments(footprint.insideCorners),
+  );
+  return {
+    direction,
+    from: outer[0],
+    to: outer.at(-1)!,
+    innerFrom: inner[0],
+    innerTo: inner.at(-1)!,
+  };
 }
 
 function sectionStations(plan: Plan) {
-  if (!plan.garage?.structure) return;
+  if (!plan.garage?.structure?.terrain) return;
   try {
-    const { edges, ridgeEdge } = garageGeometry(plan);
-    return [
-      midpoint(...edges[ridgeEdge]),
-      midpoint(...edges[ridgeEdge + 2]),
-    ] as const;
+    const footprint = garageFootprint(plan);
+    const { roof } = buildingGeometry(plan);
+    if (!roof) return;
+    const { from, to } = sectionCut(footprint, roof);
+    return [from.point, to.point] as const;
   } catch {
     return undefined;
   }
@@ -119,109 +155,215 @@ const elevationEdge: Record<Exclude<GarageView, "section">, number> = {
 };
 const m = (cm: number) => `${(cm / 100).toFixed(2)} m`;
 
+function svgPoints(points: Point[]) {
+  return points.map(({ x, y }) => `${x},${y}`).join(" ");
+}
+
+function roofProjection(roof: BuildingRoof, origin: Point, forward: Point) {
+  const station = (point: Point) => dot(difference(point, origin), forward);
+  const depth = (point: Point) => cross(forward, difference(point, origin));
+  // Back roof faces paint first. Each face has a constant vertical offset
+  // from its underside, including the fascia at the footprint edges.
+  return roof.facets
+    .map((facet) => ({
+      depth: facet.reduce((sum, point) => sum + depth(point), 0) / facet.length,
+      surfaces: [
+        facet.map((point) => ({
+          x: station(point),
+          y: -point.z - roof.verticalThickness,
+        })),
+        ...facet.map((point, index) => {
+          const next = facet[(index + 1) % facet.length];
+          return [
+            { x: station(point), y: -point.z },
+            { x: station(next), y: -next.z },
+            { x: station(next), y: -next.z - roof.verticalThickness },
+            { x: station(point), y: -point.z - roof.verticalThickness },
+          ];
+        }),
+      ],
+    }))
+    .sort((a, b) => a.depth - b.depth)
+    .flatMap(({ surfaces }) => surfaces);
+}
+
+function nearRoofEdge(a: Point, b: Point, roof: BuildingRoof) {
+  const ridge = roof.ridge;
+  const vector = difference(b, a);
+  const across = ridge && difference(ridge[1], ridge[0]);
+  const determinant = across && cross(vector, across);
+  if (!ridge || !across || Math.abs(determinant ?? 0) < epsilon) return [a, b];
+  const t = cross(difference(ridge[0], a), across) / determinant!;
+  return t > epsilon && t < 1 - epsilon
+    ? [a, offset(a, scale(vector, t)), b]
+    : [a, b];
+}
+
+function nearestWallOnSide(
+  id: string[],
+  point: Point,
+  walls: Map<string, BuildingWall>,
+) {
+  return id
+    .map((id) => walls.get(id)!)
+    .reduce((nearest, item) =>
+      dist(item.wall.a, point) + dist(item.wall.b, point) <
+      dist(nearest.wall.a, point) + dist(nearest.wall.b, point)
+        ? item
+        : nearest,
+    );
+}
+
 export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
-  const { footprint, edges, ridgeEdge } = garageGeometry(plan);
-  const input = plan.garage?.structure;
-  const isSection = view === "section";
-  const edge = view === "section" ? (ridgeEdge + 1) % 4 : elevationEdge[view];
-  const span = dist(...edges[edge]);
-  const gable = (edge - ridgeEdge) % 2 !== 0;
-  const [edgeA, edgeB] = edges[edge];
-  const widthAcrossRoof = dist(...edges[(ridgeEdge + 1) % 4]);
+  const footprint = garageFootprint(plan);
+  const model = buildingGeometry(plan);
+  const { floorLevel: floor, roof } = model;
+  if (!roof)
+    throw Error(
+      `Incomplete ${garageViewNames[view].toLowerCase()}. Set a roof in Building and close the exterior walls.`,
+    );
+
+  const edges = exteriorDimensionSegments(footprint.corners);
+  const cut = view === "section" ? sectionCut(footprint, roof) : undefined;
+  const edge = view === "section" ? cut!.from.edge : elevationEdge[view];
+  const [from, to] = cut
+    ? [cut.from.point, cut.to.point]
+    : [...edges[edge]].reverse();
+  const span = dist(from, to);
+  const direction = scale(difference(to, from), 1 / span);
+  const station = (p: Point) => dot(difference(p, from), direction);
+  const atStation = (s: number) => offset(from, scale(direction, s));
+  const path = (a: Point, b: Point, at: (p: Point) => number) =>
+    nearRoofEdge(a, b, roof).map((p) => ({ x: station(p), y: -at(p) }));
+
+  const terrain = plan.garage?.structure?.terrain?.[view];
   const missing: string[] = [];
-  if (input?.floor === undefined) missing.push("finished floor level");
-  if (input?.wallHeight === undefined)
-    missing.push("clear wall height to the roof underside");
-  if (input?.roofPitch === undefined) missing.push("roof pitch");
-  if (input?.roofThickness === undefined) missing.push("roof thickness");
-  const terrain = input?.terrain?.[view];
   for (const kind of ["existing", "proposed"] as const) {
     const profile = terrain?.[kind];
     if (!profile || profile.length < 2) missing.push(`${kind} terrain profile`);
     else if (
       profile[0].x > 0 ||
-      profile.at(-1)!.x < span - 1e-6 ||
+      profile.at(-1)!.x < span - epsilon ||
       profile.some((p, index) => index > 0 && profile[index - 1].x >= p.x)
-    )
+    ) {
       missing.push(
         `${kind} terrain spanning stations 0 to ${m(span)} in ascending order`,
       );
+    }
   }
 
-  const openings = isSection
-    ? []
-    : plan.items.flatMap((item) => {
-        if (
-          (item.type !== "door" && item.type !== "window") ||
-          !footprint.wallIds[edge].includes(item.hostId)
-        )
-          return [];
-        const frame = openingFrame(item, plan.items);
-        if (!frame) return [];
-        const entry = Object.hasOwn(input?.openings ?? {}, item.id)
-          ? input?.openings?.[item.id]
-          : undefined;
-        const sill = entry?.sill ?? (item.type === "door" ? 0 : undefined);
-        if (sill === undefined || entry?.height === undefined) {
-          missing.push(`${item.name || item.type} sill or opening height`);
-          return [];
-        }
-        if (sill + entry.height > (input?.wallHeight ?? Infinity))
-          missing.push(
-            `${item.name || item.type} opening within the wall height`,
-          );
-        const center =
-          ((frame.center.x - edgeA.x) * (edgeB.x - edgeA.x) +
-            (frame.center.y - edgeA.y) * (edgeB.y - edgeA.y)) /
-          span;
-        return [
-          {
-            x: span - center - item.width / 2,
-            width: item.width,
-            sill,
-            height: entry.height,
-            id: item.id,
-            type: item.type,
-          },
-        ];
-      });
+  const walls = new Map(model.walls.map((item) => [item.wall.id, item]));
+  const sideWalls = cut
+    ? [
+        nearestWallOnSide(footprint.wallIds[cut.from.edge], from, walls),
+        nearestWallOnSide(footprint.wallIds[cut.to.edge], to, walls),
+      ]
+    : footprint.wallIds[edge].map((id) => walls.get(id)!);
+  const openings = sideWalls.flatMap((wall) =>
+    wall.openings.flatMap((item) => {
+      const position = cut
+        ? dist(wall.wall.a, item.center)
+        : station(item.center);
+      const touchesCut =
+        !cut ||
+        Math.abs(
+          position -
+            dot(
+              difference(wall === sideWalls[0] ? from : to, wall.wall.a),
+              scale(
+                difference(wall.wall.b, wall.wall.a),
+                1 / dist(wall.wall.a, wall.wall.b),
+              ),
+            ),
+        ) <=
+          item.opening.width / 2;
+      if (!touchesCut) return [];
+      if (!item.fits)
+        missing.push(
+          `${item.opening.name || item.opening.type} opening within the wall height`,
+        );
+      return [{ ...item, wall, x: position - item.opening.width / 2 }];
+    }),
+  );
   if (missing.length)
     throw Error(
       `Incomplete ${garageViewNames[view].toLowerCase()}. Enter ${missing.join(", ")}.`,
     );
 
-  const floor = input!.floor!,
-    wall = input!.wallHeight!,
-    pitch = input!.roofPitch!,
-    thickness = input!.roofThickness!;
-  const angle = (pitch * Math.PI) / 180;
-  const verticalThickness = thickness / Math.cos(angle);
-  const rise = (widthAcrossRoof / 2) * Math.tan(angle);
-  const eavesY = -floor - wall;
-  const ridgeY = eavesY - rise - verticalThickness;
-  const floorY = -floor;
-  const eaveTop = eavesY - verticalThickness;
-  const existing = terrain!.existing!,
-    proposed = terrain!.proposed!;
+  const base = -floor;
+  const low = roof.base + roof.verticalThickness;
+  const high =
+    Math.max(...roof.facets.flatMap((facet) => facet.map((p) => p.z))) +
+    roof.verticalThickness;
+  const roofShapes = cut
+    ? [
+        [
+          ...path(from, to, (p) => roofHeightAt(roof, p, "top")),
+          ...path(to, from, (p) => roofHeightAt(roof, p)),
+        ],
+      ]
+    : roofProjection(roof, from, direction);
+  const existing = terrain!.existing!;
+  const proposed = terrain!.proposed!;
   const profileBounds = pointsBox(
     [...existing, ...proposed].map(({ x, y }) => ({ x, y: -y })),
   );
-  const roofTop = gable
-    ? `0,${eaveTop} ${span / 2},${ridgeY} ${span},${eaveTop}`
-    : `0,${ridgeY} ${span},${ridgeY}`;
-  const roofBottom =
-    isSection && gable
-      ? `${span},${eavesY} ${span / 2},${ridgeY + verticalThickness} 0,${eavesY}`
-      : `${span},${eavesY} 0,${eavesY}`;
-  const walls = footprint.wallIds.map(
-    (id) => plan.items.find((item) => item.id === id[0]) as Wall,
-  );
-  const firstThickness = walls[ridgeEdge].thickness;
-  const lastThickness = walls[(ridgeEdge + 2) % 4].thickness;
   const left = Math.min(-145, profileBounds.x - 10);
-  const right = Math.max(span + 200, profileBounds.x + profileBounds.w + 10);
-  const top = Math.min(ridgeY - 40, profileBounds.y - 16);
-  const bottom = Math.max(floorY + 95, profileBounds.y + profileBounds.h + 40);
+  const right = Math.max(span + 230, profileBounds.x + profileBounds.w + 10);
+  const top = Math.min(-high - 45, profileBounds.y - 16);
+  const bottom = Math.max(base + 95, profileBounds.y + profileBounds.h + 40);
+  const clear = Math.min(...sideWalls.map((wall) => wall.height));
+  const wallPanels = cut
+    ? sideWalls.flatMap((wall, index) => {
+        const range =
+          index === 0
+            ? [0, station(cut.innerFrom.point)]
+            : [station(cut.innerTo.point), span];
+        const opening = openings.find((item) => item.wall === wall);
+        const [a, b] = range;
+        const upper = path(atStation(a), atStation(b), (p) =>
+          wallTopAt(wall, p, roof),
+        );
+        return [
+          [
+            ...upper,
+            { x: b, y: opening ? -opening.top : base },
+            { x: a, y: opening ? -opening.top : base },
+          ],
+          ...(opening && opening.bottom > floor
+            ? [
+                [
+                  { x: a, y: base },
+                  { x: b, y: base },
+                  { x: b, y: -opening.bottom },
+                  { x: a, y: -opening.bottom },
+                ],
+              ]
+            : []),
+        ];
+      })
+    : sideWalls.map((wall) => {
+        const ends = [station(wall.wall.a), station(wall.wall.b)].sort(
+          (a, b) => a - b,
+        );
+        const leftmost = Math.min(
+          ...sideWalls.map(({ wall }) =>
+            Math.min(station(wall.a), station(wall.b)),
+          ),
+        );
+        const rightmost = Math.max(
+          ...sideWalls.map(({ wall }) =>
+            Math.max(station(wall.a), station(wall.b)),
+          ),
+        );
+        const a = ends[0] === leftmost ? 0 : ends[0];
+        const b = ends[1] === rightmost ? span : ends[1];
+        return [
+          ...path(atStation(a), atStation(b), (p) => wallTopAt(wall, p, roof)),
+          { x: b, y: base },
+          { x: a, y: base },
+        ];
+      });
 
   return {
     title: garageViewNames[view],
@@ -238,111 +380,88 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
         strokeLinejoin="round"
         strokeLinecap="round"
       >
-        <rect
-          x={0}
-          y={eavesY}
-          width={span}
-          height={wall}
-          fill={isSection ? "white" : "#f0f4ef"}
-          stroke="#263e37"
-          strokeWidth={2}
-        />
-        <polygon
-          points={`${roofTop} ${roofBottom}`}
-          fill="#d2e3d9"
-          stroke="#263e37"
-          strokeWidth={2}
-        />
-        {!gable && (
-          <line
-            x1={0}
-            x2={span}
-            y1={eaveTop}
-            y2={eaveTop}
+        {roofShapes.map((points, index) => (
+          <polygon
+            key={index}
+            points={svgPoints(points)}
+            fill="#d2e3d9"
             stroke="#263e37"
             strokeWidth={2}
           />
-        )}
-        {isSection && (
+        ))}
+        {wallPanels.map((points, index) => (
+          <polygon
+            key={index}
+            points={svgPoints(points)}
+            fill={cut ? "#d2e3d9" : "#f0f4ef"}
+            stroke="#263e37"
+            strokeWidth={2}
+          />
+        ))}
+        {cut && (
           <>
-            <rect
-              x={0}
-              y={eavesY}
-              width={firstThickness}
-              height={wall}
-              fill="#d2e3d9"
-              stroke="#263e37"
-              strokeWidth={2}
-            />
-            <rect
-              x={span - lastThickness}
-              y={eavesY}
-              width={lastThickness}
-              height={wall}
-              fill="#d2e3d9"
-              stroke="#263e37"
-              strokeWidth={2}
-            />
             <line
               x1={0}
-              y1={floorY}
               x2={span}
-              y2={floorY}
+              y1={base}
+              y2={base}
               stroke="#263e37"
               strokeWidth={4}
             />
-            <text x={span / 2} y={floorY - 38} textAnchor="middle">
+            <text x={span / 2} y={base - 38} textAnchor="middle">
               Garage
             </text>
             <text
               x={span / 2}
-              y={ridgeY + verticalThickness + 35}
+              y={-high + roof.verticalThickness + 35}
               textAnchor="middle"
             >
-              Roof pitch {pitch}° · Roof thickness {thickness} cm
+              Roof pitch {roof.pitch}° · Roof thickness {roof.thickness} cm
             </text>
-            <text x={span / 2} y={floorY - 16} textAnchor="middle">
-              Wall thickness {firstThickness} / {lastThickness} cm
+            <text x={span / 2} y={base - 16} textAnchor="middle">
+              Wall thickness {sideWalls[0].wall.thickness} /{" "}
+              {sideWalls[1].wall.thickness} cm
             </text>
             <Measure
-              x1={firstThickness + 32}
-              y1={eavesY}
-              x2={firstThickness + 32}
-              y2={floorY}
-              label={`Clear height ${m(wall)}`}
+              x1={station(cut.innerFrom.point) + 32}
+              x2={station(cut.innerFrom.point) + 32}
+              y1={base - clear}
+              y2={base}
+              label={`Clear height ${m(clear)}`}
               vertical
             />
           </>
         )}
-        {openings.map((opening) => (
-          <g key={opening.id} stroke="#263e37" strokeWidth={2}>
-            <rect
-              x={opening.x}
-              y={floorY - opening.sill - opening.height}
-              width={opening.width}
-              height={opening.height}
-              fill={opening.type === "window" ? "#d8ebed" : "#e2e9df"}
-            />
-            {opening.type === "window" && (
-              <line
-                x1={opening.x + opening.width / 2}
-                x2={opening.x + opening.width / 2}
-                y1={floorY - opening.sill - opening.height}
-                y2={floorY - opening.sill}
+        {!cut &&
+          openings.map(({ opening, x, top, bottom }) => (
+            <g key={opening.id} stroke="#263e37" strokeWidth={2}>
+              <rect
+                x={x}
+                y={-top}
+                width={opening.width}
+                height={top - bottom}
+                fill={opening.type === "window" ? "#d8ebed" : "#e2e9df"}
               />
-            )}
-            {opening.type === "door" &&
-              [1, 2, 3].map((n) => (
+              {opening.type === "window" && (
                 <line
-                  key={n}
-                  x1={opening.x}
-                  x2={opening.x + opening.width}
-                  y1={floorY - opening.sill - (opening.height * n) / 4}
-                  y2={floorY - opening.sill - (opening.height * n) / 4}
+                  x1={x + opening.width / 2}
+                  x2={x + opening.width / 2}
+                  y1={-top}
+                  y2={-bottom}
                 />
-              ))}
-          </g>
-        ))}
+              )}
+              {opening.type === "door" &&
+                [1, 2, 3].map((n) => (
+                  <line
+                    key={n}
+                    x1={x}
+                    x2={x + opening.width}
+                    y1={-bottom - ((top - bottom) * n) / 4}
+                    y2={-bottom - ((top - bottom) * n) / 4}
+                  />
+                ))}
+            </g>
+          ))}
         <polyline
           points={existing.map(({ x, y }) => `${x},${-y}`).join(" ")}
           fill="none"
@@ -366,20 +485,22 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
         <Measure
           x1={span + 32}
           x2={span + 32}
-          y1={eaveTop}
-          y2={floorY}
-          label={`Eaves ${m(floorY - eaveTop)} above floor`}
+          y1={-low}
+          y2={base}
+          label={`${roof.type === "flat" ? "Roof top" : "Eaves"} ${m(low - floor)} above floor`}
           vertical
         />
-        <Measure
-          x1={span + 75}
-          x2={span + 75}
-          y1={ridgeY}
-          y2={floorY}
-          label={`Ridge ${m(floorY - ridgeY)} above floor`}
-          vertical
-        />
-        <text x={-10} y={floorY - 5} textAnchor="end">
+        {roof.type !== "flat" && (
+          <Measure
+            x1={span + 75}
+            x2={span + 75}
+            y1={-high}
+            y2={base}
+            label={`${roof.type === "gable" ? "Ridge" : "High edge"} ${m(high - floor)} above floor`}
+            vertical
+          />
+        )}
+        <text x={-10} y={base - 5} textAnchor="end">
           Floor {m(floor)}
         </text>
       </g>,

@@ -1,3 +1,4 @@
+import { wallHeight } from "./building";
 import type { GaragePermitDetails } from "./garagePackage";
 import type { GarageSite } from "./siteMap";
 import type { GarageStructure } from "./garageViews";
@@ -59,7 +60,9 @@ export function garageAreas(plan: Plan) {
   const byaNotes: string[] = [];
   if (
     !area?.clearFloor ||
-    (plan.garage?.structure?.wallHeight ?? Infinity) < 190
+    plan.items.some(
+      (item) => item.type === "wall" && wallHeight(plan, item) < 190,
+    )
   )
     braNotes.push(
       "Confirm that the entire floor is measurable. Low or sloped clearance needs a separate assessment.",

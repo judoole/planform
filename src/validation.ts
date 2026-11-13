@@ -5,6 +5,7 @@ import projectSchema from "../public/agent/project.schema.json";
 import type { Item, Plan, Point, RectItem, Wall } from "./model";
 import { wallEnds } from "./junctions";
 import { siteMapProblem } from "./siteMap";
+import { adoptLegacyGarageMeasurements } from "./legacyGarage";
 import { embeddedRasterProblem, referenceHeight } from "./reference";
 import { defaultLayer, drawingLayers } from "./layers";
 import {
@@ -93,7 +94,7 @@ export function validateProject(input: unknown): Plan {
   const plan = structuredClone(input) as Plan;
   validateStructure(plan, validateSchema);
   validateRelationships(plan, "");
-  return plan;
+  return adoptLegacyGarageMeasurements(plan);
 }
 
 function validateRelationships(plan: Plan, path: string) {
@@ -279,8 +280,12 @@ function validateComparison(input: ComparisonProject): ComparisonProject {
     guardDrawing(input.plans?.[version], `/plans/${version}`);
   const project = structuredClone(input);
   validateStructure(project, validateComparisonSchema);
-  for (const version of planVersions)
+  for (const version of planVersions) {
     validateRelationships(project.plans[version], `/plans/${version}`);
+    project.plans[version] = adoptLegacyGarageMeasurements(
+      project.plans[version],
+    );
+  }
   return project;
 }
 
@@ -329,9 +334,10 @@ function validateMultiProject(input: MultiPlanProject): MultiPlanProject {
       message: "Active must reference a drawing ID.",
     });
   if (issues.length) throw new ProjectError(issues);
-  project.drawings.forEach((d, i) =>
-    validateRelationships(d.plan, `/drawings/${i}/plan`),
-  );
+  project.drawings.forEach((d, i) => {
+    validateRelationships(d.plan, `/drawings/${i}/plan`);
+    d.plan = adoptLegacyGarageMeasurements(d.plan);
+  });
   return project;
 }
 

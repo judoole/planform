@@ -1,5 +1,5 @@
 import { garageFootprint } from "./garage";
-import { garageRidgeAngle } from "./garageViews";
+import { buildingGeometry } from "./building";
 import { add, dist, pointsBox, rotate, type Plan, type Point } from "./model";
 import type { EmbeddedRaster } from "./reference";
 
@@ -56,23 +56,11 @@ export function siteGarageGeometry(plan: Plan, site: GarageSite) {
     const p = rotate(difference(point, origin), rotation);
     return add(center, { x: p.x / scale, y: p.y / scale });
   };
-  // Ridge orientation follows the same roof as the section and elevations.
-  const direction = rotate({ x: 1, y: 0 }, garageRidgeAngle(plan));
-  const half = Math.max(
-    ...corners.map((p) => {
-      const delta = difference(p, origin);
-      return Math.abs(delta.x * direction.x + delta.y * direction.y);
-    }),
-  );
+  const ridge = buildingGeometry(plan).roof?.ridge;
   return {
     scale,
     corners: corners.map(transform),
-    ridge: [
-      transform(add(origin, { x: direction.x * half, y: direction.y * half })),
-      transform(
-        add(origin, { x: -direction.x * half, y: -direction.y * half }),
-      ),
-    ] as const,
+    ridge: ridge?.map(transform),
   };
 }
 

@@ -80,10 +80,12 @@ export function SiteArtwork({ plan, site }: { plan: Plan; site: GarageSite }) {
               fill="#d7efe5"
               fillOpacity={0.85}
             />
-            <polyline
-              points={points(garage.ridge)}
-              strokeDasharray={`${5 * unit} ${3 * unit}`}
-            />
+            {garage.ridge && (
+              <polyline
+                points={points(garage.ridge)}
+                strokeDasharray={`${5 * unit} ${3 * unit}`}
+              />
+            )}
           </g>
         )}
         {distances.map(({ a, b, distanceM, index }) => (
