@@ -4,7 +4,9 @@ Planform stores editable project files locally and can share snapshots or compar
 
 ## Save and open
 
-Planform automatically keeps the current local draft in this browser. Use **Save project** to download an editable `.planform.json` backup, and **Open** to continue from a saved file.
+Planform keeps up to eight recent local recovery revisions in this browser. Open **Local recovery history** (the clock icon) to choose a revision by project name and save time. Restoring it keeps the previous current revision in history. Browser storage quotas can shorten the history or interrupt recovery saves. Large embedded files can reach that quota even when the editable project can still be downloaded.
+
+Use **Save project** to save an editable `.planform.json` file and **Open** to continue from it. The project heading shows local recovery and project file status separately. Before replacing a project with unsaved edits, choose whether to download it first, proceed, or cancel.
 
 ## Share
 

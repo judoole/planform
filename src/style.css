@@ -1549,7 +1549,7 @@ button svg {
     overflow: hidden;
     white-space: nowrap;
   }
-  .header-actions > button[aria-label] {
+  .header-actions > button[aria-label]:not(.recovery-button) {
     display: inline-flex;
   }
 }
@@ -1661,7 +1661,8 @@ button svg {
   background: #1e342c60;
   backdrop-filter: blur(5px);
 }
-.save-dialog .field input {
+.save-dialog .field input,
+.save-dialog .field select {
   width: 100%;
   padding: 9px;
   border: 1px solid #ccd7ce;

@@ -43,6 +43,7 @@ import {
   Search,
   PanelRightClose,
   Link2,
+  History as HistoryIcon,
 } from "lucide-react";
 import {
   type Plan,
@@ -72,6 +73,12 @@ import { download, exportSvg, exportPng } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
 import ProposalManager from "./ProposalManager";
+import { RecoveryDialog, ReplaceProjectDialog } from "./RecoveryDialogs";
+import {
+  readRecovery,
+  saveRecovery as saveLocalRevision,
+  type RecoveryRevision,
+} from "./recovery";
 import { isShareHash, readShareHash } from "./share";
 import {
   activePlan,
@@ -95,7 +102,6 @@ import {
   createExteriorContourReader,
   visibleExteriorContour,
 } from "./exterior";
-const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
   label: string;
@@ -120,16 +126,20 @@ const palette: {
   { tool: "measure", label: "Measure", icon: ScanLine, key: "M" },
   { tool: "text", label: "Label", icon: Type, key: "T" },
 ];
-function startup(): Project {
+function startup(sharedProject?: Project) {
+  if (sharedProject) return { project: sharedProject, status: "Shared copy" };
   try {
-    const s =
-      localStorage.getItem(RECOVERY) ||
-      localStorage.getItem("planform-recovery-v3") ||
-      localStorage.getItem("planform-recovery-v2") ||
-      localStorage.getItem("planform-recovery-v1");
-    if (s) return readProjectFile(s);
-  } catch {}
-  return emptyPlan();
+    const latest = readRecovery(localStorage)[0];
+    if (latest)
+      return {
+        project: latest.project,
+        status: "Saved locally",
+        recovered: true,
+      };
+    return { project: emptyPlan(), status: "No local recovery yet" };
+  } catch {
+    return { project: emptyPlan(), status: "Recovery unavailable" };
+  }
 }
 function localAddress() {
   const url = new URL(window.location.href);
@@ -189,9 +199,8 @@ function SharedProject({ hash }: { hash: string }) {
 }
 
 function Editor({ sharedProject }: { sharedProject?: Project }) {
-  const [project, setProject] = useState<Project>(
-      () => sharedProject ?? startup(),
-    ),
+  const [initial] = useState(() => startup(sharedProject));
+  const [project, setProject] = useState<Project>(initial.project),
     [preview, setPreview] = useState<Plan | null>(null),
     [overlay, setOverlay] = useState(false),
     [overlayId, setOverlayId] = useState<string>(),
@@ -221,7 +230,19 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [shareOpen, setShareOpen] = useState(false),
     [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
-    [autosave, setAutosave] = useState("Saved locally"),
+    [autosave, setAutosave] = useState(initial.status),
+    [revisions, setRevisions] = useState<RecoveryRevision[] | null>(null),
+    [replacement, setReplacement] = useState<{
+      action: string;
+      run: () => void;
+    } | null>(null),
+    [fileState, setFileState] = useState<{
+      baseline: Project | null;
+      hasFile: boolean;
+    }>({
+      baseline: initial.recovered ? null : initial.project,
+      hasFile: false,
+    }),
     [coords, setCoords] = useState("0.0, 0.0"),
     [cancelToken, setCancelToken] = useState(0),
     [measure, setMeasure] = useState<{
@@ -238,6 +259,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     histories = useRef(new Map<string, History>()),
     projectRef = useRef(project),
     lastSaved = useRef(project),
+    fileSession = useRef(0),
     clipboard = useRef<Item[]>([]),
     nameBefore = useRef<Plan | null>(null);
   const saveHandle = useRef<FileSystemFileHandle | null>(null);
@@ -325,38 +347,27 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     if (activePlan(projectRef.current).items.length) fit();
   }, []);
   const saveRecovery = useCallback(() => {
-    const current = projectRef.current;
-    if (lastSaved.current !== current) {
-      try {
-        const contents = serialize(current);
-        checkJsonSize(contents);
-        localStorage.setItem(RECOVERY, contents);
-        lastSaved.current = current;
-      } catch {
-        return "Recovery unavailable · download to save";
-      }
+    if (sharedProject || lastSaved.current === projectRef.current) return;
+    try {
+      saveLocalRevision(localStorage, projectRef.current);
+      lastSaved.current = projectRef.current;
+      setAutosave("Saved locally");
+    } catch {
+      setAutosave("Recovery unavailable");
     }
-    return "Saved locally";
-  }, []);
+  }, [sharedProject]);
   useEffect(() => {
     if (sharedProject) return;
-    const flush = () => {
-      saveRecovery();
-    };
-    window.addEventListener("pagehide", flush);
+    window.addEventListener("pagehide", saveRecovery);
     return () => {
-      window.removeEventListener("pagehide", flush);
-      flush();
+      window.removeEventListener("pagehide", saveRecovery);
+      saveRecovery();
     };
   }, [sharedProject, saveRecovery]);
   useEffect(() => {
-    if (sharedProject) return;
-    if (project === lastSaved.current) {
-      setAutosave("Saved locally");
-      return;
-    }
-    setAutosave("Saving…");
-    const timer = setTimeout(() => setAutosave(saveRecovery()), 900);
+    if (sharedProject || project === lastSaved.current) return;
+    setAutosave("Saving locally…");
+    const timer = setTimeout(saveRecovery, 900);
     return () => clearTimeout(timer);
   }, [project, sharedProject, saveRecovery]);
   useEffect(() => {
@@ -531,19 +542,21 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     commit({ ...plan, items: [...plan.items, ...newItems] });
     setSelection(r.ids);
   }
-  function downloadProject() {
+  function downloadProject(filename?: string) {
     const current = projectRef.current;
     const contents = serialize(current);
     checkJsonSize(contents);
     download(
       new Blob([contents], { type: "application/json" }),
-      `${current.name || "Untitled"}.planform.json`,
+      filename ?? `${current.name || "Untitled"}.planform.json`,
     );
+    setFileState({ baseline: current, hasFile: true });
   }
   async function save(filename?: string) {
     try {
       if (!filename) {
         const current = projectRef.current;
+        const session = fileSession.current;
         const contents = serialize(current);
         checkJsonSize(contents);
         const fileName = `${current.name || "Untitled"}.planform.json`;
@@ -568,17 +581,17 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           const writable = await handle.createWritable();
           await writable.write(contents);
           await writable.close();
-          saveHandle.current = handle;
-          showNotice("Project saved. Future saves will update this file.");
+          if (fileSession.current === session) {
+            saveHandle.current = handle;
+            setFileState({ baseline: current, hasFile: true });
+            showNotice("Project saved. Future saves will update this file.");
+          }
           return;
         }
         setSaveOpen(true);
         return;
       }
-      const current = projectRef.current;
-      const contents = serialize(current);
-      checkJsonSize(contents);
-      download(new Blob([contents], { type: "application/json" }), filename);
+      downloadProject(filename);
       setSaveOpen(false);
       showNotice(
         "Project downloaded. Open the JSON file to continue editing later.",
@@ -597,7 +610,6 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     );
   }
   function replaceProject(next: Project) {
-    saveHandle.current = null;
     clearDrawingContext();
     setOverlay(false);
     histories.current = new Map();
@@ -606,16 +618,65 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     setManageOpen(false);
     updateProject(next);
   }
-  function newProject() {
+  function resetFileSession(next: Project | null, hasFile: boolean) {
+    fileSession.current++;
     saveHandle.current = null;
-    if (project.version === 2) {
+    setFileState({ baseline: next, hasFile });
+  }
+  function requestReplacement(action: string, run: () => void) {
+    if (projectRef.current === fileState.baseline) run();
+    else setReplacement({ action, run });
+  }
+  function continueReplacement(downloadFirst: boolean) {
+    if (!replacement) return;
+    try {
+      if (downloadFirst) downloadProject();
+      setReplacement(null);
+      replacement.run();
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
+  }
+  function newProject() {
+    saveRecovery();
+    const next = emptyPlan();
+    resetFileSession(next, false);
+    if (projectRef.current.version === 2) {
       clearDrawingContext();
-      commit(emptyPlan());
+      commit(next, undefined, true);
     } else {
-      replaceProject(emptyPlan());
+      replaceProject(next);
     }
     setCamera({ x: 100, y: 100, k: 0.8 });
     setMenu(false);
+  }
+  function requestNewProject() {
+    requestReplacement("Create new project", newProject);
+  }
+  function chooseProjectFile() {
+    fileRef.current?.click();
+    setMenu(false);
+  }
+  function showRecovery() {
+    setMenu(false);
+    saveRecovery();
+    try {
+      setRevisions(readRecovery(localStorage));
+    } catch {
+      setAutosave("Recovery unavailable");
+      setRevisions([]);
+    }
+  }
+  function restoreRecovery(revision: RecoveryRevision) {
+    setRevisions(null);
+    requestReplacement("Restore selected revision", () => {
+      saveRecovery();
+      const next = revision.project;
+      resetFileSession(null, false);
+      replaceProject(next);
+      fit(activePlan(next));
+      showNotice("Local revision restored.");
+    });
   }
   async function loadFile(
     input: HTMLInputElement,
@@ -653,14 +714,17 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         return;
       }
       const next = readProjectFile(contents);
-      saveHandle.current = null;
-      if (next.version === 2 && projectRef.current.version === 2) {
-        openDrawing(next);
-      } else {
-        replaceProject(next);
-        fit(activePlan(next));
-        showNotice("Project opened.");
-      }
+      requestReplacement("Open selected project", () => {
+        saveRecovery();
+        resetFileSession(next, true);
+        if (next.version === 2 && projectRef.current.version === 2) {
+          openDrawing(next);
+        } else {
+          replaceProject(next);
+          fit(activePlan(next));
+          showNotice("Project opened.");
+        }
+      });
     } catch (e) {
       showNotice((e as Error).message);
     } finally {
@@ -695,6 +759,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         shareOpen ||
         manageOpen ||
         saveOpen ||
+        revisions ||
+        replacement ||
         busy
       )
         return;
@@ -711,7 +777,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       if (mod && ["s", "o"].includes(k)) {
         e.preventDefault();
         if (k === "s") save();
-        else fileRef.current?.click();
+        else chooseProjectFile();
         return;
       }
       if (mod && k === "z") {
@@ -818,23 +884,34 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               nameBefore.current = null;
             }}
           />
-          <span>
-            <span className="save-dot" />
-            {sharedProject ? "Shared copy" : autosave}
+          <span role="status">{autosave}</span>
+          <span role="status">
+            {project !== fileState.baseline
+              ? "File has unsaved edits"
+              : fileState.hasFile
+                ? "Project file current"
+                : "No project file saved"}
           </span>
         </div>
         <div className="header-actions">
-          <button onClick={newProject} title="New empty project">
+          <button onClick={requestNewProject} title="New empty project">
             <FilePlus2 size={16} />
             <span>New</span>
           </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            title="Open Planform project"
-          >
+          <button onClick={chooseProjectFile} title="Open Planform project">
             <FolderOpen size={16} />
             <span>Open</span>
           </button>
+          {!sharedProject && (
+            <button
+              onClick={showRecovery}
+              className="recovery-button"
+              title="Local recovery history"
+              aria-label="Local recovery history"
+            >
+              <HistoryIcon size={16} />
+            </button>
+          )}
           <button onClick={() => save()} title="Download editable project">
             <Download size={16} />
             <span>Save project</span>
@@ -896,15 +973,11 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       )}
       {menu && (
         <div className="mobile-project-menu">
-          <button onClick={newProject}>New project</button>
-          <button
-            onClick={() => {
-              fileRef.current?.click();
-              setMenu(false);
-            }}
-          >
-            Open project
-          </button>
+          <button onClick={requestNewProject}>New project</button>
+          <button onClick={chooseProjectFile}>Open project</button>
+          {!sharedProject && (
+            <button onClick={showRecovery}>Local recovery history</button>
+          )}
           <button
             onClick={() => {
               save();
@@ -919,6 +992,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         type="file"
         ref={fileRef}
         accept=".json,.planform.json"
+        aria-label="Project file"
         hidden
         onChange={(e) => loadFile(e.currentTarget)}
       />
@@ -1478,6 +1552,20 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             />
           </section>
         </div>
+      )}
+      {revisions && (
+        <RecoveryDialog
+          revisions={revisions}
+          onClose={() => setRevisions(null)}
+          onRestore={restoreRecovery}
+        />
+      )}
+      {replacement && (
+        <ReplaceProjectDialog
+          action={replacement.action}
+          onClose={() => setReplacement(null)}
+          onContinue={continueReplacement}
+        />
       )}
       {saveOpen && (
         <SaveDialog

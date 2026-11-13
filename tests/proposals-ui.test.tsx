@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import App from "../src/App";
 import { emptyPlan, serialize } from "../src/model";
 import { activePlan, addProposal, asMultiProject } from "../src/project";
-import { readProjectFile } from "../src/validation";
+import { readRecovery } from "../src/recovery";
 
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -99,8 +99,7 @@ it("keeps exterior visibility out of geometry undo and redo", async () => {
   expect(host.querySelectorAll('[data-item-type="wall"]')).toHaveLength(0);
   await act(async () => window.dispatchEvent(new Event("pagehide")));
   expect(
-    activePlan(readProjectFile(localStorage.getItem("planform-recovery-v4")!))
-      .showExteriorDimensions,
+    activePlan(readRecovery(localStorage)[0].project).showExteriorDimensions,
   ).toBe(false);
 });
 
@@ -149,7 +148,7 @@ it("restores deleted proposals with their own undo history and saves every drawi
   expect(host.querySelectorAll(".object-list button")).toHaveLength(0);
   // pagehide flushes recovery immediately, like navigating away from the editor.
   await act(async () => window.dispatchEvent(new Event("pagehide")));
-  const saved = readProjectFile(localStorage.getItem("planform-recovery-v4")!);
+  const saved = readRecovery(localStorage)[0].project;
   expect(saved.version).toBe(4);
   if (saved.version !== 4) throw Error("Expected v4");
   expect(saved.drawings).toHaveLength(3);
@@ -239,7 +238,7 @@ it("migrates v3 recovery and replaces only the chosen proposal as one undoable e
   await select("existing");
   expect(host.querySelectorAll(".object-list button")).toHaveLength(1);
   await act(async () => window.dispatchEvent(new Event("pagehide")));
-  const saved = readProjectFile(localStorage.getItem("planform-recovery-v4")!);
+  const saved = readRecovery(localStorage)[0].project;
   expect(saved.version).toBe(4);
   expect(localStorage.getItem("planform-recovery-v3")).toBe(serialize(legacy));
 });
