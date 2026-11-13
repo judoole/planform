@@ -14,7 +14,6 @@ import {
   layoutSheet,
   sheetPreview,
   sheetsPdf,
-  type SheetDrawing,
   type SheetOptions,
 } from "./sheets";
 
@@ -40,42 +39,40 @@ export default function DrawingPdfExport({
   });
   const [hidden, setHidden] = useState<string[]>([]);
   const [active, setActive] = useState<string>();
-  const [snapshot, setSnapshot] = useState<SheetDrawing>();
-  const [snapshotError, setSnapshotError] = useState("");
+  const [snapshotResult, setSnapshotResult] = useState<{
+    plan: Plan;
+    pages: DrawingPdfPage[];
+    error?: string;
+  }>();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [snapshotLoading, setSnapshotLoading] = useState(canRender3D);
   useEffect(() => {
     if (!canRender3D) return;
     let current = true;
-    setSnapshotLoading(true);
-    setSnapshot(undefined);
-    setSnapshotError("");
     void import("./buildingSnapshot")
-      .then(({ buildingSnapshot }) => {
-        if (current) setSnapshot(buildingSnapshot(plan));
+      .then(({ buildingSnapshotPages }) => {
+        if (current)
+          setSnapshotResult({ plan, pages: buildingSnapshotPages(plan) });
       })
       .catch(() => {
         if (current)
-          setSnapshotError(
-            "The browser could not render a 3D page. The other pages can still be downloaded.",
-          );
-      })
-      .finally(() => {
-        if (current) setSnapshotLoading(false);
+          setSnapshotResult({
+            plan,
+            pages: [],
+            error:
+              "The browser could not render the 3D views. The other pages can still be downloaded.",
+          });
       });
     return () => {
       current = false;
     };
   }, [canRender3D, plan]);
+  const snapshots =
+    canRender3D && snapshotResult?.plan === plan ? snapshotResult : undefined;
+  const snapshotLoading = canRender3D && !snapshots;
   const choices: DrawingPdfPage[] = [...pages];
-  if (snapshot)
-    choices.splice(pages[0]?.id === "plan" ? 1 : 0, 0, {
-      id: "3d",
-      label: "3D view",
-      scale: "fit",
-      drawing: snapshot,
-    });
+  if (snapshots)
+    choices.splice(pages[0]?.id === "plan" ? 1 : 0, 0, ...snapshots.pages);
   const chosen = choices.filter((page) => !hidden.includes(page.id));
   const includeMap = chosen.some((page) => page.id === "property-map");
   const waitingForMap = includeMap && parcels.loading;
@@ -180,8 +177,8 @@ export default function DrawingPdfExport({
       {includeMap && !waitingForMap && !parcels.data.selected.length && (
         <p>The selected parcel boundary is unavailable for this PDF.</p>
       )}
-      {snapshotLoading && <p role="status">Preparing the 3D page…</p>}
-      {snapshotError && <p role="status">{snapshotError}</p>}
+      {snapshotLoading && <p role="status">Preparing the 3D views…</p>}
+      {snapshots?.error && <p role="status">{snapshots.error}</p>}
       {!choices.length && !snapshotLoading && (
         <p>Add something to your drawing before exporting.</p>
       )}

@@ -8,24 +8,30 @@ import {
 } from "three";
 import { exteriorWallLengthSummary } from "./exterior";
 import { buildScene } from "./buildingScene";
+import type { DrawingPdfPage } from "./drawingPdfPages";
+import { visiblePlan } from "./layers";
 import type { Plan } from "./model";
-import type { SheetDrawing } from "./sheets";
 
-/** Capture a fresh illustration from the same geometry as the interactive 3D view. */
-export function buildingSnapshot(plan: Plan): SheetDrawing {
+const views = [
+  { id: "3d", label: "3D view", direction: 1 },
+  { id: "3d-opposite", label: "3D view - Opposite corner", direction: -1 },
+];
+
+/** Capture both illustrations from the same geometry as the interactive view. */
+export function buildingSnapshotPages(input: Plan): DrawingPdfPage[] {
+  const plan = visiblePlan(input);
   const building = buildScene(plan);
-  if (building.empty) {
-    building.dispose();
-    throw Error(
-      building.issues[0]?.message ?? "Draw walls to include a 3D view.",
-    );
-  }
   let renderer: WebGLRenderer | undefined;
   try {
-    renderer = new WebGLRenderer({ antialias: true });
+    if (building.empty)
+      throw Error(
+        building.issues[0]?.message ?? "Draw walls to include a 3D view.",
+      );
+    const capture = new WebGLRenderer({ antialias: true });
+    renderer = capture;
     const width = 1600;
     const height = 1050;
-    renderer.setSize(width, height);
+    capture.setSize(width, height);
 
     const scene = new Scene();
     scene.background = new Color("#eef3ed");
@@ -45,20 +51,31 @@ export function buildingSnapshot(plan: Plan): SheetDrawing {
       span * 20 + 1000,
     );
     const middle = building.height * 0.43;
-    camera.position.set(span * 1.15, middle + span * 0.83, span * 1.05);
-    camera.lookAt(0, middle, 0);
-    renderer.render(scene, camera);
-    const jpeg = renderer.domElement.toDataURL("image/jpeg", 0.92);
-    if (!jpeg.startsWith("data:image/jpeg;base64,"))
-      throw Error("The browser could not capture the rendered model.");
     const dimensions = exteriorWallLengthSummary(plan);
-    return {
-      title: "3D view",
-      bounds: { x: 0, y: 0, w: width, h: height },
-      markup: `<image href="${jpeg}" width="${width}" height="${height}" />`,
-      fitLabel: "3D illustration - Not to scale",
-      legend: dimensions ? [dimensions] : undefined,
-    };
+    return views.map(({ id, label, direction }) => {
+      camera.position.set(
+        direction * span * 1.15,
+        middle + span * 0.83,
+        direction * span * 1.05,
+      );
+      camera.lookAt(0, middle, 0);
+      capture.render(scene, camera);
+      const jpeg = capture.domElement.toDataURL("image/jpeg", 0.92);
+      if (!jpeg.startsWith("data:image/jpeg;base64,"))
+        throw Error("The browser could not capture the rendered model.");
+      return {
+        id,
+        label,
+        scale: "fit",
+        drawing: {
+          title: label,
+          bounds: { x: 0, y: 0, w: width, h: height },
+          markup: `<image href="${jpeg}" width="${width}" height="${height}" />`,
+          fitLabel: "3D illustration - Not to scale",
+          legend: dimensions ? [dimensions] : undefined,
+        },
+      };
+    });
   } finally {
     building.dispose();
     renderer?.dispose();

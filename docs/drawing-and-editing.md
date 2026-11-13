@@ -27,7 +27,7 @@ Room labels are included in browser SVG/PNG exports and agent CLI previews. Room
 
 Exterior lengths appear automatically for a calibrated drawing with a closed convex outline. Interior partitions can remain inside it. Each side is measured between the intersections of adjoining outside faces. A rectangular garage with 580 × 680 cm centerline spans and 20 cm walls shows two sides of 6.00 m and two sides of 7.00 m. Openings and rounded corner fills do not affect the measurement.
 
-Use **Show exterior wall lengths** in Properties to hide or show the lengths for the active drawing. The 2D editor, floor plan PDF, SVG/PNG exports and CLI previews show the measurements around the outline. The 3D view and its PDF page show the measured side lengths as a summary. Properties explains when a drawing needs calibration or a supported closed outline. Free-point dimensions remain editable with **Dimension**.
+Use **Show exterior wall lengths** in Properties to hide or show the lengths for the active drawing. The 2D editor, floor plan PDF, SVG/PNG exports and CLI previews show the measurements around the outline. The 3D view and its PDF pages show the measured side lengths as a summary. Properties explains when a drawing needs calibration or a supported closed outline. Free-point dimensions remain editable with **Dimension**.
 
 ### Layers
 
