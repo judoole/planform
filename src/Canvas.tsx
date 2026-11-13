@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { traceForExport } from "./reference";
 import { type Camera, screenToWorld, pinchCamera } from "./coordinates";
 import {
@@ -137,6 +138,7 @@ export default function Canvas({
   onOverlap: (ids: string[]) => void;
   cancelToken: number;
 }) {
+  const t = useTranslation();
   const wrapper = useRef<HTMLDivElement>(null),
     [size, setSize] = useState({ w: 1000, h: 700 }),
     [anchor, setAnchor] = useState<Point | null>(null),
@@ -144,7 +146,10 @@ export default function Canvas({
       DimensionAnchor | undefined
     >(),
     [cursor, setCursor] = useState<Point | null>(null),
-    [snapKind, setSnapKind] = useState(""),
+    [snapHint, setSnapHint] = useState<{
+      kind: string;
+      target?: string;
+    } | null>(null),
     [marquee, setMarquee] = useState<Box | null>(null);
   const [pointerKind, setPointerKind] = useState("mouse");
   const gesture = useRef<Gesture | null>(null),
@@ -164,7 +169,7 @@ export default function Canvas({
     setAnchor(null);
     setDimensionAnchor(undefined);
     setMarquee(null);
-    setSnapKind("");
+    setSnapHint(null);
     if (gesture.current) setPreview(null);
     gesture.current = null;
     pointers.current.clear();
@@ -212,7 +217,9 @@ export default function Canvas({
       exclude,
       anchor || undefined,
     );
-    setSnapKind(r.kind);
+    setSnapHint((hint) =>
+      !r.kind ? null : hint?.kind === r.kind ? hint : { kind: r.kind },
+    );
     return r.point;
   };
   function measurementPoint(point: Point, free: boolean) {
@@ -221,11 +228,15 @@ export default function Canvas({
         ? findDimensionAnchor(point, shown.items, 8 / camera.k)
         : undefined;
     if (result) {
-      setSnapKind(`Attach to ${result.name}`);
+      setSnapHint((hint) =>
+        hint?.target === result.name
+          ? hint
+          : { kind: "Attach to {name}", target: result.name },
+      );
       return result;
     }
     if (tool === "dimension" && free) {
-      setSnapKind("");
+      setSnapHint(null);
       return { point, anchor: undefined };
     }
     return { point: snapped(point), anchor: undefined };
@@ -704,7 +715,7 @@ export default function Canvas({
         ref={svgRef}
         className="canvas"
         data-pointer-mode={pointerKind}
-        aria-label="Floor plan drawing canvas"
+        aria-label={t("Floor plan drawing canvas")}
         role="img"
         onPointerDown={down}
         onPointerMove={move}
@@ -859,7 +870,7 @@ export default function Canvas({
                 paintOrder="stroke"
               >
                 {dist(anchor, cursor).toFixed(1)}{" "}
-                {plan.calibration.calibrated ? "cm" : "units"}
+                {plan.calibration.calibrated ? "cm" : t("units")}
               </text>
               <circle
                 cx={anchor.x}
@@ -869,7 +880,7 @@ export default function Canvas({
               />
             </g>
           )}
-          {snapKind && cursor && tool !== "select" && (
+          {snapHint && cursor && tool !== "select" && (
             <g pointerEvents="none">
               <circle
                 cx={cursor.x}
@@ -885,7 +896,12 @@ export default function Canvas({
                 fontSize={11 / camera.k}
                 fill="#9a602d"
               >
-                {snapKind}
+                {t(
+                  snapHint.kind,
+                  snapHint.target === undefined
+                    ? undefined
+                    : { name: snapHint.target },
+                )}
               </text>
             </g>
           )}
@@ -893,7 +909,7 @@ export default function Canvas({
       </svg>
       <div className="canvas-hint">
         <span className="hint-dot" />
-        {toolHelp[tool]}
+        {t(toolHelp[tool])}
         {anchor && (
           <button
             onClick={() => {
@@ -901,7 +917,7 @@ export default function Canvas({
               setTool("select");
             }}
           >
-            Finish
+            {t("Finish")}
           </button>
         )}
       </div>
@@ -910,14 +926,13 @@ export default function Canvas({
           <span className="empty-symbol">
             ⌜<span>⌟</span>
           </span>
-          <h2>Make room for your ideas.</h2>
+          <h2>{t("Make room for your ideas.")}</h2>
           <p>
-            Draw your first wall, or bring in an existing floor plan.
-            <br />
-            Every detail stays in your browser.
+            {t("Draw your first wall, or bring in an existing floor plan.")}
+            <br /> {t("Every detail stays in your browser.")}
           </p>
           <button className="primary" onClick={() => setTool("wall")}>
-            Draw your first wall <span>↗</span>
+            {t("Draw your first wall")} <span>↗</span>
           </button>
         </div>
       )}

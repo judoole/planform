@@ -1,3 +1,4 @@
+import { fixed, translate, type Language } from "./messages";
 import { wallHeight } from "./building";
 import type { GarageSite } from "./siteMap";
 import type { GarageStructure } from "./garageViews";
@@ -105,28 +106,35 @@ export function garageAreas(plan: Plan) {
   };
 }
 
-export function garageAreaReport(plan: Plan) {
+export function garageAreaReport(plan: Plan, language: Language = "en") {
+  const t = translate(language);
   const { footprint, bra, bya } = garageAreas(plan);
   const dimensions = (polygon: Point[]) =>
     [dist(polygon[0], polygon[1]), dist(polygon[1], polygon[2])]
-      .map((cm) => `${(cm / 100).toFixed(2)} m`)
+      .map((cm) => `${fixed(cm / 100, 2, language)} m`)
       .join(" × ");
   return [
-    "Building area calculation",
+    t("Building area calculation"),
     plan.name,
     "",
-    `BRA: ${bra.value.toFixed(2)} m²${bra.notes.length ? " (provisional)" : ""}`,
-    `Inside faces of the exterior walls: ${dimensions(footprint.insideCorners)}.`,
-    "Included: enclosed ground-floor area inside the exterior wall faces.",
-    ...bra.notes,
+    `BRA: ${fixed(bra.value, 2, language)} m²${bra.notes.length ? ` (${t("provisional")})` : ""}`,
+    t("Inside faces of the exterior walls: {dimensions}.", {
+      dimensions: dimensions(footprint.insideCorners),
+    }),
+    t("Included: enclosed ground-floor area inside the exterior wall faces."),
+    ...bra.notes.map((note) => t(note)),
     "",
-    `BYA: ${bya.value.toFixed(2)} m²${bya.notes.length ? " (provisional)" : ""}`,
-    `Outside faces of the exterior walls: ${dimensions(footprint.corners)}.`,
-    "Included: ground footprint enclosed by the exterior face of the walls.",
-    ...bya.notes,
+    `BYA: ${fixed(bya.value, 2, language)} m²${bya.notes.length ? ` (${t("provisional")})` : ""}`,
+    t("Outside faces of the exterior walls: {dimensions}.", {
+      dimensions: dimensions(footprint.corners),
+    }),
+    t("Included: ground footprint enclosed by the exterior face of the walls."),
+    ...bya.notes.map((note) => t(note)),
     "",
-    "Building-level calculation. Plot utilization, other structures and outdoor parking are separate.",
-    "Measurement guidance: DiBK TEK17 § 5-4 (BRA) and § 5-2 (BYA).",
+    t(
+      "Building-level calculation. Plot utilization, other structures and outdoor parking are separate.",
+    ),
+    t("Measurement guidance: DiBK TEK17 § 5-4 (BRA) and § 5-2 (BYA)."),
     "https://www.dibk.no/regelverk/byggteknisk-forskrift-tek17/5/5-4",
     "https://www.dibk.no/regelverk/byggteknisk-forskrift-tek17/5/5-2",
     "",

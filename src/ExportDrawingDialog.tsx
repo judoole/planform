@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { download, exportPng } from "./exports";
@@ -24,6 +25,7 @@ export default function ExportDrawingDialog({
   onClose: () => void;
   onAdditionalDrawings: () => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const [format, setFormat] = useState<Format>("pdf");
   const [exporting, setExporting] = useState(false);
@@ -71,15 +73,15 @@ export default function ExportDrawingDialog({
     >
       <button
         className="modal-close"
-        aria-label="Close drawing export"
+        aria-label={t("Close drawing export")}
         onClick={onClose}
       >
         <X size={16} />
       </button>
-      <h2 id="drawing-export-title">Export drawing</h2>
-      <p>Download your available drawing views together in one PDF.</p>
+      <h2 id="drawing-export-title">{t("Export drawing")}</h2>
+      <p>{t("Download your available drawing views together in one PDF.")}</p>
       <label className="field">
-        <span>Format</span>
+        <span>{t("Format")}</span>
         <select
           value={format}
           onChange={(event) => {
@@ -88,8 +90,8 @@ export default function ExportDrawingDialog({
           }}
         >
           <option value="pdf">PDF</option>
-          <option value="svg">SVG · vector drawing</option>
-          <option value="png">PNG · image</option>
+          <option value="svg">{t("SVG · vector drawing")}</option>
+          <option value="png">{t("PNG · image")}</option>
         </select>
       </label>
       {format === "pdf" ? (
@@ -105,23 +107,25 @@ export default function ExportDrawingDialog({
             <img
               className="sheet-preview"
               src={`data:image/svg+xml,${encodeURIComponent(svg)}`}
-              alt="Floor plan export preview"
+              alt={t("Floor plan export preview")}
             />
           )}
           {(previewError || failure) && (
-            <p role="alert">{previewError || failure}</p>
+            <p role="alert">{t(previewError || failure)}</p>
           )}
           <button
             className="primary"
             disabled={!svg || exporting}
             onClick={() => void saveArtwork()}
           >
-            {exporting ? "Preparing…" : `Download ${format.toUpperCase()}`}
+            {exporting
+              ? t("Preparing…")
+              : t("Download {format}", { format: format.toUpperCase() })}
           </button>
         </>
       )}
       <button className="more-drawings-button" onClick={onAdditionalDrawings}>
-        More drawings and measurements
+        {t("More drawings and measurements")}
       </button>
     </dialog>
   );

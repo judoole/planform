@@ -1,3 +1,5 @@
+import { fixed } from "./messages";
+import { useLanguage, useTranslation } from "./i18n";
 import { referenceHeight, type TraceReference } from "./reference";
 import { Fragment, memo } from "react";
 import {
@@ -42,6 +44,7 @@ export function RenovationLegend({
   y: number;
   fontSize?: number;
 }) {
+  const t = useTranslation();
   const legend = phaseLegendStyles(plan);
   if (!legend) return null;
   return (
@@ -53,7 +56,11 @@ export function RenovationLegend({
       fontFamily="Arial, sans-serif"
       pointerEvents="none"
     >
-      <text y={fontSize}>{legend.title}</text>
+      <text y={fontSize}>
+        {t("Renovation view: {view}", {
+          view: t(legend.title),
+        })}
+      </text>
       {legend.entries.map((entry, index) => {
         const baseline = fontSize * (2.4 + index * 1.4);
         return (
@@ -68,7 +75,7 @@ export function RenovationLegend({
               strokeDasharray={"dash" in entry ? entry.dash : undefined}
             />
             <text x={fontSize * 1.65} y={baseline}>
-              {entry.label}
+              {t(entry.label)}
             </text>
           </g>
         );
@@ -141,12 +148,14 @@ export const ExteriorDimensions = memo(function ExteriorDimensions({
 }: {
   contour?: ExteriorContour;
 }) {
+  const t = useTranslation();
+  const language = useLanguage();
   if (contour?.status !== "ready") return null;
   return (
     <g
       data-exterior-dimensions="true"
       pointerEvents="none"
-      aria-label="Exterior wall lengths"
+      aria-label={t("Exterior wall lengths")}
     >
       {exteriorDimensionSegments(contour.corners).map(([a, b], index) => (
         <DimensionMark
@@ -154,7 +163,7 @@ export const ExteriorDimensions = memo(function ExteriorDimensions({
           a={a}
           b={b}
           offset={exteriorDimensionOffset}
-          label={exteriorDimensionLabel(a, b)}
+          label={exteriorDimensionLabel(a, b, language)}
           keepLabelUpright
         />
       ))}
@@ -171,6 +180,8 @@ export function RoomLabels({
   calibrated: boolean;
   showScalePrompt?: boolean;
 }) {
+  const t = useTranslation();
+  const language = useLanguage();
   return (
     <g
       data-room-labels="true"
@@ -178,11 +189,11 @@ export function RoomLabels({
       fontFamily="Arial, sans-serif"
     >
       {rooms.map((room, n) => {
-        const name = `Room ${n + 1}`;
+        const name = t("Room {number}", { number: n + 1 });
         const area = calibrated
-          ? formatRoomArea(room.areaCm2)
+          ? formatRoomArea(room.areaCm2, language)
           : showScalePrompt
-            ? "Set scale"
+            ? t("Set scale")
             : undefined;
         const label = area ? `${name}: ${area}` : name;
         const size = Math.min(18, room.clearance / 3);
@@ -256,6 +267,7 @@ function Fireplace({
   );
 }
 function Symbol({ i }: { i: RectItem }) {
+  const t = useTranslation();
   const w = i.w,
     h = i.h;
   if (i.type === "text")
@@ -294,7 +306,7 @@ function Symbol({ i }: { i: RectItem }) {
           stroke="none"
           fill={ink}
         >
-          UP
+          {t("UP")}
         </text>
       </g>
     );
@@ -504,6 +516,8 @@ export const DrawItem = memo(
     plan: Plan;
     interactive?: boolean;
   }) {
+    const t = useTranslation();
+    const language = useLanguage();
     let shape;
     const status = renovationStatus(plan, i);
     if (i.type === "wall")
@@ -573,7 +587,7 @@ export const DrawItem = memo(
           a={a}
           b={b}
           offset={i.offset}
-          label={`${dist(a, b).toFixed(1)} ${plan.calibration.calibrated ? "cm" : "units"}`}
+          label={`${fixed(dist(a, b), 1, language)} ${plan.calibration.calibrated ? "cm" : t("units")}`}
           interactive={interactive}
         />
       );

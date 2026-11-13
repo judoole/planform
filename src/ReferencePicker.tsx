@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { openReferenceFile, type EmbeddedRaster } from "./referenceImport";
 
@@ -8,6 +9,7 @@ export default function ReferencePicker({
   onApply: (raster: EmbeddedRaster) => void;
   onClose: () => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const sourceRef = useRef<Awaited<
     ReturnType<typeof openReferenceFile>
@@ -82,9 +84,9 @@ export default function ReferencePicker({
         onClose();
       }}
     >
-      <h2 id="reference-picker-title">Import local reference</h2>
+      <h2 id="reference-picker-title">{t("Import local reference")}</h2>
       <label className="field">
-        <span>Image or PDF file</span>
+        <span>{t("Image or PDF file")}</span>
         <input
           type="file"
           accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
@@ -94,7 +96,7 @@ export default function ReferencePicker({
       </label>
       {pageCount > 1 && (
         <label className="field">
-          <span>PDF page</span>
+          <span>{t("PDF page")}</span>
           <select
             value={page}
             disabled={working}
@@ -102,17 +104,20 @@ export default function ReferencePicker({
           >
             {Array.from({ length: pageCount }, (_, index) => (
               <option key={index} value={index + 1}>
-                Page {index + 1} of {pageCount}
+                {t("Page {number} of {total}", {
+                  number: index + 1,
+                  total: pageCount,
+                })}
               </option>
             ))}
           </select>
         </label>
       )}
-      {error && <p role="alert">{error}</p>}
-      {working && <p role="status">Reading local reference…</p>}
+      {error && <p role="alert">{t(error)}</p>}
+      {working && <p role="status">{t("Reading local reference…")}</p>}
       <div className="modal-actions">
         <button type="button" onClick={onClose}>
-          Cancel
+          {t("Cancel")}
         </button>
         <button
           type="button"
@@ -120,7 +125,7 @@ export default function ReferencePicker({
           disabled={!pageCount || working}
           onClick={() => void apply()}
         >
-          Use reference
+          {t("Use reference")}
         </button>
       </div>
     </dialog>

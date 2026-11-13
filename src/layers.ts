@@ -1,3 +1,4 @@
+import { translate, type Language } from "./messages";
 import { dimensionEndpoints } from "./dimensions";
 import type { Box, Item, Plan } from "./model";
 
@@ -76,7 +77,7 @@ export function phaseLegendStyles(plan: Plan) {
     return undefined;
   const view = renovationViews[plan.renovationView ?? "all"];
   return {
-    title: `Renovation view: ${view.title}`,
+    title: view.title,
     entries: (plan.renovationView === "existing"
       ? ["existing" as const]
       : view.statuses
@@ -93,10 +94,14 @@ export function drawRenovationStatus(
     : (status ?? "existing");
 }
 
-export function phaseLegend(plan: Plan): string[] {
+export function phaseLegend(plan: Plan, language: Language = "en"): string[] {
+  const t = translate(language);
   const legend = phaseLegendStyles(plan);
   return legend
-    ? [legend.title, ...legend.entries.map((entry) => entry.label)]
+    ? [
+        t("Renovation view: {view}", { view: t(legend.title) }),
+        ...legend.entries.map((entry) => t(entry.label)),
+      ]
     : [];
 }
 

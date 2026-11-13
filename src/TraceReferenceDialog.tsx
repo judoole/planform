@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useEffect, useRef } from "react";
 import { NumberField } from "./Properties";
 import type { TraceReference } from "./reference";
@@ -17,6 +18,7 @@ export default function TraceReferenceDialog({
   onReplace: () => void;
   onRemove: () => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = dialog.current!;
@@ -36,14 +38,14 @@ export default function TraceReferenceDialog({
         onClose();
       }}
     >
-      <h2 id="reference-settings-title">Tracing reference</h2>
+      <h2 id="reference-settings-title">{t("Tracing reference")}</h2>
       <p>
         {reference.image.name}
         {reference.image.page && ` · page ${reference.image.page}`}
       </p>
       <p>
         {reference.calibrated
-          ? "Calibrated"
+          ? t("Calibrated")
           : "Uncalibrated · set a known distance before tracing a measured plan"}
       </p>
       <label className="property-checkbox">
@@ -52,7 +54,7 @@ export default function TraceReferenceDialog({
           checked={reference.visible}
           onChange={(event) => write({ visible: event.target.checked })}
         />
-        Show reference
+        {t("Show reference")}
       </label>
       <label className="property-checkbox">
         <input
@@ -60,7 +62,7 @@ export default function TraceReferenceDialog({
           checked={reference.locked}
           onChange={(event) => write({ locked: event.target.checked })}
         />
-        Lock position and size
+        {t("Lock position and size")}
       </label>
       <label className="property-checkbox">
         <input
@@ -68,10 +70,10 @@ export default function TraceReferenceDialog({
           checked={reference.includeInExport}
           onChange={(event) => write({ includeInExport: event.target.checked })}
         />
-        Include in exports when calibrated
+        {t("Include in exports when calibrated")}
       </label>
       <NumberField
-        label="Opacity (%)"
+        label={t("Opacity (%)")}
         value={reference.opacity * 100}
         min={0}
         max={100}
@@ -81,17 +83,17 @@ export default function TraceReferenceDialog({
       {!reference.locked && (
         <div className="reference-position">
           <NumberField
-            label="Position X"
+            label={t("Position X")}
             value={reference.x}
             onChange={(x) => write({ x })}
           />
           <NumberField
-            label="Position Y"
+            label={t("Position Y")}
             value={reference.y}
             onChange={(y) => write({ y })}
           />
           <NumberField
-            label="Reference width"
+            label={t("Reference width")}
             value={reference.width}
             min={0.001}
             onChange={(width) => write({ width, calibrated: false })}
@@ -100,20 +102,20 @@ export default function TraceReferenceDialog({
       )}
       <div className="modal-actions">
         <button type="button" onClick={onReplace}>
-          Replace
+          {t("Replace")}
         </button>
         <button type="button" onClick={onRemove}>
-          Remove
+          {t("Remove")}
         </button>
         <button
           type="button"
           onClick={onCalibrate}
           disabled={!reference.visible}
         >
-          Calibrate scale
+          {t("Calibrate scale")}
         </button>
         <button type="button" className="primary" onClick={onClose}>
-          Done
+          {t("Done")}
         </button>
       </div>
     </dialog>

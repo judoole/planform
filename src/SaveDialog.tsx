@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Download, FileJson, X } from "lucide-react";
 
@@ -10,6 +11,7 @@ export default function SaveDialog({
   onClose: () => void;
   onSave: (filename: string) => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [filename, setFilename] = useState(initialName);
@@ -41,7 +43,7 @@ export default function SaveDialog({
     >
       <button
         className="modal-close"
-        aria-label="Close save dialog"
+        aria-label={t("Close save dialog")}
         onClick={onClose}
       >
         <X size={20} />
@@ -49,26 +51,26 @@ export default function SaveDialog({
       <span className="modal-icon">
         <FileJson size={25} />
       </span>
-      <h2 id="save-title">Save project</h2>
-      <p>Choose a name for the editable project file.</p>
+      <h2 id="save-title">{t("Save project")}</h2>
+      <p>{t("Choose a name for the editable project file.")}</p>
       <form onSubmit={submit}>
         <label className="field">
-          <span>File name</span>
+          <span>{t("File name")}</span>
           <input
             ref={input}
             autoFocus
             value={filename}
             onChange={(event) => setFilename(event.target.value)}
-            aria-label="File name"
+            aria-label={t("File name")}
           />
         </label>
-        <p className="save-extension">Saved as a .planform.json file</p>
+        <p className="save-extension">{t("Saved as a .planform.json file")}</p>
         <div className="modal-actions">
           <button type="button" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button className="primary" type="submit" disabled={!filename.trim()}>
-            <Download size={15} /> Save file
+            <Download size={15} /> {t("Save file")}
           </button>
         </div>
       </form>

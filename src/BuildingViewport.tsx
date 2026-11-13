@@ -1,3 +1,4 @@
+import { useLanguage, useTranslation } from "./i18n";
 import { Eye, EyeOff, Maximize, Minus, Plus } from "lucide-react";
 import {
   useEffect,
@@ -220,6 +221,8 @@ export default function BuildingViewport({
   selection?: string[];
   onSelect?: (id: string) => void;
 }) {
+  const t = useTranslation();
+  const language = useLanguage();
   const [showRoof, setShowRoof] = useState(true);
   const [error, setError] = useState("");
   const host = useRef<HTMLDivElement>(null);
@@ -305,15 +308,15 @@ export default function BuildingViewport({
   }
 
   const exteriorLengths = useMemo(
-    () => exteriorWallLengthSummary(plan),
-    [plan],
+    () => exteriorWallLengthSummary(plan, language),
+    [plan, language],
   );
   const hasRoof = building.roof.children.length > 0;
   return (
-    <section className="building-viewport" aria-label="Building 3D view">
+    <section className="building-viewport" aria-label={t("Building 3D view")}>
       <div className="building-viewport-surface" ref={host}>
         <canvas
-          aria-label="Interactive 3D building model"
+          aria-label={t("Interactive 3D building model")}
           aria-describedby="building-viewport-controls"
           tabIndex={error || building.empty ? -1 : 0}
           onKeyDown={keyboard}
@@ -323,17 +326,19 @@ export default function BuildingViewport({
         <p className="building-viewport-dimensions">{exteriorLengths}</p>
       )}
       <span className="building-viewport-help" id="building-viewport-controls">
-        Drag to orbit · Right-drag to pan · Scroll to zoom
+        {t("Drag to orbit · Right-drag to pan · Scroll to zoom")}
         <span className="building-viewport-keyboard">
-          . When the model has focus, use arrow keys to orbit, plus or minus to
-          zoom, and zero to reset.
+          {". "}
+          {t(
+            "When the model has focus, use arrow keys to orbit, plus or minus to zoom, and zero to reset.",
+          )}
         </span>
       </span>
       {!building.empty && !error && (
         <div
           className="building-viewport-actions"
           role="group"
-          aria-label="3D view controls"
+          aria-label={t("3D view controls")}
         >
           <button
             type="button"
@@ -341,28 +346,28 @@ export default function BuildingViewport({
             disabled={!hasRoof}
             onClick={() => setShowRoof((showing) => !showing)}
           >
-            {showRoof ? <Eye size={16} /> : <EyeOff size={16} />} Roof
+            {showRoof ? <Eye size={16} /> : <EyeOff size={16} />} {t("Roof")}
           </button>
           <button
             type="button"
-            aria-label="Zoom out 3D"
-            title="Zoom out"
+            aria-label={t("Zoom out 3D")}
+            title={t("Zoom out")}
             onClick={() => viewport.current?.zoom(1 / 1.2)}
           >
             <Minus size={17} />
           </button>
           <button
             type="button"
-            aria-label="Zoom in 3D"
-            title="Zoom in"
+            aria-label={t("Zoom in 3D")}
+            title={t("Zoom in")}
             onClick={() => viewport.current?.zoom(1.2)}
           >
             <Plus size={17} />
           </button>
           <button
             type="button"
-            aria-label="Reset 3D view"
-            title="Reset view"
+            aria-label={t("Reset 3D view")}
+            title={t("Reset view")}
             onClick={() => viewport.current?.reset()}
           >
             <Maximize size={16} />
@@ -374,22 +379,26 @@ export default function BuildingViewport({
           className="building-viewport-empty"
           role={error ? "alert" : "status"}
         >
-          {error ||
-            building.issues[0]?.message ||
-            "Draw walls in the floor plan to begin the 3D model."}
+          {t(
+            error ||
+              building.issues[0]?.message ||
+              "Draw walls in the floor plan to begin the 3D model.",
+          )}
         </p>
       ) : building.issues.length > 0 ? (
         <details className="building-viewport-issues">
           <summary>
             {building.issues.length === 1
-              ? building.issues[0].message
-              : `${building.issues.length} issues in the 3D model`}
+              ? t(building.issues[0].message)
+              : t("{count} issues in the 3D model", {
+                  count: building.issues.length,
+                })}
           </summary>
           {building.issues.length > 1 && (
             <ul>
               {building.issues.map((issue, i) => (
                 <li key={`${issue.code}-${issue.itemId ?? i}`}>
-                  {issue.message}
+                  {t(issue.message)}
                 </li>
               ))}
             </ul>

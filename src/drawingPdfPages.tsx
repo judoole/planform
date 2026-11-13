@@ -1,3 +1,4 @@
+import { translate, type Language } from "./messages";
 import { renderToStaticMarkup } from "react-dom/server";
 import { garageAreaReport } from "./garage";
 import { sitePlanSheet } from "./garageSite";
@@ -19,7 +20,9 @@ export type DrawingPdfPage = {
 export function drawingPdfPages(
   input: Plan,
   parcels: ParcelMap = { selected: [], nearby: [] },
+  language: Language = "en",
 ) {
+  const t = translate(language);
   const plan = visiblePlan(input);
   const pages: DrawingPdfPage[] = [];
   function add(
@@ -30,21 +33,21 @@ export function drawingPdfPages(
   ) {
     try {
       const drawing = build();
-      pages.push({ id, label, scale, drawing });
+      pages.push({ id, label: t(label), scale, drawing });
     } catch {
       // Incomplete optional views are still accessible in the drawing tools.
     }
   }
   add("plan", "Floor plan", "drawing", () =>
-    floorPlanSheet(input, { fit: true }),
+    floorPlanSheet(input, { fit: true, language }),
   );
   for (const view of garageViews) {
     add(view, garageViewNames[view], "drawing", () =>
-      garageViewSheet(plan, view),
+      garageViewSheet(plan, view, language),
     );
   }
   if (plan.propertyMap?.placement) {
-    const drawing = propertyMapSheet(plan, plan.propertyMap, parcels);
+    const drawing = propertyMapSheet(plan, plan.propertyMap, parcels, language);
     if (drawing)
       pages.push({
         id: "property-map",
@@ -55,10 +58,10 @@ export function drawingPdfPages(
   }
   if (plan.garage?.site)
     add("site", "Site plan", 500, () =>
-      sitePlanSheet(plan, plan.garage?.permit?.propertyId ?? ""),
+      sitePlanSheet(plan, plan.garage?.permit?.propertyId ?? "", language),
     );
   if (plan.garage?.area)
-    add("area", "Building areas", "fit", () => areaPage(plan));
+    add("area", "Building areas", "fit", () => areaPage(plan, language));
   return {
     pages,
     canRender3D:
@@ -67,8 +70,9 @@ export function drawingPdfPages(
   };
 }
 
-function areaPage(plan: Plan): SheetDrawing {
-  const lines = garageAreaReport(plan)
+function areaPage(plan: Plan, language: Language): SheetDrawing {
+  const t = translate(language);
+  const lines = garageAreaReport(plan, language)
     .split("\n")
     .flatMap((line) => {
       if (!line.trim()) return [""];
@@ -82,9 +86,9 @@ function areaPage(plan: Plan): SheetDrawing {
       return rows;
     });
   return {
-    title: "Building areas",
+    title: t("Building areas"),
     bounds: { x: 0, y: 0, w: 720, h: 18 + lines.length * 18 },
-    fitLabel: "Area estimate",
+    fitLabel: t("Area estimate"),
     markup: renderToStaticMarkup(
       <g fill="#234039" fontFamily="Arial" fontSize={16}>
         {lines.map((line, i) => (

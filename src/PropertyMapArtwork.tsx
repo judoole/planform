@@ -1,3 +1,4 @@
+import { translate, type Language } from "./messages";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   boundaryDistanceLabel,
@@ -79,7 +80,9 @@ export function MapMeasurements({
   toView,
   bounds,
   unit = 1,
+  language = "en",
 }: {
+  language?: Language;
   distances?: BoundaryDistance[];
   toView: (point: Point) => Point;
   bounds: Box;
@@ -101,7 +104,7 @@ export function MapMeasurements({
     const a = toView(distance.a);
     const b = toView(distance.b);
     if (!inside(b)) return [];
-    const text = boundaryDistanceLabel(distance.meters);
+    const text = boundaryDistanceLabel(distance.meters, language);
     if (distance.meters === 0) return [{ a, b, text, contact: true }];
     const w = (text.length * 6.8 + 11) * unit;
     const h = 17 * unit;
@@ -193,7 +196,9 @@ export function propertyMapSheet(
   plan: Plan,
   map: PropertyMap,
   parcels: ParcelMap,
+  language: Language = "en",
 ): SheetDrawing | undefined {
+  const t = translate(language);
   const footprint = mapFootprint(plan);
   const placement = map.placement;
   if (!footprint || !placement) return;
@@ -202,6 +207,7 @@ export function propertyMapSheet(
     corners,
     parcels.selected,
     placement.center,
+    language,
   );
   const origin = projectLocation(placement.center);
   const scale = groundScale(placement.center);
@@ -214,7 +220,7 @@ export function propertyMapSheet(
   const h = Math.max(6000, footprintBounds.h + 1000);
   const bounds = { x: -w / 2, y: -h / 2, w, h };
   return {
-    title: "Property map",
+    title: t("Property map"),
     bounds,
     markup: renderToStaticMarkup(
       <g>
@@ -245,6 +251,7 @@ export function propertyMapSheet(
             toView={toView}
             bounds={bounds}
             unit={18}
+            language={language}
           />
         </g>
         <NorthArrow x={w / 2 - 600} y={-h / 2 + 600} unit={22} />
@@ -254,8 +261,8 @@ export function propertyMapSheet(
     legend: [
       map.property.number,
       `${printBackground.attribution} · Matrikkelen - Eiendomskart Teig · CC BY 4.0`,
-      measurements?.summary ?? "Selected parcel boundary unavailable.",
-      "Mapped boundaries and horizontal distances are approximate.",
+      measurements?.summary ?? t("Selected parcel boundary unavailable."),
+      t("Mapped boundaries and horizontal distances are approximate."),
     ],
   };
 }

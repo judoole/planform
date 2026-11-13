@@ -1,3 +1,4 @@
+import { fixed, translate, type Language } from "./messages";
 import { buildingGeometry } from "./building";
 import { dist, pointsBox, rotate, type Plan, type Point } from "./model";
 import { nearestSiteDistance } from "./siteMap";
@@ -88,6 +89,7 @@ export function boundaryMeasurements(
   corners: Point[],
   parcels: Parcel[],
   location: Location,
+  language: Language = "en",
 ) {
   const center = projectLocation(location);
   const scale = groundScale(location);
@@ -139,14 +141,25 @@ export function boundaryMeasurements(
       ringContains(outer, center) &&
       !holes.some((ring) => ringContains(ring, center)),
   );
+  const t = translate(language);
   return {
     distances: contact ? [contact] : distances,
     summary: contact
-      ? "Building touches or crosses a mapped boundary"
-      : `Nearest mapped boundary: ${boundaryDistanceLabel(nearest.meters)}${inside ? "" : " (outside parcel)"}`,
+      ? t("Building touches or crosses a mapped boundary")
+      : t(
+          inside
+            ? "Nearest mapped boundary: {distance}"
+            : "Nearest mapped boundary: {distance} (outside parcel)",
+          { distance: boundaryDistanceLabel(nearest.meters, language) },
+        ),
   };
 }
 
-export function boundaryDistanceLabel(meters: number) {
-  return meters > 0 && meters < 0.05 ? "<0.1 m" : `${meters.toFixed(1)} m`;
+export function boundaryDistanceLabel(
+  meters: number,
+  language: Language = "en",
+) {
+  return meters > 0 && meters < 0.05
+    ? `<${fixed(0.1, 1, language)} m`
+    : `${fixed(meters, 1, language)} m`;
 }

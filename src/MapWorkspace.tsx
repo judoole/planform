@@ -1,3 +1,4 @@
+import { useLanguage, useTranslation } from "./i18n";
 import { Minus, Plus, RotateCw, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
@@ -116,6 +117,8 @@ export default function MapWorkspace({
   onChange: (map: PropertyMap) => void;
   onImportedMap: () => void;
 }) {
+  const t = useTranslation();
+  const language = useLanguage();
   const map = plan.propertyMap;
   const location = map?.placement?.center;
   const [cameraOverride, setCamera] = useState<{
@@ -145,7 +148,12 @@ export default function MapWorkspace({
     footprint && placement ? placedFootprint(footprint, placement) : undefined;
   const measurements =
     corners && placement
-      ? boundaryMeasurements(corners, parcels.data.selected, placement.center)
+      ? boundaryMeasurements(
+          corners,
+          parcels.data.selected,
+          placement.center,
+          language,
+        )
       : undefined;
 
   useEffect(() => () => searchRequest.current?.abort(), []);
@@ -363,31 +371,31 @@ export default function MapWorkspace({
       1);
 
   return (
-    <section className="map-workspace" aria-label="Map workspace">
+    <section className="map-workspace" aria-label={t("Map workspace")}>
       <div className="map-controls">
         <form className="map-search" onSubmit={search}>
-          <label htmlFor="property-search">Find a property</label>
+          <label htmlFor="property-search">{t("Find a property")}</label>
           <div className="map-search-input">
             <input
               id="property-search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Address or gnr/bnr and municipality"
+              placeholder={t("Address or gnr/bnr and municipality")}
               maxLength={200}
               required
             />
             <button
-              aria-label="Search properties"
-              title="Search properties"
+              aria-label={t("Search properties")}
+              title={t("Search properties")}
               disabled={searching}
             >
               <Search size={17} />
             </button>
           </div>
-          {searching && <p role="status">Searching Kartverket…</p>}
-          {searchMessage && <p role="status">{searchMessage}</p>}
+          {searching && <p role="status">{t("Searching Kartverket…")}</p>}
+          {searchMessage && <p role="status">{t(searchMessage)}</p>}
           {!!results.length && (
-            <ul className="map-results" aria-label="Search results">
+            <ul className="map-results" aria-label={t("Search results")}>
               {results.map((result, i) => (
                 <li key={`${result.number}:${i}`}>
                   <button type="button" onClick={() => selectProperty(result)}>
@@ -410,25 +418,25 @@ export default function MapWorkspace({
           </div>
         )}
         <label className="map-background">
-          Background
+          {t("Background")}
           <select
             value={background}
             onChange={(e) => onBackground(e.target.value as BackgroundId)}
           >
             {Object.entries(backgrounds).map(([id, option]) => (
               <option key={id} value={id} disabled={!!option.unavailable}>
-                {option.label}
-                {option.unavailable ? " (unavailable)" : ""}
+                {t(option.label)}
+                {option.unavailable ? ` (${t("unavailable")})` : ""}
               </option>
             ))}
           </select>
         </label>
         {backgrounds.aerial.unavailable && (
-          <p className="map-aerial-note">{backgrounds.aerial.unavailable}</p>
+          <p className="map-aerial-note">{t(backgrounds.aerial.unavailable)}</p>
         )}
         {plan.garage?.site && (
           <button type="button" onClick={onImportedMap}>
-            Open imported map
+            {t("Open imported map")}
           </button>
         )}
       </div>
@@ -437,7 +445,7 @@ export default function MapWorkspace({
           <svg
             ref={svg}
             className="map-surface"
-            aria-label="Property map canvas"
+            aria-label={t("Property map canvas")}
             onPointerDown={beginDrag}
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
@@ -474,6 +482,7 @@ export default function MapWorkspace({
               />
             )}
             <MapMeasurements
+              language={language}
               distances={measurements?.distances}
               toView={toView}
               bounds={{ x: 0, y: 0, w: size.width, h: size.height }}
@@ -490,7 +499,7 @@ export default function MapWorkspace({
                 <circle
                   className="map-rotation-handle"
                   data-map-rotate="true"
-                  aria-label="Rotate building handle"
+                  aria-label={t("Rotate building handle")}
                   cx={rotationHandle.knob.x}
                   cy={rotationHandle.knob.y}
                   r={9}
@@ -504,8 +513,12 @@ export default function MapWorkspace({
             {!footprint ? (
               <p>
                 {plan.calibration.calibrated
-                  ? "Draw a closed outline with straight walls and no inward corners to place the building."
-                  : "Set a known floor plan dimension to place this imported drawing at real size."}
+                  ? t(
+                      "Draw a closed outline with straight walls and no inward corners to place the building.",
+                    )
+                  : t(
+                      "Set a known floor plan dimension to place this imported drawing at real size.",
+                    )}
               </p>
             ) : !placement ? (
               <button
@@ -518,7 +531,7 @@ export default function MapWorkspace({
                   })
                 }
               >
-                Place building
+                {t("Place building")}
               </button>
             ) : (
               <>
@@ -531,7 +544,7 @@ export default function MapWorkspace({
                     <RotateCw size={14} aria-hidden="true" />
                     <input
                       type="number"
-                      aria-label="Building rotation"
+                      aria-label={t("Building rotation")}
                       key={map.placement?.rotation}
                       defaultValue={map.placement?.rotation}
                       onBlur={(event) => {
@@ -551,46 +564,48 @@ export default function MapWorkspace({
                   </label>
                 </div>
                 <p>
-                  Drag the building to move it. Drag the white handle to rotate.
+                  {t(
+                    "Drag the building to move it. Drag the white handle to rotate.",
+                  )}
                 </p>
               </>
             )}
             {parcels.loading ? (
-              <p role="status">Loading parcel boundaries…</p>
+              <p role="status">{t("Loading parcel boundaries…")}</p>
             ) : (
               <>
                 {measurements ? (
                   <p className="map-measurement">{measurements.summary}</p>
                 ) : (
                   !parcels.data.selected.length && (
-                    <p>Selected parcel boundary unavailable.</p>
+                    <p>{t("Selected parcel boundary unavailable.")}</p>
                   )
                 )}
                 {parcels.data.partial && !!parcels.data.selected.length && (
-                  <p>Some parcel data could not be loaded.</p>
+                  <p>{t("Some parcel data could not be loaded.")}</p>
                 )}
               </>
             )}
-            {measurements && <p>Mapped boundaries are approximate.</p>}
+            {measurements && <p>{t("Mapped boundaries are approximate.")}</p>}
             {imageError && source.imageUrl && (
               <p>
                 {parcels.data.selected.length || parcels.data.nearby.length
-                  ? "Background unavailable. Showing parcel boundaries."
-                  : "Map background unavailable."}
+                  ? t("Background unavailable. Showing parcel boundaries.")
+                  : t("Map background unavailable.")}
               </p>
             )}
           </div>
           <div className="map-zoom">
             <button
               type="button"
-              aria-label="Zoom map in"
+              aria-label={t("Zoom map in")}
               onClick={() => zoom(0.67)}
             >
               <Plus size={17} />
             </button>
             <button
               type="button"
-              aria-label="Zoom map out"
+              aria-label={t("Zoom map out")}
               onClick={() => zoom(1.5)}
             >
               <Minus size={17} />
@@ -599,7 +614,7 @@ export default function MapWorkspace({
               type="button"
               onClick={() => changeCamera(propertyCamera(map))}
             >
-              Recenter
+              {t("Recenter")}
             </button>
           </div>
           <div className="map-map-footer">
@@ -619,10 +634,11 @@ export default function MapWorkspace({
       ) : (
         <div className="map-empty">
           <Search size={28} aria-hidden="true" />
-          <strong>Find the place you’re designing for</strong>
+          <strong>{t("Find the place you’re designing for")}</strong>
           <p>
-            Search a Norwegian street address, or enter a property number such
-            as 315/204 Levanger.
+            {t(
+              "Search a Norwegian street address, or enter a property number such as 315/204 Levanger.",
+            )}
           </p>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useEffect, useRef, useState } from "react";
 import { Copy, Download, Link2, X } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ export default function ShareDialog({
   onClose: () => void;
   onDownload: () => void;
 }) {
+  const t = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [includeAll, setIncludeAll] = useState(false);
@@ -81,7 +83,7 @@ export default function ShareDialog({
     >
       <button
         className="modal-close"
-        aria-label="Close share dialog"
+        aria-label={t("Close share dialog")}
         onClick={onClose}
       >
         <X size={20} />
@@ -89,14 +91,15 @@ export default function ShareDialog({
       <span className="modal-icon">
         <Link2 size={25} />
       </span>
-      <h2 id="share-title">Share this plan</h2>
+      <h2 id="share-title">{t("Share this plan")}</h2>
       <p>
-        Anyone with the link can open and edit their own copy. The link includes
-        the source notes for the drawings you share.
+        {t(
+          "Anyone with the link can open and edit their own copy. The link includes the source notes for the drawings you share.",
+        )}
       </p>
       {project.version !== 2 && (
         <label className="field">
-          <span>Include in link</span>
+          <span>{t("Include in link")}</span>
           <select
             value={includeAll ? "all" : "active"}
             onChange={(e) => {
@@ -105,30 +108,30 @@ export default function ShareDialog({
             }}
           >
             <option value="active">
-              {
-                projectDrawings(project).find(
+              {t("{name} only", {
+                name: projectDrawings(project).find(
                   (d) => d.id === activeDrawingId(project),
-                )!.name
-              }{" "}
-              only
+                )!.name,
+              })}
             </option>
-            <option value="all">Entire project</option>
+            <option value="all">{t("Entire project")}</option>
           </select>
         </label>
       )}
       {local && (
         <p>
-          This address is local. To share across devices, open Planform at a
-          hosted address or download the project file.
+          {t(
+            "This address is local. To share across devices, open Planform at a hosted address or download the project file.",
+          )}
         </p>
       )}
       {error ? (
         <p role="alert" className="share-error">
-          {error}
+          {t(error)}
         </p>
       ) : url ? (
         <label className="field">
-          <span>Share link</span>
+          <span>{t("Share link")}</span>
           <input
             ref={input}
             value={url}
@@ -137,7 +140,7 @@ export default function ShareDialog({
           />
         </label>
       ) : (
-        <p role="status">Creating your link…</p>
+        <p role="status">{t("Creating your link…")}</p>
       )}
       <div className="modal-actions">
         <button
@@ -150,16 +153,16 @@ export default function ShareDialog({
             }
           }}
         >
-          <Download size={15} /> Download project
+          <Download size={15} /> {t("Download project")}
         </button>
         {url && (
           <button className="primary" onClick={copyLink}>
-            <Copy size={15} /> Copy link
+            <Copy size={15} /> {t("Copy link")}
           </button>
         )}
       </div>
       {status && (!status.url || status.url === url) && (
-        <p role="status">{status.message}</p>
+        <p role="status">{t(status.message)}</p>
       )}
     </dialog>
   );

@@ -321,6 +321,34 @@ describe("permit deliverables share the edited garage", () => {
     });
   });
 
+  it("uses the PDF language in both the title block and generated artwork", () => {
+    const plan = fittedGarage();
+    const english = drawingPdfPages(plan).pages;
+    const norwegian = drawingPdfPages(plan, undefined, "nb").pages;
+    expect(norwegian.map((page) => page.id)).toEqual(
+      english.map((page) => page.id),
+    );
+    expect(norwegian[0].drawing.bounds).toEqual(english[0].drawing.bounds);
+    const sheets = Object.fromEntries(
+      norwegian.map(({ id, drawing }) => [id, drawing]),
+    );
+    const preview = sheetPreview(sheets.plan, {
+      ...defaultSheetOptions,
+      name: "Sjøbu ved Åsen & Co.",
+      language: "nb",
+    });
+    expect(preview).toContain("Plantegning - første etasje");
+    expect(preview).toContain("Skriv ut i 100 % størrelse");
+    expect(preview).toContain("Sjøbu ved Åsen &amp; Co.");
+    expect(preview).toContain("Rom 1");
+    expect(preview).toContain("36,96 m²");
+    expect(sheets.section.markup).toContain("Takvinkel 28°");
+    expect(sheets.site.legend).toContain("Eiendom: Gnr. 12, bnr. 34");
+    expect(sheets.site.legend).toContain("1. West boundary - 12,50 m");
+    expect(sheets.area.markup).toContain("Beregning av bygningsareal");
+    expect(english[0].drawing.markup).toContain("Room 1");
+  });
+
   it("updates the additional drawing sheets from the edited building", () => {
     const plan = fittedGarage();
     expect(garageViews.map((view) => garageViewSheet(plan, view))).toHaveLength(

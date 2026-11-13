@@ -1,3 +1,4 @@
+import { fixed, type Language } from "./messages";
 import polygonClipping, { type Polygon, type Ring } from "polygon-clipping";
 import polylabel from "polylabel";
 import { type Item, type Point, type Wall, dist, same } from "./model";
@@ -128,9 +129,12 @@ export function findRooms(items: Item[]): Room[] {
   );
 }
 
-export function formatRoomArea(areaCm2: number): string {
+export function formatRoomArea(
+  areaCm2: number,
+  language: Language = "en",
+): string {
   const squareMeters = areaCm2 / 10_000;
   return squareMeters > 0 && squareMeters < 0.005
-    ? "< 0.01 m²"
-    : `${squareMeters.toFixed(2)} m²`;
+    ? `< ${fixed(0.01, 2, language)} m²`
+    : `${fixed(squareMeters, 2, language)} m²`;
 }

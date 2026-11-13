@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useState } from "react";
 import type { GarageDetails } from "./garage";
 import {
@@ -22,6 +23,7 @@ function TerrainField({
   const [value, setValue] = useState(
     () => points?.map(({ x, y }) => `${x}, ${y}`).join("\n") ?? "",
   );
+  const t = useTranslation();
   const [error, setError] = useState("");
   return (
     <label>
@@ -67,7 +69,7 @@ function TerrainField({
             onChange(parsed);
         }}
       />
-      {error && <small role="alert">{error}</small>}
+      {error && <small role="alert">{t(error)}</small>}
     </label>
   );
 }
@@ -79,6 +81,7 @@ export default function GarageViewsPanel({
   plan: Plan;
   onChange: (details: GarageDetails) => void;
 }) {
+  const t = useTranslation();
   const [view, setView] = useState<GarageView>("section");
   const structure = plan.garage?.structure ?? {};
   function update(next: GarageStructure) {
@@ -88,37 +91,39 @@ export default function GarageViewsPanel({
 
   return (
     <>
-      <h3>Section and elevations</h3>
+      <h3>{t("Section and elevations")}</h3>
       <p>
-        Set heights and the roof in Building, and opening dimensions in
-        Properties.
+        {t(
+          "Set heights and the roof in Building, and opening dimensions in Properties.",
+        )}
       </p>
       <div className="sheet-fields">
         <label>
-          Drawing view
+          {t("Drawing view")}
           <select
             value={view}
             onChange={(e) => setView(e.target.value as GarageView)}
           >
             {garageViews.map((value) => (
               <option key={value} value={value}>
-                {garageViewNames[value]}
+                {t(garageViewNames[value])}
               </option>
             ))}
           </select>
         </label>
       </div>
       <p>
-        Enter one station, height pair in cm on each line. Cover the full
-        drawing width. Station zero is the left exterior face.
+        {t(
+          "Enter one station, height pair in cm on each line. Cover the full drawing width. Station zero is the left exterior face.",
+        )}
       </p>
       <div className="sheet-fields">
         {(["existing", "proposed"] as const).map((kind) => (
           <TerrainField
             key={`${view}-${kind}`}
-            label={
-              kind === "existing" ? "Existing terrain" : "Proposed terrain"
-            }
+            label={t(
+              kind === "existing" ? "Existing terrain" : "Proposed terrain",
+            )}
             points={terrain?.[kind]}
             onChange={(points) =>
               update({
@@ -132,7 +137,10 @@ export default function GarageViewsPanel({
           />
         ))}
       </div>
-      <SheetExport name={plan.name} build={() => garageViewSheet(plan, view)} />
+      <SheetExport
+        name={plan.name}
+        build={({ language }) => garageViewSheet(plan, view, language)}
+      />
     </>
   );
 }
