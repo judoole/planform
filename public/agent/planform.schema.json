@@ -91,6 +91,27 @@
             }
           }
         },
+        "permit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "propertyId": { "type": "string", "maxLength": 120 },
+            "address": { "type": "string", "maxLength": 200 },
+            "description": { "type": "string", "maxLength": 10000 },
+            "separate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "applicationForm": { "$ref": "#/$defs/permitDocumentStatus" },
+                "neighbourNotice": { "$ref": "#/$defs/permitDocumentStatus" },
+                "dispensation": { "$ref": "#/$defs/permitDocumentStatus" },
+                "consent": { "$ref": "#/$defs/permitDocumentStatus" },
+                "authorities": { "$ref": "#/$defs/permitDocumentStatus" },
+                "siteConsiderations": { "$ref": "#/$defs/permitDocumentStatus" }
+              }
+            }
+          }
+        },
         "area": {
           "type": "object",
           "additionalProperties": false,
@@ -179,6 +200,9 @@
   },
   "required": ["format", "version", "name", "units", "items"],
   "$defs": {
+    "permitDocumentStatus": {
+      "enum": ["supplied", "missing", "notApplicable"]
+    },
     "terrainProfile": {
       "type": "object",
       "additionalProperties": false,
