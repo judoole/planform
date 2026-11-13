@@ -4,6 +4,7 @@ import comparisonSchema from "../public/agent/comparison.schema.json";
 import projectSchema from "../public/agent/project.schema.json";
 import type { Item, Plan, Point, RectItem, Wall } from "./model";
 import { wallEnds } from "./junctions";
+import { siteMapProblem } from "./siteMap";
 import { embeddedRasterProblem, referenceHeight } from "./reference";
 import { defaultLayer, drawingLayers } from "./layers";
 import {
@@ -97,6 +98,16 @@ export function validateProject(input: unknown): Plan {
 
 function validateRelationships(plan: Plan, path: string) {
   const issues: Issue[] = [];
+  const site = plan.garage?.site;
+  if (site) {
+    const problem = embeddedRasterProblem(site.map) ?? siteMapProblem(site);
+    if (problem)
+      issues.push({
+        path: `${path}/garage/site`,
+        code: "site",
+        message: problem,
+      });
+  }
   const reference = plan.traceReference;
   if (reference) {
     const problem = embeddedRasterProblem(reference.image);

@@ -1814,3 +1814,18 @@ button svg {
 .permit-checklist small {
   grid-column: 1 / -1;
 }
+
+.garage-site-map {
+  display: block;
+  width: 100%;
+  height: min(54vh, 520px);
+  background: #e8edea;
+  border: 1px solid #c6d3cb;
+  margin-bottom: 15px;
+}
+.garage-site-map.marking {
+  cursor: crosshair;
+}
+.site-features button {
+  margin-left: 0.5rem;
+}

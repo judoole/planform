@@ -91,6 +91,43 @@
             }
           }
         },
+        "site": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["map", "northDegrees", "features"],
+          "properties": {
+            "map": { "$ref": "#/$defs/embeddedRaster" },
+            "northDegrees": { "$ref": "#/$defs/siteAngle" },
+            "calibration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["a", "b", "distanceM"],
+              "properties": {
+                "a": { "$ref": "#/$defs/point" },
+                "b": { "$ref": "#/$defs/point" },
+                "distanceM": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 10000
+                }
+              }
+            },
+            "placement": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["center", "rotation"],
+              "properties": {
+                "center": { "$ref": "#/$defs/point" },
+                "rotation": { "$ref": "#/$defs/siteAngle" }
+              }
+            },
+            "features": {
+              "type": "array",
+              "maxItems": 15,
+              "items": { "$ref": "#/$defs/siteFeature" }
+            }
+          }
+        },
         "permit": {
           "type": "object",
           "additionalProperties": false,
@@ -200,6 +237,35 @@
   },
   "required": ["format", "version", "name", "units", "items"],
   "$defs": {
+    "siteAngle": { "type": "number", "minimum": -360, "maximum": 360 },
+    "siteFeature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "points"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "boundary",
+            "road",
+            "building",
+            "utility",
+            "buildingLine",
+            "access",
+            "parking"
+          ]
+        },
+        "name": { "type": "string", "maxLength": 36 },
+        "correction": { "type": "string", "maxLength": 60 },
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/point" }
+        }
+      },
+      "if": { "properties": { "kind": { "const": "parking" } } },
+      "then": { "properties": { "points": { "type": "array", "minItems": 3 } } }
+    },
     "permitDocumentStatus": {
       "enum": ["supplied", "missing", "notApplicable"]
     },
