@@ -1,4 +1,5 @@
 import Ajv from "ajv";
+import type { BuildingSettings } from "./building";
 import projectSchema from "../public/agent/planform.schema.json";
 import commandSchema from "../public/agent/commands.schema.json";
 import {
@@ -32,6 +33,8 @@ type Operation =
       hostId: string;
       offset: number;
       width: number;
+      height?: number;
+      sill?: number;
       hinge?: number;
       swing?: number;
       style?: Opening["style"];
@@ -57,6 +60,7 @@ type Operation =
     }
   | { op: "update"; id: string; changes: Record<string, unknown> }
   | { op: "setExteriorDimensions"; show: boolean }
+  | { op: "setBuilding"; building: BuildingSettings | null }
   | { op: "delete"; ids: string[]; cascade?: boolean };
 export type CommandBatch = {
   format: "planform-commands";
@@ -118,6 +122,8 @@ export function applyCommands(
         hostId: wall.id,
         t: op.offset / length,
         width: op.width,
+        ...(op.height === undefined ? {} : { height: op.height }),
+        ...(op.sill === undefined ? {} : { sill: op.sill }),
         hinge: op.hinge ?? 1,
         swing: op.swing ?? 1,
         ...(op.style === undefined ? {} : { style: op.style }),
@@ -195,7 +201,7 @@ export function applyCommands(
         )
       )
         fail(`Object "${item.id}" is locked. Unlock it explicitly first.`);
-      const updated = { ...item, ...op.changes } as Item;
+      const updated = updateItem(item, op.changes);
       if (isLayerLocked(plan, updated)) fail(`Destination layer is locked.`);
       if (item.type === "wall" && keys.includes("thickness"))
         plan.items.forEach((dependent) => {
@@ -209,6 +215,9 @@ export function applyCommands(
       changed.add(item.id);
     } else if (op.op === "setExteriorDimensions") {
       plan.showExteriorDimensions = op.show;
+    } else if (op.op === "setBuilding") {
+      if (op.building) plan.building = op.building;
+      else delete plan.building;
     } else {
       const requested = new Set(op.ids);
       const ids = deletionIds(plan, op.ids);
@@ -238,4 +247,17 @@ export function applyCommands(
     changedIds: [...changed],
     deletedIds: [...deleted],
   };
+}
+
+function updateItem(item: Item, changes: Record<string, unknown>): Item {
+  const next = { ...item, ...changes } as Item;
+  if (next.type === "wall" || next.type === "door" || next.type === "window") {
+    if (changes.height === null) delete next.height;
+    if (
+      (next.type === "door" || next.type === "window") &&
+      changes.sill === null
+    )
+      delete next.sill;
+  }
+  return next;
 }

@@ -171,6 +171,7 @@
     "renovationView": {
       "enum": ["all", "existing", "demolition", "proposed"]
     },
+    "building": { "$ref": "#/$defs/building" },
     "grid": {
       "type": "number",
       "minimum": 1,
@@ -337,6 +338,42 @@
         "locked": { "type": "boolean" }
       }
     },
+    "building": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Vertical dimensions in real centimeters, independently of floor plan calibration.",
+      "properties": {
+        "defaultWallHeight": { "$ref": "#/$defs/buildingHeight" },
+        "floorLevel": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "roof": { "$ref": "#/$defs/roof" }
+      }
+    },
+    "roof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["flat", "shed", "gable"] },
+        "pitch": { "type": "number", "minimum": 0, "maximum": 75 },
+        "direction": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "description": "Clockwise degrees from drawing +X. Gable ridge direction or direction uphill for shed."
+        },
+        "thickness": { "type": "number", "exclusiveMinimum": 0, "maximum": 500 }
+      }
+    },
+    "buildingHeight": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 5000
+    },
+    "openingSill": { "type": "number", "minimum": 0, "maximum": 5000 },
     "point": {
       "type": "object",
       "additionalProperties": false,
@@ -419,6 +456,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "height": { "$ref": "#/$defs/buildingHeight" },
         "id": {
           "type": "string",
           "minLength": 1,
@@ -478,6 +516,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "height": { "$ref": "#/$defs/buildingHeight" },
+        "sill": { "$ref": "#/$defs/openingSill" },
         "id": {
           "type": "string",
           "minLength": 1,
@@ -539,6 +579,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "height": { "$ref": "#/$defs/buildingHeight" },
+        "sill": { "$ref": "#/$defs/openingSill" },
         "id": {
           "type": "string",
           "minLength": 1,

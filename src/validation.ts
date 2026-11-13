@@ -1,4 +1,5 @@
 import Ajv from "ajv";
+import { buildingGeometry } from "./building";
 import schema from "../public/agent/planform.schema.json";
 import comparisonSchema from "../public/agent/comparison.schema.json";
 import projectSchema from "../public/agent/project.schema.json";
@@ -453,5 +454,16 @@ export function projectWarnings(plan: Plan): string[] {
     notes.unshift(
       "Scale is unconfirmed. Calibrate against a known real measurement.",
     );
+  if (
+    plan.calibration.calibrated &&
+    (plan.building ||
+      plan.items.some(
+        (item) =>
+          (item.type === "wall" && item.height !== undefined) ||
+          ((item.type === "door" || item.type === "window") &&
+            (item.height !== undefined || item.sill !== undefined)),
+      ))
+  )
+    notes.push(...buildingGeometry(plan).issues.map(({ message }) => message));
   return notes;
 }

@@ -245,6 +245,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     ),
     [viewMode, setViewMode] = useState<"plan" | "3d">("plan"),
     [opened3D, setOpened3D] = useState(false),
+    [buildingViewReset, setBuildingViewReset] = useState(0),
     [query, setQuery] = useState(""),
     [overlap, setOverlap] = useState<string[]>([]),
     [overlapOpen, setOverlapOpen] = useState(false),
@@ -824,12 +825,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     }
   }
   function openDrawing(next: Plan) {
+    setBuildingViewReset((n) => n + 1);
     clearDrawingContext();
     commit(next, undefined, true);
     fit(next);
     showNotice("Drawing opened. Undo restores the previous drawing.");
   }
   function replaceProject(next: Project) {
+    setBuildingViewReset((n) => n + 1);
     clearDrawingContext();
     setOverlay(false);
     histories.current = new Map();
@@ -862,6 +865,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     const next = emptyPlan();
     resetFileSession(next, false);
     if (projectRef.current.version === 2) {
+      setBuildingViewReset((n) => n + 1);
       clearDrawingContext();
       commit(next, undefined, true);
     } else {
@@ -1559,6 +1563,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 }
               >
                 <BuildingViewport
+                  key={`${buildingViewReset}:${version}`}
                   plan={shown}
                   selection={visibleSelection}
                   onSelect={(id) => {
@@ -1705,20 +1710,26 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       <footer className="statusbar">
         <span>
           <span className="status-dot" />
-          {selected.length
-            ? `${selected.length} selected`
-            : tool === "select"
-              ? "Ready to design"
-              : palette.find((p) => p.tool === tool)?.label || "Select"}
+          {viewMode === "3d" && !selected.length
+            ? "3D view"
+            : selected.length
+              ? `${selected.length} selected`
+              : tool === "select"
+                ? "Ready to design"
+                : palette.find((p) => p.tool === tool)?.label || "Select"}
         </span>
-        <span className="navigation-hint">
-          Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
-        </span>
-        <span className="coordinate-readout">
-          {coords} {plan.calibration.calibrated ? "cm" : "units"}
-          <span className="status-separator" />
-          Grid {plan.grid} {plan.calibration.calibrated ? "cm" : "units"}
-        </span>
+        {viewMode === "plan" && (
+          <>
+            <span className="navigation-hint">
+              Scroll to pan · Ctrl/⌘ + scroll to zoom · Pinch on touch
+            </span>
+            <span className="coordinate-readout">
+              {coords} {plan.calibration.calibrated ? "cm" : "units"}
+              <span className="status-separator" />
+              Grid {plan.grid} {plan.calibration.calibrated ? "cm" : "units"}
+            </span>
+          </>
+        )}
       </footer>
       {notice && (
         <div role="status" className="toast">
@@ -2043,6 +2054,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               Scroll to pan; Ctrl/⌘ + scroll or pinch to zoom. Pan tool makes
               navigation explicit. Every tool and edit action also has a visible
               control.
+            </p>
+            <p>
+              Open Building to set floor heights and a roof. Switch to 3D to
+              inspect the building and select walls or openings.
             </p>
             <div className="shortcuts">
               <span>V / H / W / F / M</span>

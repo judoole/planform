@@ -14,13 +14,19 @@ You are creating a single-floor, 2D architectural drawing. Return a downloadable
 ## Project envelope
 
 Required: `format: "planform"`, `version: 2`, `name`, `units: "cm"`, `items`.
-Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrated": true, "imported": false, "factor": 1 }`), `showExteriorDimensions` (boolean; hidden when omitted), `source: { "file": "house.pdf", "page": 1, "notes": ["..."] }`, `$schema`.
+Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrated": true, "imported": false, "factor": 1 }`), `showExteriorDimensions` (boolean; hidden when omitted), `building` (vertical dimensions and roof, described below), `source: { "file": "house.pdf", "page": 1, "notes": ["..."] }`, `$schema`.
 
 `calibration.factor` is cumulative scaling history; changing this number does not scale geometry. All stored coordinates are already in centimeters. Set `imported: true` for reconstructed source drawings. Never claim unknown dimensions are measured.
 
 Set `showExteriorDimensions` to true to annotate a calibrated, convex loop of connected straight walls. The editor and rendered exports label each exterior wall between the intersections of adjoining outside faces, including angled corners. For a 600 × 700 cm rectangular exterior with 20 cm walls, draw the centerlines 580 × 680 cm apart.
 
 Every item requires `id`, `name`, `type`. Optional `locked` and `evidence: { "basis": "measured" | "estimated", "note": "Source dimension or explicit assumption" }`. IDs are unique across the entire document, including groups. Unknown properties and arbitrary SVG markup are rejected.
+
+## Building dimensions
+
+Use `building.defaultWallHeight` for the common wall height. Wall `height` overrides it. Omitted values resolve to a 240 cm common height. Opening `height` and `sill` set the vertical opening size and its elevation above the floor. A door defaults to a 210 cm height and a 0 cm sill. A window defaults to a 100 cm height and a 90 cm sill. `building.floorLevel` is the finished floor level relative to the project's height datum and defaults to zero. Vertical measurements use real centimeters and retain their values when plan calibration changes horizontal measurements.
+
+Optional `building.roof` has `type: "flat" | "shed" | "gable"`, pitch in degrees, clockwise direction measured from plan +X, and thickness in centimeters normal to the slope. Gable direction is along the ridge and shed direction is uphill. Defaults for a pitched roof are 30°, direction 0°, and 24 cm thickness. Flat roofs use zero pitch. Roof geometry derives from a closed convex outer wall loop, including ordinary partitions and collinear wall segments of equal thickness. The roof sits on the highest exterior wall. A lower exterior override can leave a gap. Record unresolved dimensions and review the building view before relying on drawings that use them.
 
 ## Items
 
@@ -67,9 +73,11 @@ Use `splitWall` with `wallId`, `offset` from its start (a), a fresh `segmentId` 
 
 Use `joinWalls` with `sourceWallId`, `sourceEnd:"a"|"b"`, `targetWallId`, `targetOffset` from its start, a fresh `segmentId` and a fresh `junctionId`. Target offsets at the wall endpoints join a corner and need no additional segment. Interior offsets split the target. The source and any walls already meeting there move to the target point together.
 
+Use `{ "op": "setBuilding", "building": { "defaultWallHeight": 260, "roof": { "type": "gable", "pitch": 30 } } }` to replace the drawing's building settings. A null `building` removes them. The `opening` operation accepts `height` and `sill`. Update an object's `height` or an opening's `sill` to null to restore its inherited or default value. An opening that extends past its host wall's height is retained, and the 3D view identifies the unresolved dimensions.
+
 Use `{ "op": "setExteriorDimensions", "show": true }` to show exterior wall labels for the drawing, or set `show` to false to hide them.
 
-Batches are atomic, apply in order, and validate the final result. Invalid openings are rejected, never silently moved/shrunk/deleted. A wall resize retains opening t, so center distance changes proportionally; update t as part of the same batch if a fixed distance is needed. Dependent objects may be added later in the same batch. If shrinking a wall, fix its openings in that batch. Deleting an anchor object requires explicitly including its attached dimensions or `cascade:true`; deleting a wall also removes hosted openings, including any dimensions attached to those openings. Deleted IDs are reported.
+Batches are atomic, apply in order, and validate the final result. Invalid horizontal opening geometry is rejected without moving, shrinking or deleting openings. A wall resize retains opening t, so center distance changes proportionally; update t as part of the same batch if a fixed distance is needed. Dependent objects may be added later in the same batch. If shrinking a wall, fix its openings in that batch. Deleting an anchor object requires explicitly including its attached dimensions or `cascade:true`; deleting a wall also removes hosted openings, including any dimensions attached to those openings. Deleted IDs are reported.
 
 Run: `npm run plan -- apply drawing.planform.json edits.json --out revised.planform.json`. Then render and inspect the revised drawing. In the browser, use **AI drawings → Edits to the current drawing → Validate & preview → Apply edits**. A complete drawing can be pasted or opened as a downloaded project. Each accepted import/batch is one undoable edit.
 

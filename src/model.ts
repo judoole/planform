@@ -5,6 +5,7 @@ import {
   type RenovationStatus,
   type RenovationView,
 } from "./layers";
+import type { BuildingSettings } from "./building";
 import { readProject } from "./validation";
 import type { GarageDetails } from "./garage";
 import {
@@ -40,6 +41,7 @@ export type Wall = Base & {
   thickness: number;
   junctions?: Partial<Record<WallEnd, string>>;
   renovationStatus?: RenovationStatus;
+  height?: number;
 };
 export type DoorStyle = "hinged" | "sliding";
 export type Opening = Base & {
@@ -47,6 +49,8 @@ export type Opening = Base & {
   hostId: string;
   t: number;
   width: number;
+  height?: number;
+  sill?: number;
   hinge: number;
   swing: number;
   style?: DoorStyle;
@@ -84,6 +88,7 @@ export type Plan = {
   layers?: Layer[];
   activeLayerId?: string;
   renovationView?: RenovationView;
+  building?: BuildingSettings;
   calibration: {
     calibrated: boolean;
     imported: boolean;
