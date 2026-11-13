@@ -1,4 +1,5 @@
 import { readProject } from "./validation";
+import type { GarageDetails } from "./garage";
 import type { Project } from "./project";
 import type { FurnitureKind } from "./furniture";
 export type Point = { x: number; y: number };
@@ -47,6 +48,7 @@ export type Plan = {
   units: "cm";
   items: Item[];
   showExteriorDimensions?: boolean;
+  garage?: GarageDetails;
   calibration: {
     calibrated: boolean;
     imported: boolean;

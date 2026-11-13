@@ -22,7 +22,12 @@ const dot = (a: Point, b: Point) => a.x * b.x + a.y * b.y;
 
 export type ExteriorContour =
   | { status: "uncalibrated" | "open" | "unsupported" }
-  | { status: "ready"; corners: Point[] };
+  | {
+      status: "ready";
+      corners: Point[];
+      insideCorners: Point[];
+      wallIds: string[];
+    };
 
 function wallLoop(walls: Wall[]) {
   const key = ({ x, y }: Point) => `${x},${y}`;
@@ -147,15 +152,21 @@ function deriveWallContour(walls: Wall[]): ExteriorContour {
   faces = [...faces.slice(first), ...faces.slice(0, first)];
 
   const corners = offsetCorners(faces, 1);
+  const insideCorners = offsetCorners(faces, -1);
   const forwardEdges = (points: Point[]) =>
     exteriorDimensionSegments(points).every(
       ([a, b], i) => dot(subtract(b, a), faces[i].direction) > tolerance,
     );
   // Extreme thickness differences can make an offset edge disappear, and
   // excessive thickness can fill the enclosure entirely.
-  if (!forwardEdges(corners) || !forwardEdges(offsetCorners(faces, -1)))
+  if (!forwardEdges(corners) || !forwardEdges(insideCorners))
     return { status: "unsupported" };
-  return { status: "ready", corners };
+  return {
+    status: "ready",
+    corners,
+    insideCorners,
+    wallIds: faces.map((wall) => wall.id),
+  };
 }
 
 export function createExteriorContourReader() {

@@ -27,6 +27,15 @@ export function renderPlanSvg(input: Plan): string {
     >
       <title>{plan.name}</title>
       <rect x={x} y={y} width={w} height={h} fill="white" />
+      <PlanArtwork plan={plan} />
+    </svg>,
+  );
+}
+
+/** Shared architectural sheet content in drawing coordinates. */
+export function PlanArtwork({ plan }: { plan: Plan }) {
+  return (
+    <>
       {plan.items.map((item) => (
         <DrawItem key={item.id} item={item} plan={plan} interactive={false} />
       ))}
@@ -34,7 +43,7 @@ export function renderPlanSvg(input: Plan): string {
         rooms={findRooms(plan.items)}
         calibrated={plan.calibration.calibrated}
       />
-      <ExteriorDimensions contour={exterior} />
-    </svg>,
+      <ExteriorDimensions contour={visibleExteriorContour(plan)} />
+    </>
   );
 }

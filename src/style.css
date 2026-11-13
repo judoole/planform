@@ -1696,3 +1696,44 @@ button svg {
 .share-load a {
   color: #1c5e49;
 }
+
+.sheet-dialog {
+  width: min(960px, 94vw);
+  max-width: none;
+  max-height: 92vh;
+  overflow: auto;
+}
+.sheet-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sheet-fields label {
+  display: grid;
+  gap: 4px;
+}
+.sheet-fields input,
+.sheet-fields select {
+  border: 1px solid #b7c3bb;
+  border-radius: 5px;
+  background: white;
+  padding: 5px 8px;
+  color: #253b33;
+}
+.sheet-preview {
+  display: block;
+  width: 100%;
+  max-height: 61vh;
+  object-fit: contain;
+  margin: 12px 0;
+  background: #e8edea;
+  border: 1px solid #d1dbd5;
+}
+
+.garage-area-diagram {
+  display: block;
+  width: 100%;
+  height: min(240px, 35vh);
+  margin: 12px auto;
+}

@@ -83,7 +83,7 @@ describe("garage exterior contour", () => {
         },
       ],
     }).plan;
-    expect(deriveExteriorContour(withDoor)).toEqual({
+    expect(deriveExteriorContour(withDoor)).toMatchObject({
       status: "ready",
       corners: [
         { x: 0, y: 0 },
@@ -182,7 +182,7 @@ describe("garage exterior contour", () => {
     const angled = setCorner(plan, walls[1].id, "b", { x: 80, y: 690 });
     // The sloped centerline follows a 3-4-5 direction. Its outer face
     // intersects y=0 at x=610 and y=700 at x=85.
-    expect(deriveExteriorContour(angled)).toEqual({
+    expect(deriveExteriorContour(angled)).toMatchObject({
       status: "ready",
       corners: [
         { x: 0, y: 0 },

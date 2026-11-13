@@ -63,6 +63,9 @@ import {
   uid,
 } from "./model";
 import { furniture, type FurnitureKind } from "./furniture";
+import GarageArea from "./GarageArea";
+import SheetExport from "./SheetExport";
+import { floorPlanSheet } from "./planSheet";
 import { download, exportSvg, exportPng } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
@@ -209,6 +212,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [overlapOpen, setOverlapOpen] = useState(false),
     [menu, setMenu] = useState(false),
     [exportMenu, setExportMenu] = useState(false),
+    [sheetOpen, setSheetOpen] = useState(false),
+    [garageOpen, setGarageOpen] = useState(false),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
     [shareOpen, setShareOpen] = useState(false),
@@ -685,7 +690,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
-      if (shareOpen || manageOpen || saveOpen || busy) return;
+      if (
+        garageOpen ||
+        sheetOpen ||
+        shareOpen ||
+        manageOpen ||
+        saveOpen ||
+        busy
+      )
+        return;
       const el = e.target as HTMLElement;
       if (el.closest('input,textarea,select,[contenteditable="true"]')) return;
       const mod = e.metaKey || e.ctrlKey,
@@ -846,6 +859,22 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <div className="dropdown">
                 <button onClick={() => exporting(false)}>SVG · drawing</button>
                 <button onClick={() => exporting(true)}>PNG · image</button>
+                <button
+                  onClick={() => {
+                    setExportMenu(false);
+                    setSheetOpen(true);
+                  }}
+                >
+                  PDF · scaled sheet
+                </button>
+                <button
+                  onClick={() => {
+                    setExportMenu(false);
+                    setGarageOpen(true);
+                  }}
+                >
+                  Garage permit
+                </button>
               </div>
             )}
           </div>
@@ -1374,6 +1403,55 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           onClose={() => setShareOpen(false)}
           onDownload={downloadProject}
         />
+      )}
+      {garageOpen && (
+        <div className="modal-backdrop">
+          <section
+            className="modal sheet-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="garage-title"
+          >
+            <button
+              className="modal-close"
+              aria-label="Close garage permit"
+              onClick={() => setGarageOpen(false)}
+            >
+              <X size={16} />
+            </button>
+            <h2 id="garage-title">Garage permit</h2>
+            <h3>Building areas</h3>
+            <GarageArea
+              plan={drawing}
+              onChange={(garage) =>
+                commit({ ...drawing, garage }, undefined, true)
+              }
+            />
+          </section>
+        </div>
+      )}
+      {sheetOpen && (
+        <div className="modal-backdrop">
+          <section
+            className="modal sheet-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sheet-title"
+          >
+            <button
+              className="modal-close"
+              aria-label="Close scaled sheet"
+              onClick={() => setSheetOpen(false)}
+            >
+              <X size={16} />
+            </button>
+            <h2 id="sheet-title">Scaled PDF sheet</h2>
+            <SheetExport
+              build={() => floorPlanSheet(drawing)}
+              name={drawing.name}
+            />
+          </section>
+        </div>
       )}
       {saveOpen && (
         <SaveDialog

@@ -25,6 +25,22 @@
       "type": "boolean",
       "description": "Show the live outside-face length of each wall in a calibrated, closed convex footprint. Omitted means hidden."
     },
+    "garage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clearFloor": { "type": "boolean" },
+            "loft": { "type": "boolean" },
+            "overhang": { "type": "boolean" },
+            "otherArea": { "type": "boolean" }
+          }
+        }
+      }
+    },
     "grid": {
       "type": "number",
       "minimum": 1,
