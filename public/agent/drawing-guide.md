@@ -6,7 +6,7 @@ You are creating a single-floor, 2D architectural drawing. Return a downloadable
 
 1. Inspect the supplied PDF/image or description. Identify the relevant floor and readable dimensions. Use embedded text and vector geometry where available, and inspect a rendered page too. A PDF's printed scale alone is insufficient after arbitrary resizing. Ask for a known real dimension if no reliable measurement exists.
 2. Use a consistent origin, X increasing right, Y increasing down. Rotation is in degrees, clockwise on the page. Wall endpoints lie on wall **centerlines**; clear internal room dimensions exclude half of each bounding wall's thickness. A 500 cm clear room between two 20 cm walls has wall centerlines 520 cm apart.
-3. Build the main walls first, then partitions and attached doors/windows. Reuse exactly equal endpoint coordinates for connected corners. T-junctions that need shared editing should split the host wall into segments, remapping its openings. Do not create duplicate walls between adjacent rooms. Walls have no persistent room identity.
+3. Build the main walls first, then partitions and attached doors/windows. Reuse exactly equal endpoint coordinates for connected corners. Use the `joinWalls` operation to split a target wall and connect a T-junction, preserving its openings. Use `splitWall` to divide a single wall without a new branch. Do not create duplicate walls between adjacent rooms. Walls have no persistent room identity.
 4. Add labels, stairs and furniture only when supported by the source or requested. Keep all architectural elements top-level. Groups may contain furniture, stairs, text and other groups only.
 5. Distinguish measured geometry from estimates using `evidence`. Record ambiguous symbols, scale assumptions, inconsistent dimension chains and omitted detail in `source.notes`. If absolute scale cannot be established, set `calibration.calibrated` to false, say dimensions are provisional, and request calibration. Schema validity is not proof that the building has been measured correctly.
 6. Validate the file, render a preview, compare against the source, correct discrepancies, and return the project plus unresolved assumptions. In Codex with this repository: `npm run plan -- validate drawing.planform.json`; `npm run plan -- render drawing.planform.json --out preview.png`. Render uses Planform's own architectural renderer. If these tools aren't available, clearly state which checks were not performed.
@@ -24,7 +24,7 @@ Every item requires `id`, `name`, `type`. Optional `locked` and `evidence: { "ba
 
 ## Items
 
-- Wall: `{ "id":"north", "name":"North wall", "type":"wall", "a":{"x":0,"y":0}, "b":{"x":600,"y":0}, "thickness":20 }`. Nonzero length, positive thickness. Endpoints specify direction, which affects openings.
+- Wall: `{ "id":"north", "name":"North wall", "type":"wall", "a":{"x":0,"y":0}, "b":{"x":600,"y":0}, "thickness":20 }`. Nonzero length, positive thickness. Endpoints specify direction, which affects openings. Optional `junctions: {a?, b?}` stores explicit junction IDs. Endpoints with the same ID must have exactly equal coordinates. Older walls still connect at coincident endpoints.
 - Door/window: `{ "id":"entry", "name":"Entry", "type":"door", "hostId":"north", "t":0.25, "width":90, "hinge":1, "swing":1 }`. `t` is the opening **center** as a fraction of host length from a to b. For center 150 cm along a 600 cm wall, t = 0.25. Width is physical, not fractional. The entire opening must fit and must not overlap another opening. Hosts must be top-level walls at least 5 cm long; opening width is at least 1 cm.
 - Door orientation: in local coordinates, +X points a→b and +Y is clockwise from it. For `hinge:1`, hinge is at the a-side edge; `hinge:-1` puts it at the b-side edge. `swing:1` opens toward local -Y; `swing:-1` toward +Y. Reversing wall endpoints reverses the local axes. Windows require hinge/swing too; use 1 for both.
 - Sliding door: use `type:"door"` with `style:"sliding"`. `slideDirection:1` (default) points toward wall end b; `-1` points toward start a. The symbol shows two panels within the opening. Sliding doors still store `hinge` and `swing` for switching back to a hinged door; use 1 for both if unknown. An omitted `style` means hinged. The `opening` operation also accepts `style` and `slideDirection` for doors.
@@ -62,6 +62,10 @@ For file-based updates, return the complete project and keep existing IDs. Alter
 ```
 
 Operations: `add` with `items`; `opening` with center `offset` in centimeters (not t); `corner` with `wallId`, `end:"a"|"b"`, `point`; `update` with `id` and `changes`; `delete` with `ids` and optional `cascade:true` for hosted openings. Update cannot change IDs, types, endpoints or group structure. Use corner for shared endpoint edits. Object commands target top-level objects. Locked objects require a separate unlock operation (`update` with only `locked:false`) first. Connected locked walls block a corner edit.
+
+Use `splitWall` with `wallId`, `offset` from its start (a), a fresh `segmentId` and a fresh `junctionId`. The wall segment containing the original start retains the original ID. Wall properties and opening positions and widths are preserved. Splits through openings fail.
+
+Use `joinWalls` with `sourceWallId`, `sourceEnd:"a"|"b"`, `targetWallId`, `targetOffset` from its start, a fresh `segmentId` and a fresh `junctionId`. Target offsets at the wall endpoints join a corner and need no additional segment. Interior offsets split the target. The source and any walls already meeting there move to the target point together.
 
 Use `{ "op": "setExteriorDimensions", "show": true }` to show exterior wall labels for the drawing, or set `show` to false to hide them.
 

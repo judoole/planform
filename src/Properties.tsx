@@ -29,6 +29,7 @@ import type { Tool } from "./Canvas";
 import { isEditProtected, isLayerLocked } from "./layers";
 import { type Room, formatRoomArea } from "./rooms";
 import type { ExteriorContour } from "./exterior";
+import WallJunctionControls from "./WallJunctionControls";
 
 const exteriorMessages = {
   open: "Close the wall loop to show exterior dimensions.",
@@ -143,7 +144,7 @@ export default function Properties({
   roomError?: string;
   exterior: ExteriorContour;
   selection: string[];
-  commit: (p: Plan) => void;
+  commit: (p: Plan, base?: Plan, strict?: boolean) => void;
   setSelection: (s: string[]) => void;
   setTool: (t: Tool) => void;
   onDuplicate: () => void;
@@ -179,6 +180,9 @@ export default function Properties({
     } catch (e) {
       onError((e as Error).message);
     }
+  }
+  function moveCorner(wall: Wall, end: "a" | "b", point: Wall["a"]) {
+    action(() => commit(setCorner(plan, wall.id, end, point)));
   }
   return (
     <div className="properties-content">
@@ -377,12 +381,10 @@ export default function Properties({
                   value={dist(item.a, item.b)}
                   onChange={(length) => {
                     const r = (angle(item.a, item.b) * Math.PI) / 180;
-                    commit(
-                      setCorner(plan, item.id, "b", {
-                        x: item.a.x + Math.cos(r) * length,
-                        y: item.a.y + Math.sin(r) * length,
-                      }),
-                    );
+                    moveCorner(item, "b", {
+                      x: item.a.x + Math.cos(r) * length,
+                      y: item.a.y + Math.sin(r) * length,
+                    });
                   }}
                 />
                 <div className="field-grid">
@@ -400,12 +402,10 @@ export default function Properties({
                     onChange={(v) => {
                       const l = dist(item.a, item.b),
                         r = (v * Math.PI) / 180;
-                      commit(
-                        setCorner(plan, item.id, "b", {
-                          x: item.a.x + Math.cos(r) * l,
-                          y: item.a.y + Math.sin(r) * l,
-                        }),
-                      );
+                      moveCorner(item, "b", {
+                        x: item.a.x + Math.cos(r) * l,
+                        y: item.a.y + Math.sin(r) * l,
+                      });
                     }}
                   />
                 </div>
@@ -421,9 +421,7 @@ export default function Properties({
                         unit={units}
                         value={item[end].x}
                         onChange={(x) =>
-                          commit(
-                            setCorner(plan, item.id, end, { ...item[end], x }),
-                          )
+                          moveCorner(item, end, { ...item[end], x })
                         }
                       />
                       <NumberField
@@ -431,9 +429,7 @@ export default function Properties({
                         unit={units}
                         value={item[end].y}
                         onChange={(y) =>
-                          commit(
-                            setCorner(plan, item.id, end, { ...item[end], y }),
-                          )
+                          moveCorner(item, end, { ...item[end], y })
                         }
                       />
                     </div>
@@ -444,6 +440,13 @@ export default function Properties({
                   every connected wall.
                 </p>
               </div>
+              <WallJunctionControls
+                key={item.id}
+                plan={plan}
+                wall={item}
+                onCommit={(p) => commit(p, undefined, true)}
+                onError={onError}
+              />
             </>
           )}
           {(item.type === "door" || item.type === "window") && (

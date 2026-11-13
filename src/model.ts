@@ -1,6 +1,13 @@
 import { defaultLayer, itemLayerId, type Layer } from "./layers";
 import { readProject } from "./validation";
 import type { GarageDetails } from "./garage";
+import {
+  checkWallEdits,
+  connectedEndpoints,
+  wallEnds,
+  type EditProtection,
+  type WallEnd,
+} from "./junctions";
 import type { Project } from "./project";
 import type { FurnitureKind } from "./furniture";
 export type Point = { x: number; y: number };
@@ -18,6 +25,7 @@ export type Wall = Base & {
   a: Point;
   b: Point;
   thickness: number;
+  junctions?: Partial<Record<WallEnd, string>>;
 };
 export type DoorStyle = "hinged" | "sliding";
 export type Opening = Base & {
@@ -242,9 +250,22 @@ export function setCorner(
   which: "a" | "b",
   p: Point,
   normalize = true,
+  protectedItem: EditProtection = (item) => Boolean(item.locked),
 ): Plan {
   const wall = plan.items.find((i) => i.id === wallId) as Wall;
   const old = wall[which];
+  const connected = connectedEndpoints(plan, old);
+  checkWallEdits(
+    plan,
+    connected.map(({ wall }) => wall),
+    protectedItem,
+  );
+  if (
+    connected.some(
+      ({ wall, end }) => dist(wall[end === "a" ? "b" : "a"], p) < 0.001,
+    )
+  )
+    throw Error("A wall endpoint cannot be moved onto its opposite endpoint.");
   const next = {
     ...plan,
     items: plan.items.map((i) => {
@@ -258,17 +279,37 @@ export function setCorner(
   };
   return normalize ? normalizeOpenings(next) : next;
 }
-export function translate(plan: Plan, ids: string[], delta: Point): Plan {
+export function translate(
+  plan: Plan,
+  ids: string[],
+  delta: Point,
+  protectedItem: EditProtection = (item) => Boolean(item.locked),
+): Plan {
   const corners: Point[] = [];
   for (const i of plan.items)
     if (ids.includes(i.id) && i.type === "wall") corners.push(i.a, i.b);
+  checkWallEdits(
+    plan,
+    corners.flatMap((point) =>
+      connectedEndpoints(plan, point).map(({ wall }) => wall),
+    ),
+    protectedItem,
+  );
   const items = plan.items.map((i) => {
     if (i.type === "wall") {
       const a = corners.some((c) => same(c, i.a)),
         b = corners.some((c) => same(c, i.b));
-      return a || b
-        ? { ...i, a: a ? add(i.a, delta) : i.a, b: b ? add(i.b, delta) : i.b }
-        : i;
+      if (!a && !b) return i;
+      const wall = {
+        ...i,
+        a: a ? add(i.a, delta) : i.a,
+        b: b ? add(i.b, delta) : i.b,
+      };
+      if (dist(wall.a, wall.b) < 0.001)
+        throw Error(
+          "A wall endpoint cannot be moved onto its opposite endpoint.",
+        );
+      return wall;
     }
     if (!ids.includes(i.id)) return i;
     if (isRect(i)) return { ...i, x: i.x + delta.x, y: i.y + delta.y };
@@ -297,7 +338,8 @@ export function duplicateItems(
   delta: Point = { x: 30, y: 30 },
 ) {
   const p = clone(plan),
-    map = new Map<string, string>();
+    map = new Map<string, string>(),
+    junctions = new Map<string, string>();
   const source = plan.items.filter(
     (i) =>
       ids.includes(i.id) ||
@@ -313,22 +355,47 @@ export function duplicateItems(
     c.id = map.get(i.id)!;
     if ((c.type === "door" || c.type === "window") && map.has(c.hostId))
       c.hostId = map.get(c.hostId)!;
+    if (c.type === "wall" && c.junctions) {
+      for (const end of wallEnds) {
+        const original = c.junctions[end];
+        if (!original) continue;
+        const copy = junctions.get(original) ?? uid();
+        junctions.set(original, copy);
+        c.junctions[end] = copy;
+      }
+    }
     if (isRect(c) && c.children) c.children = c.children.map(remap);
     return c;
   }
-  const copies = source.map(remap);
-  p.items.push(...copies);
+  const copies = source
+    .map(remap)
+    .map((item) =>
+      item.type === "wall"
+        ? { ...item, a: add(item.a, delta), b: add(item.b, delta) }
+        : item,
+    );
+  const copiedIds = new Set(copies.map((item) => item.id));
+  const moved = copies.filter(
+    (item) =>
+      item.type !== "wall" &&
+      !(
+        (item.type === "door" || item.type === "window") &&
+        copiedIds.has(item.hostId)
+      ),
+  );
+  const next = translate(
+    { ...p, items: [...p.items, ...copies] },
+    moved.map((item) => item.id),
+    delta,
+  );
+  const remaining = new Set(next.items.map((item) => item.id));
   return {
-    plan: translate(
-      p,
-      copies.map((i) => i.id),
-      delta,
-    ),
-    ids: copies
-      .filter((i) =>
-        ids.includes(source.find((s) => map.get(s.id) === i.id)!.id),
+    plan: next,
+    ids: source
+      .filter(
+        (item) => ids.includes(item.id) && remaining.has(map.get(item.id)!),
       )
-      .map((i) => i.id),
+      .map((item) => map.get(item.id)!),
   };
 }
 export function calibrate(plan: Plan, measured: number, real: number): Plan {

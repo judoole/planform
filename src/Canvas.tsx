@@ -339,7 +339,11 @@ export default function Canvas({
       });
       return;
     }
-    setPreview(gesturePlan(g, p));
+    try {
+      setPreview(gesturePlan(g, p));
+    } catch {
+      setPreview(null);
+    }
   }
   function gesturePlan(g: Gesture, p: Point): Plan {
     const item = g.base.items.find((i) => i.id === g.ids[0]);
@@ -456,7 +460,14 @@ export default function Canvas({
         setMarquee(null);
         return;
       }
-      if (g.moved || dist(s, g.screen) > 3) commit(gesturePlan(g, p), g.base);
+      if (g.moved || dist(s, g.screen) > 3) {
+        try {
+          commit(gesturePlan(g, p), g.base);
+        } catch (error) {
+          setPreview(null);
+          onStatus((error as Error).message);
+        }
+      }
       return;
     }
     if (tool === "pan" || tool === "select" || tool === "box") return;

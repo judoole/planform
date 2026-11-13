@@ -4,10 +4,10 @@ Use the canvas tools to create and refine a single-floor plan.
 
 ## Draw and edit
 
-- **Wall** creates connected corners; **Room** creates four walls with a drag. Room is a drawing tool, not a persistent room object. Shared corners use equal endpoint coordinates; split T-junctions into wall segments when they need shared endpoint editing.
+- **Wall** creates connected corners; **Room** creates four walls with a drag. Room is a drawing tool, not a persistent room object. Shared corners use equal endpoint coordinates. Use **Wall junctions** in Properties to explicitly split a wall at a distance from its start or join a selected wall endpoint to another wall. A join inside a target wall splits it into two segments, creating a T-junction. The default join position projects the source endpoint onto the target wall. Splits through openings are rejected, and each operation is one undo step.
 - Select walls to edit length, thickness, angle or endpoints. **Door** and **Window** attach to walls. Manual edits retain the existing fit-to-wall behavior: openings may move/shrink when space changes, and are removed when less than 5 cm remains. Deleting a wall removes its openings. Undo restores the edit. Strict agent imports/commands reject these conflicts instead.
 - In the **Door** tool, choose a hinged or sliding door before clicking a wall. Change an existing door's type or flip its slide direction in **Properties**.
-- Place stairs, furniture, labels and dimensions. Symbols have resize and rotation handles. Dimensions have independent endpoints and are not attached to walls. Joins use simple rounded corner fills.
+- Place stairs, furniture, labels and dimensions. Symbols have resize and rotation handles. Dimensions have independent endpoints and are not attached to walls. Joined walls share a rounded fill the width of the thickest connected wall at the corner or T-junction.
 - Group furniture, stairs, labels or other groups. Walls, openings and dimensions cannot be grouped. Ungrouping non-uniformly scaled groups with rotated children is blocked when it would require shear.
 - Use box selection, Shift-click, Objects search and the overlapping-object picker. Properties offers exact numeric editing, locking, duplication and deletion.
 - Scroll to pan; Ctrl/Command + scroll zooms around the pointer. Touch uses one pointer for the active tool and two pointers for pinch/pan. Zoom and Fit controls remain visible.

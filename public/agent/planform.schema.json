@@ -310,6 +310,24 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 10000000
+        },
+        "junctions": {
+          "description": "Persistent IDs of explicitly joined endpoints. Endpoints sharing an ID must have identical coordinates.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "a": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "b": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
         }
       },
       "required": ["id", "name", "type", "a", "b", "thickness"]

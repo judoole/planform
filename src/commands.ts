@@ -4,7 +4,6 @@ import commandSchema from "../public/agent/commands.schema.json";
 import {
   clone,
   dist,
-  same,
   setCorner,
   type Evidence,
   type Item,
@@ -15,6 +14,12 @@ import {
 } from "./model";
 import { isItemLocked, isLayerLocked } from "./layers";
 import { ProjectError, validateProject } from "./validation";
+import {
+  connectedEndpoints,
+  joinWalls,
+  splitWall,
+  type WallEnd,
+} from "./junctions";
 
 type Operation =
   | { op: "add"; items: Item[] }
@@ -33,6 +38,22 @@ type Operation =
       evidence?: Evidence;
     }
   | { op: "corner"; wallId: string; end: "a" | "b"; point: Point }
+  | {
+      op: "splitWall";
+      wallId: string;
+      offset: number;
+      segmentId: string;
+      junctionId: string;
+    }
+  | {
+      op: "joinWalls";
+      sourceWallId: string;
+      sourceEnd: WallEnd;
+      targetWallId: string;
+      targetOffset: number;
+      segmentId: string;
+      junctionId: string;
+    }
   | { op: "update"; id: string; changes: Record<string, unknown> }
   | { op: "setExteriorDimensions"; show: boolean }
   | { op: "delete"; ids: string[]; cascade?: boolean };
@@ -71,6 +92,7 @@ export function applyCommands(
     const find = (id: string) =>
       plan.items.find((i) => i.id === id) ||
       fail(`Object "${id}" does not exist at the top level.`);
+    const protectedItem = (item: Item) => isItemLocked(plan, item);
     const editable = (id: string) => {
       const item = find(id);
       if (isItemLocked(plan, item))
@@ -108,30 +130,55 @@ export function applyCommands(
       const wall = editable(op.wallId);
       if (wall.type !== "wall") fail("Corner edits require a wall.");
       const old = (wall as Wall)[op.end];
-      const connected = plan.items.filter(
-        (item) =>
-          item.type === "wall" && (same(item.a, old) || same(item.b, old)),
-      );
-      const connectedIds = new Set(connected.map((item) => item.id));
-      for (const item of connected) {
-        if (isItemLocked(plan, item))
-          fail(`Connected wall "${item.id}" is locked.`);
-        changed.add(item.id);
+      for (const { wall: connected } of connectedEndpoints(plan, old))
+        changed.add(connected.id);
+      try {
+        plan = setCorner(plan, wall.id, op.end, op.point, false, protectedItem);
+      } catch (error) {
+        fail((error as Error).message);
       }
-      plan.items.forEach((item) => {
-        if (
-          (item.type === "door" || item.type === "window") &&
-          connectedIds.has(item.hostId)
-        )
-          editable(item.id);
-      });
-      plan = setCorner(plan, wall.id, op.end, op.point, false);
+    } else if (op.op === "splitWall" || op.op === "joinWalls") {
+      const previous = new Set(plan.items);
+      try {
+        plan =
+          op.op === "splitWall"
+            ? splitWall(
+                plan,
+                op.wallId,
+                op.offset,
+                op.segmentId,
+                op.junctionId,
+                protectedItem,
+              )
+            : joinWalls(
+                plan,
+                op.sourceWallId,
+                op.sourceEnd,
+                op.targetWallId,
+                op.targetOffset,
+                op.segmentId,
+                op.junctionId,
+              );
+      } catch (error) {
+        fail((error as Error).message);
+      }
+      plan.items
+        .filter((item) => !previous.has(item))
+        .forEach((item) => changed.add(item.id));
     } else if (op.op === "update") {
       const item = find(op.id),
         keys = Object.keys(op.changes);
       if (
         keys.some((key) =>
-          ["id", "type", "children", "sourceBox", "a", "b"].includes(key),
+          [
+            "id",
+            "type",
+            "children",
+            "sourceBox",
+            "a",
+            "b",
+            "junctions",
+          ].includes(key),
         )
       )
         fail(

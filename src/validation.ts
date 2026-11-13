@@ -2,7 +2,8 @@ import Ajv from "ajv";
 import schema from "../public/agent/planform.schema.json";
 import comparisonSchema from "../public/agent/comparison.schema.json";
 import projectSchema from "../public/agent/project.schema.json";
-import type { Item, Plan, RectItem, Wall } from "./model";
+import type { Item, Plan, Point, RectItem, Wall } from "./model";
+import { wallEnds } from "./junctions";
 import { defaultLayer, drawingLayers } from "./layers";
 import {
   asMultiProject,
@@ -96,6 +97,7 @@ export function validateProject(input: unknown): Plan {
 function validateRelationships(plan: Plan, path: string) {
   const issues: Issue[] = [];
   const all = new Map<string, Item>();
+  const junctions = new Map<string, Point>();
   const layers = new Set<string>();
   drawingLayers(plan).forEach((layer, i) => {
     if (layers.has(layer.id))
@@ -147,6 +149,21 @@ function validateRelationships(plan: Plan, path: string) {
           "zero_length",
           "Endpoints must be at least 0.001 cm apart.",
         );
+      if (item.type === "wall") {
+        for (const end of wallEnds) {
+          const id = item.junctions?.[end];
+          if (!id) continue;
+          const point = item[end];
+          const existing = junctions.get(id);
+          if (existing && (existing.x !== point.x || existing.y !== point.y))
+            issue(
+              `/junctions/${end}`,
+              "junction_mismatch",
+              `Junction "${id}" must have identical endpoint coordinates on every wall.`,
+            );
+          junctions.set(id, point);
+        }
+      }
       if (item.type === "group") walk(item.children!, `${here}/children`, true);
     });
   }
