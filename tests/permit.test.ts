@@ -140,6 +140,7 @@ describe("scaled sheets", () => {
     const page = layoutSheet(drawing, options);
     expect(page.h).toBeCloseTo(165);
     expect(page.barWidth).toBe(0);
+    expect(drawing.markup).not.toContain("Set scale");
     expect(sheetPreview(drawing, options)).toContain("Sketch - Not to scale");
     expect(sheetPreview(drawing, options)).not.toContain("Print at 100%");
   });

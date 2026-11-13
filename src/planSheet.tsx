@@ -32,6 +32,8 @@ export function floorPlanSheet(
       stroke: entry.line,
       dashed: "dash" in entry,
     })),
-    markup: renderToStaticMarkup(<PlanArtwork plan={plan} />),
+    markup: renderToStaticMarkup(
+      <PlanArtwork plan={plan} showScalePrompt={false} />,
+    ),
   };
 }

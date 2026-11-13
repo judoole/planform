@@ -49,7 +49,13 @@ export function renderPlanSvg(input: Plan): string {
 }
 
 /** Shared architectural sheet content in drawing coordinates. */
-export function PlanArtwork({ plan }: { plan: Plan }) {
+export function PlanArtwork({
+  plan,
+  showScalePrompt = true,
+}: {
+  plan: Plan;
+  showScalePrompt?: boolean;
+}) {
   return (
     <>
       <TraceReferenceArtwork reference={traceForExport(plan.traceReference)} />
@@ -59,6 +65,7 @@ export function PlanArtwork({ plan }: { plan: Plan }) {
       <RoomLabels
         rooms={findRooms(plan.items)}
         calibrated={plan.calibration.calibrated}
+        showScalePrompt={showScalePrompt}
       />
       <ExteriorDimensions contour={visibleExteriorContour(plan)} />
       <GarageSectionMark plan={plan} />

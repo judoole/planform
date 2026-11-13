@@ -165,9 +165,11 @@ export const ExteriorDimensions = memo(function ExteriorDimensions({
 export function RoomLabels({
   rooms,
   calibrated,
+  showScalePrompt = true,
 }: {
   rooms: Room[];
   calibrated: boolean;
+  showScalePrompt?: boolean;
 }) {
   return (
     <g
@@ -177,15 +179,20 @@ export function RoomLabels({
     >
       {rooms.map((room, n) => {
         const name = `Room ${n + 1}`;
-        const area = calibrated ? formatRoomArea(room.areaCm2) : "Set scale";
+        const area = calibrated
+          ? formatRoomArea(room.areaCm2)
+          : showScalePrompt
+            ? "Set scale"
+            : undefined;
+        const label = area ? `${name}: ${area}` : name;
         const size = Math.min(18, room.clearance / 3);
         return (
           <g
             key={n}
             transform={`translate(${room.label.x} ${room.label.y})`}
-            aria-label={`${name}: ${area}`}
+            aria-label={label}
           >
-            <title>{`${name}: ${area}`}</title>
+            <title>{label}</title>
             <text
               textAnchor="middle"
               fill="#52685d"
@@ -194,12 +201,14 @@ export function RoomLabels({
               strokeLinejoin="round"
               paintOrder="stroke"
             >
-              <tspan x={0} y={-size * 0.35} fontSize={size * 0.72}>
+              <tspan x={0} y={area ? -size * 0.35 : 0} fontSize={size * 0.72}>
                 {name}
               </tspan>
-              <tspan x={0} y={size * 0.85} fontSize={size} fontWeight={600}>
-                {area}
-              </tspan>
+              {area && (
+                <tspan x={0} y={size * 0.85} fontSize={size} fontWeight={600}>
+                  {area}
+                </tspan>
+              )}
             </text>
           </g>
         );
