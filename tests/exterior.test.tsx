@@ -196,9 +196,25 @@ describe("exterior dimensions in saved drawings and exports", () => {
     const bounds = annotatedPlanBounds(show);
     expect(bounds.x).toBeLessThan(-50);
     expect(bounds.y).toBeLessThan(-50);
+    expect(bounds.x + bounds.w).toBeGreaterThan(650);
+    expect(bounds.y + bounds.h).toBeGreaterThan(750);
     for (const markup of [exportSvg(svg, bounds), renderPlanSvg(show)]) {
-      expect(markup).toContain("6.00 m");
-      expect(markup).toContain("7.00 m");
+      const exported = new DOMParser().parseFromString(markup, "text/html");
+      const marks = [
+        ...exported.querySelectorAll("[data-exterior-dimensions] > g"),
+      ];
+      expect(marks.map((mark) => mark.textContent)).toEqual([
+        "6.00 m",
+        "7.00 m",
+        "6.00 m",
+        "7.00 m",
+      ]);
+      expect(marks.map((mark) => mark.getAttribute("transform"))).toEqual([
+        "translate(0 0) rotate(0)",
+        "translate(600 0) rotate(90)",
+        "translate(600 700) rotate(180)",
+        "translate(0 700) rotate(-90)",
+      ]);
       expect(markup).toContain("200.0 cm");
       expect(markup).not.toContain("data-hit");
     }

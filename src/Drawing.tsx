@@ -59,7 +59,7 @@ function DimensionMark({
         strokeWidth={5}
         paintOrder="stroke"
         transform={
-          keepLabelUpright && Math.abs(rotation) > 90
+          keepLabelUpright && (rotation >= 90 || rotation < -90)
             ? `rotate(180 ${l / 2} ${d - 11})`
             : undefined
         }
@@ -84,7 +84,7 @@ export function ExteriorDimensions({ contour }: { contour?: ExteriorContour }) {
     <g
       data-exterior-dimensions="true"
       pointerEvents="none"
-      aria-label="Overall exterior dimensions"
+      aria-label="Exterior wall lengths"
     >
       {exteriorDimensionSegments(contour.corners).map(([a, b], index) => (
         <DimensionMark

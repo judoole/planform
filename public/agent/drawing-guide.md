@@ -18,7 +18,7 @@ Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrate
 
 `calibration.factor` is cumulative scaling history; changing this number does not scale geometry. All stored coordinates are already in centimeters. Set `imported: true` for reconstructed source drawings. Never claim unknown dimensions are measured.
 
-Set `showExteriorDimensions` to true to annotate a calibrated rectangle formed by four connected walls. The editor and rendered exports derive dimensions from the outside wall faces. For a 600 × 700 cm exterior with 20 cm walls, draw the centerlines 580 × 680 cm apart.
+Set `showExteriorDimensions` to true to annotate a calibrated rectangle formed by four connected walls. The editor and rendered exports label each exterior wall from outside corner to outside corner. For a 600 × 700 cm exterior with 20 cm walls, draw the centerlines 580 × 680 cm apart.
 
 Every item requires `id`, `name`, `type`. Optional `locked` and `evidence: { "basis": "measured" | "estimated", "note": "Source dimension or explicit assumption" }`. IDs are unique across the entire document, including groups. Unknown properties and arbitrary SVG markup are rejected.
 

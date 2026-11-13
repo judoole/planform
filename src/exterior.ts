@@ -97,11 +97,13 @@ export function deriveExteriorContour(plan: Plan): ExteriorContour {
 }
 
 export const exteriorDimensionOffset = -36;
-export const exteriorDimensionSegments = ([a, b, , d]: ExteriorCorners): [
+export const exteriorDimensionSegments = ([a, b, c, d]: ExteriorCorners): [
   Point,
   Point,
 ][] => [
   [a, b],
+  [b, c],
+  [c, d],
   [d, a],
 ];
 export const exteriorDimensionLabel = (a: Point, b: Point) =>

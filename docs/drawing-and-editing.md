@@ -23,8 +23,8 @@ Areas are measured inside wall faces, excluding wall thickness and internal wall
 
 Room labels are included in browser SVG/PNG exports and agent CLI previews. Rooms are derived from walls rather than saved as separate objects, so existing project files need no migration.
 
-## Overall exterior dimensions
+## Exterior wall lengths
 
-In **Properties**, turn on **Show overall exterior dimensions** for a calibrated drawing containing one rectangular loop of four walls. The marks show the distances between opposite outside wall faces, using half of each wall’s thickness. A garage with 580 × 680 cm centerline spans and 20 cm walls measures 6.00 × 7.00 m outside. Openings and rounded corner fills do not affect the measurement.
+In **Properties**, turn on **Show exterior wall lengths** for a calibrated drawing containing one rectangular loop of four walls. Each side is measured from outside corner to outside corner using half of each adjoining wall’s thickness. A garage with 580 × 680 cm centerline spans and 20 cm walls shows two sides of 6.00 m and two sides of 7.00 m. Openings and rounded corner fills do not affect the measurement.
 
 The setting is saved per drawing. The editor and SVG/PNG exports recalculate the marks from the current walls, including after undo and reopening. Properties explains when the drawing needs calibration, when the loop is open, and when the wall layout is unsupported. Free-point dimensions remain editable with the **Dimension** tool and Properties.

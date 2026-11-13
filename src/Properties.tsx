@@ -306,7 +306,7 @@ export default function Properties({
             checked={Boolean(plan.showExteriorDimensions)}
             onChange={(event) => onShowExteriorDimensions(event.target.checked)}
           />
-          Show overall exterior dimensions
+          Show exterior wall lengths
         </label>
         {exterior.status !== "ready" && (
           <p className="notice" role="status">
