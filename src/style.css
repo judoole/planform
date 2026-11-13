@@ -1783,6 +1783,7 @@ button svg {
 }
 
 .trace-reference-button {
+  pointer-events: auto;
   font-size: 11px;
   min-height: 27px;
   gap: 5px;

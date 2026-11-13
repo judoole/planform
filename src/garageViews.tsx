@@ -153,7 +153,7 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
     : plan.items.flatMap((item) => {
         if (
           (item.type !== "door" && item.type !== "window") ||
-          item.hostId !== footprint.wallIds[edge]
+          !footprint.wallIds[edge].includes(item.hostId)
         )
           return [];
         const frame = openingFrame(item, plan.items);
@@ -214,7 +214,7 @@ export function garageViewSheet(plan: Plan, view: GarageView): SheetDrawing {
       ? `${span},${eavesY} ${span / 2},${ridgeY + verticalThickness} 0,${eavesY}`
       : `${span},${eavesY} 0,${eavesY}`;
   const walls = footprint.wallIds.map(
-    (id) => plan.items.find((item) => item.id === id) as Wall,
+    (id) => plan.items.find((item) => item.id === id[0]) as Wall,
   );
   const firstThickness = walls[ridgeEdge].thickness;
   const lastThickness = walls[(ridgeEdge + 2) % 4].thickness;

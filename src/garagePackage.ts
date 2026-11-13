@@ -1,5 +1,6 @@
 import { garageAreaReport, garageAreas, garageFootprint } from "./garage";
 import { garageViewNames, garageViews, garageViewSheet } from "./garageViews";
+import { visiblePlan } from "./layers";
 import type { Plan } from "./model";
 import { floorPlanSheet } from "./planSheet";
 import {
@@ -52,16 +53,6 @@ export type PermitEntry = {
 };
 
 export type PermitSiteSheet = (plan: Plan, propertyId: string) => SheetDrawing;
-
-function proposedGaragePlan(plan: Plan): Plan {
-  // Permit measurements and drawings use the proposed building. Visibility
-  // still controls the architectural floor plan, which must show its outline.
-  return plan.renovationView &&
-    plan.renovationView !== "proposed" &&
-    plan.renovationView !== "all"
-    ? { ...plan, renovationView: "proposed" }
-    : plan;
-}
 
 function scaledAttachment(
   title: string,
@@ -131,7 +122,17 @@ export function prepareGaragePackage(
   input: Plan,
   makeSiteSheet: PermitSiteSheet,
 ) {
-  const plan = proposedGaragePlan(input);
+  const plan = { ...visiblePlan(input), showExteriorDimensions: true };
+  const allWallsVisible =
+    input.items.filter((item) => item.type === "wall").length ===
+    plan.items.filter((item) => item.type === "wall").length;
+  function buildingSheet(build: () => SheetDrawing) {
+    if (!allWallsVisible)
+      throw Error(
+        "Show all garage walls in the active layer and renovation view.",
+      );
+    return build();
+  }
   const name = plan.name.trim() || "Garage";
   const propertyId = plan.garage?.permit?.propertyId?.trim() ?? "";
   const options = { ...defaultSheetOptions, name };
@@ -139,33 +140,35 @@ export function prepareGaragePackage(
     applicationDraft(plan),
     scaledAttachment(
       "Floor plan - Ground floor",
-      () => {
-        // Require a garage footprint, even if an ordinary calibrated plan could
-        // be plotted by the general purpose sheet tool.
-        garageFootprint(plan);
-        return floorPlanSheet(plan);
-      },
+      () =>
+        buildingSheet(() => {
+          // Require a garage footprint, even if an ordinary calibrated plan could
+          // be plotted by the general purpose sheet tool.
+          garageFootprint(plan);
+          return floorPlanSheet(plan);
+        }),
       options,
     ),
     ...garageViews.map((view) =>
       scaledAttachment(
         garageViewNames[view],
-        () => garageViewSheet(plan, view),
+        () => buildingSheet(() => garageViewSheet(plan, view)),
         options,
       ),
     ),
     scaledAttachment(
       "Site plan",
-      () => {
-        if (!propertyId)
-          throw Error("Enter the property identifier for the site plan.");
-        return makeSiteSheet(plan, propertyId);
-      },
+      () =>
+        buildingSheet(() => {
+          if (!propertyId)
+            throw Error("Enter the property identifier for the site plan.");
+          return makeSiteSheet(plan, propertyId);
+        }),
       { ...options, scale: 500 },
     ),
   ];
   try {
-    const { bra, bya } = garageAreas(plan);
+    const { bra, bya } = garageAreas(input);
     entries.push({
       title: "Area calculation",
       status: "generated",
@@ -175,7 +178,7 @@ export function prepareGaragePackage(
           : undefined,
       file: {
         filename: "Garage area calculation - BRA and BYA.txt",
-        text: garageAreaReport(plan),
+        text: garageAreaReport(input),
       },
     });
   } catch (error) {

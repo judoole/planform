@@ -57,7 +57,10 @@ export function garageAreas(plan: Plan) {
   const area = plan.garage?.area;
   const braNotes: string[] = [];
   const byaNotes: string[] = [];
-  if (!area?.clearFloor)
+  if (
+    !area?.clearFloor ||
+    (plan.garage?.structure?.wallHeight ?? Infinity) < 190
+  )
     braNotes.push(
       "Confirm that the entire floor is measurable. Low or sloped clearance needs a separate assessment.",
     );

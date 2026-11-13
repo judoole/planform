@@ -67,6 +67,9 @@ import {
 } from "./model";
 import { furniture, type FurnitureKind } from "./furniture";
 import GarageArea from "./GarageArea";
+import GaragePackagePanel from "./GaragePackagePanel";
+import GarageSitePanel from "./GarageSitePanel";
+import { sitePlanSheet } from "./garageSite";
 import GarageViewsPanel from "./GarageViewsPanel";
 import { planArtworkBounds } from "./preview";
 import SheetExport from "./SheetExport";
@@ -244,7 +247,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [exportMenu, setExportMenu] = useState(false),
     [sheetOpen, setSheetOpen] = useState(false),
     [garageOpen, setGarageOpen] = useState(false),
-    [garageTab, setGarageTab] = useState<"area" | "views">("area"),
+    [garageTab, setGarageTab] = useState<"area" | "views" | "site" | "package">(
+      "area",
+    ),
     [help, setHelp] = useState(false),
     [notice, setNotice] = useState(""),
     [shareOpen, setShareOpen] = useState(false),
@@ -388,6 +393,12 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   function changeLayers(next: Plan) {
     setOverlapOpen(false);
     setCancelToken((id) => id + 1);
+    commit(next, undefined, true);
+  }
+  function updateGarage(garage: Plan["garage"]) {
+    const current = projectRef.current;
+    const next = { ...activePlan(current), garage };
+    checkJsonSize(serialize(replaceActivePlan(current, next)));
     commit(next, undefined, true);
   }
   const fit = useCallback(
@@ -952,6 +963,16 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
+      if (e.key === "Escape" && !referencePicker) {
+        if (sheetOpen) {
+          setSheetOpen(false);
+          return;
+        }
+        if (garageOpen) {
+          setGarageOpen(false);
+          return;
+        }
+      }
       if (
         garageOpen ||
         sheetOpen ||
@@ -1737,21 +1758,40 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               >
                 Section and elevations
               </button>
+              <button
+                aria-pressed={garageTab === "site"}
+                onClick={() => setGarageTab("site")}
+              >
+                Site plan
+              </button>
+              <button
+                aria-pressed={garageTab === "package"}
+                onClick={() => setGarageTab("package")}
+              >
+                Application package
+              </button>
             </div>
             {garageTab === "area" ? (
-              <GarageArea
-                plan={drawing}
-                onChange={(garage) =>
-                  commit({ ...drawing, garage }, undefined, true)
-                }
-              />
-            ) : (
+              <GarageArea plan={drawing} onChange={updateGarage} />
+            ) : garageTab === "views" ? (
               <GarageViewsPanel
                 key={version}
                 plan={drawing}
-                onChange={(garage) =>
-                  commit({ ...drawing, garage }, undefined, true)
-                }
+                onChange={updateGarage}
+              />
+            ) : garageTab === "site" ? (
+              <GarageSitePanel
+                key={version}
+                plan={drawing}
+                propertyId={drawing.garage?.permit?.propertyId ?? ""}
+                onChange={updateGarage}
+              />
+            ) : (
+              <GaragePackagePanel
+                key={version}
+                plan={drawing}
+                makeSiteSheet={sitePlanSheet}
+                onChange={updateGarage}
               />
             )}
           </section>
@@ -1859,7 +1899,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               <>
                 <p>
                   Enter the real distance between your two points. This rescales
-                  the entire floor plan, including hidden and locked objects.
+                  the entire floor plan, including hidden and locked objects and
+                  any tracing reference. The site map keeps its own scale.
                 </p>
                 <label className="field">
                   <span>Real distance in centimeters</span>

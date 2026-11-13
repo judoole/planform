@@ -55,7 +55,13 @@ export default function GarageSitePanel({
     : new Map<number, number>();
 
   function update(site: GarageSite | undefined) {
-    onChange({ ...plan.garage, site });
+    try {
+      onChange({ ...plan.garage, site });
+      return true;
+    } catch (error) {
+      setError((error as Error).message);
+      return false;
+    }
   }
   function start(next: Mode) {
     setMode(next);
@@ -71,7 +77,10 @@ export default function GarageSitePanel({
     );
     if (p.x < 0 || p.x > site.map.width || p.y < 0 || p.y > site.map.height)
       return;
-    const point = { x: p.x, y: p.y };
+    addPoint({ x: p.x, y: p.y });
+  }
+  function addPoint(point: Point) {
+    if (!site) return;
     if (mode === "place") {
       update({
         ...site,
@@ -174,7 +183,10 @@ export default function GarageSitePanel({
         <ReferencePicker
           onClose={() => setChoose(false)}
           onApply={(map) => {
-            update({ map, northDegrees: 0, features: [] });
+            onChange({
+              ...plan.garage,
+              site: { map, northDegrees: 0, features: [] },
+            });
             setChoose(false);
             start("idle");
           }}
@@ -267,28 +279,7 @@ export default function GarageSitePanel({
                     setError("Enter a position within the map.");
                     return;
                   }
-                  if (mode === "place") {
-                    update({
-                      ...site,
-                      placement: {
-                        center: { x, y },
-                        rotation: site.placement?.rotation ?? 0,
-                      },
-                    });
-                    start("idle");
-                  } else if (mode === "calibrate") {
-                    setPoints((previous) =>
-                      previous.length >= 2
-                        ? [{ x, y }]
-                        : [...previous, { x, y }],
-                    );
-                  } else {
-                    setPoints((previous) =>
-                      previous.length < 100
-                        ? [...previous, { x, y }]
-                        : previous,
-                    );
-                  }
+                  addPoint({ x, y });
                 }}
               >
                 Add map point

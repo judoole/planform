@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { splitWall } from "../src/junctions";
+import { garageViews, garageViewSheet } from "../src/garageViews";
+import { sitePlanSheet } from "../src/garageSite";
+import { prepareGaragePackage } from "../src/garagePackage";
+import {
+  nearestSiteDistance,
+  siteDistances,
+  siteGarageGeometry,
+} from "../src/siteMap";
 import { garageAreas, garageAreaReport } from "../src/garage";
-import { emptyPlan, type Wall } from "../src/model";
+import { emptyPlan, type Plan, type Wall } from "../src/model";
 import { floorPlanSheet } from "../src/planSheet";
 import { layoutSheet, defaultSheetOptions } from "../src/sheets";
 import { validateProject } from "../src/validation";
@@ -51,6 +60,23 @@ describe("garage areas", () => {
     };
     expect(garageAreas(edited).bya.value).toBe(43.31);
     expect(garageAreaReport(edited)).toContain("BYA: 43.31 m²");
+  });
+
+  it("keeps the footprint and both areas after splitting a straight garage wall", () => {
+    const original = garage();
+    const split = splitWall(
+      original,
+      "wall-0",
+      290,
+      "half-wall",
+      "split-point",
+    );
+    expect(garageAreas(split).bra.value).toBe(36.96);
+    expect(garageAreas(split).bya.value).toBe(42);
+    expect(garageAreas(split).footprint.wallIds[0]).toEqual([
+      "wall-0",
+      "half-wall",
+    ]);
   });
 
   it("labels partial results separately and rejects unsupported footprints", () => {
@@ -119,5 +145,139 @@ describe("scaled sheets", () => {
         { ...defaultSheetOptions, name: plan.name },
       ),
     ).toThrow("Choose larger paper");
+  });
+});
+
+describe("permit deliverables share the edited garage", () => {
+  function fittedGarage() {
+    const plan: Plan = garage();
+    const terrain = Object.fromEntries(
+      garageViews.map((view) => [
+        view,
+        {
+          existing: [
+            { x: 0, y: 5 },
+            { x: 900, y: -20 },
+          ],
+          proposed: [
+            { x: 0, y: 16 },
+            { x: 900, y: -8 },
+          ],
+        },
+      ]),
+    );
+    plan.garage = {
+      ...plan.garage,
+      permit: {
+        propertyId: "Gnr. 12, bnr. 34",
+        description: "Detached garage",
+        separate: {
+          applicationForm: "supplied",
+          dispensation: "notApplicable",
+        },
+      },
+      structure: {
+        floor: 30,
+        wallHeight: 245,
+        roofPitch: 28,
+        roofThickness: 24,
+        terrain,
+      },
+      site: {
+        map: {
+          name: "Municipal map",
+          dataUrl: "data:image/png;base64,placeholder",
+          width: 600,
+          height: 450,
+          page: 2,
+        },
+        calibration: {
+          a: { x: 35, y: 405 },
+          b: { x: 235, y: 405 },
+          distanceM: 20,
+        },
+        placement: { center: { x: 300, y: 220 }, rotation: 0 },
+        northDegrees: 12,
+        features: [
+          {
+            name: "West boundary",
+            kind: "boundary",
+            points: [
+              { x: 145, y: 140 },
+              { x: 145, y: 350 },
+            ],
+          },
+        ],
+      },
+    };
+    return plan;
+  }
+  it("moves the footprint and shortest feature distances without affecting floor calibration", () => {
+    const plan = fittedGarage();
+    const site = plan.garage!.site!;
+    const geometry = siteGarageGeometry(plan, site);
+    expect(geometry.corners).toEqual([
+      { x: 270, y: 185 },
+      { x: 330, y: 185 },
+      { x: 330, y: 255 },
+      { x: 270, y: 255 },
+    ]);
+    expect(
+      siteDistances(geometry.corners, site.features, geometry.scale)[0]
+        .distanceM,
+    ).toBe(12.5);
+    const rotated = siteGarageGeometry(plan, {
+      ...site,
+      placement: { ...site.placement!, rotation: 90 },
+    });
+    expect(
+      siteDistances(rotated.corners, site.features, rotated.scale)[0].distanceM,
+    ).toBe(12);
+    expect(
+      nearestSiteDistance(geometry.corners, [
+        { x: 280, y: 200 },
+        { x: 290, y: 200 },
+      ])?.distance,
+    ).toBe(0);
+    expect(garageAreas(plan).bya.value).toBe(42);
+    const uncalibrated = {
+      ...plan,
+      garage: { ...plan.garage, site: { ...site, calibration: undefined } },
+    };
+    expect(() => sitePlanSheet(uncalibrated, "12/34")).toThrow(
+      "Calibrate the site map",
+    );
+  });
+  it("prepares every sheet from one snapshot and records incomplete entries", () => {
+    const plan = fittedGarage();
+    const prepared = prepareGaragePackage(plan, sitePlanSheet);
+    expect(
+      prepared.entries.filter((entry) => entry.file && "sheet" in entry.file),
+    ).toHaveLength(7);
+    expect(
+      prepared.entries.find(
+        ({ title }) => title === "Municipal application form",
+      )?.status,
+    ).toBe("supplied");
+    expect(
+      prepared.entries.find(({ title }) => title === "Dispensation request")
+        ?.status,
+    ).toBe("notApplicable");
+    const structure = plan.garage!.structure!;
+    expect(garageViewSheet(plan, "section").markup).toContain("Roof pitch 28");
+    const edited = {
+      ...plan,
+      garage: { ...plan.garage, structure: { ...structure, roofPitch: 32 } },
+    };
+    expect(garageViewSheet(edited, "section").markup).toContain(
+      "Roof pitch 32",
+    );
+    const partial = prepareGaragePackage(garage(), sitePlanSheet);
+    expect(
+      partial.entries.find(({ title }) => title === "Site plan")?.status,
+    ).toBe("missing");
+    expect(
+      partial.entries.find(({ title }) => title === "Section A-A")?.status,
+    ).toBe("missing");
   });
 });

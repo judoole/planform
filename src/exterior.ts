@@ -27,7 +27,7 @@ export type ExteriorContour =
       status: "ready";
       corners: Point[];
       insideCorners: Point[];
-      wallIds: string[];
+      wallIds: string[][];
     };
 
 function wallLoop(walls: Wall[]) {
@@ -68,7 +68,14 @@ function wallLoop(walls: Wall[]) {
     : ({ status: "open" } as const);
 }
 
-const reverseWall = (wall: Wall): Wall => ({ ...wall, a: wall.b, b: wall.a });
+const reverseWall = (wall: Wall): Wall => ({
+  ...wall,
+  a: wall.b,
+  b: wall.a,
+  ...(wall.junctions
+    ? { junctions: { a: wall.junctions.b, b: wall.junctions.a } }
+    : {}),
+});
 
 function wallFace(wall: Wall) {
   const delta = subtract(wall.b, wall.a);
@@ -76,6 +83,7 @@ function wallFace(wall: Wall) {
   const direction = { x: delta.x / length, y: delta.y / length };
   return {
     ...wall,
+    wallIds: [wall.id],
     direction,
     // Clockwise in the drawing's Y-down coordinates.
     outward: {
@@ -83,6 +91,34 @@ function wallFace(wall: Wall) {
       y: (-direction.x * wall.thickness) / 2,
     },
   };
+}
+
+function mergeStraightFaces(walls: Wall[]) {
+  const faces = walls.map(wallFace);
+  const adjacent = (a: (typeof faces)[number], b: (typeof faces)[number]) =>
+    a.junctions?.b &&
+    a.junctions.b === b.junctions?.a &&
+    a.thickness === b.thickness &&
+    Math.abs(cross(a.direction, b.direction)) <= tolerance &&
+    dot(a.direction, b.direction) > 0;
+  const start = faces.findIndex(
+    (face, index) =>
+      !adjacent(faces[(index + faces.length - 1) % faces.length], face),
+  );
+  if (start === -1) return faces;
+  const reordered = [...faces.slice(start), ...faces.slice(0, start)];
+  const result: typeof faces = [];
+  for (const face of reordered) {
+    const previous = result.at(-1);
+    if (previous && adjacent(previous, face)) {
+      previous.b = face.b;
+      previous.junctions = { ...previous.junctions, b: face.junctions?.b };
+      previous.wallIds.push(...face.wallIds);
+    } else {
+      result.push(face);
+    }
+  }
+  return result;
 }
 
 function offsetCorners(faces: ReturnType<typeof wallFace>[], side: 1 | -1) {
@@ -106,7 +142,7 @@ function offsetCorners(faces: ReturnType<typeof wallFace>[], side: 1 | -1) {
 
 /** Intersections of neighboring outside wall faces, in clockwise order in cm.
  * The first edge points most nearly right, then down on a tie. Each edge
- * corresponds to one wall in a single convex loop of straight walls.
+ * corresponds to a straight face, which can include explicitly split walls.
  */
 export function deriveExteriorContour(plan: Plan): ExteriorContour {
   if (!plan.calibration.calibrated) return { status: "uncalibrated" };
@@ -120,7 +156,7 @@ function deriveWallContour(walls: Wall[]): ExteriorContour {
   const path = wallLoop(walls);
   if (path.status !== "closed") return { status: path.status };
 
-  let faces = path.loop.map(wallFace);
+  let faces = mergeStraightFaces(path.loop);
   const turns = faces.map(({ direction }, i) => {
     const next = faces[(i + 1) % faces.length].direction;
     return Math.atan2(cross(direction, next), dot(direction, next));
@@ -137,7 +173,7 @@ function deriveWallContour(walls: Wall[]): ExteriorContour {
   )
     return { status: "unsupported" };
   if (winding < 0)
-    faces = path.loop.reverse().map((wall) => wallFace(reverseWall(wall)));
+    faces = mergeStraightFaces(path.loop.reverse().map(reverseWall));
 
   const maxRight = faces.reduce(
     (right, face) => Math.max(right, face.direction.x),
@@ -166,7 +202,7 @@ function deriveWallContour(walls: Wall[]): ExteriorContour {
     status: "ready",
     corners,
     insideCorners,
-    wallIds: faces.map((wall) => wall.id),
+    wallIds: faces.map((wall) => wall.wallIds),
   };
 }
 

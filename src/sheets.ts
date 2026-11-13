@@ -85,7 +85,7 @@ export async function sheetPdf(drawing: SheetDrawing, options: SheetOptions) {
   ]);
   const pdf = new jsPDF({
     unit: "mm",
-    format: options.paper.toLowerCase(),
+    format: [page.width, page.height],
     orientation: options.orientation,
     precision: 8,
     compress: true,
