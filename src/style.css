@@ -1781,3 +1781,14 @@ button svg {
   flex: 0 0 auto;
   padding: 0.25rem;
 }
+
+.trace-reference-button {
+  font-size: 11px;
+  min-height: 27px;
+  gap: 5px;
+  padding: 4px 8px;
+}
+.reference-settings .property-checkbox {
+  display: flex;
+  margin: 10px 0;
+}

@@ -1,16 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { traceForExport } from "./reference";
 import { phaseLegend, visiblePlan } from "./layers";
 import type { Plan } from "./model";
 import { PlanArtwork, planArtworkBounds } from "./preview";
 import type { SheetDrawing } from "./sheets";
 
 export function floorPlanSheet(input: Plan): SheetDrawing {
-  const plan = visiblePlan(input);
+  const visible = visiblePlan(input);
+  const plan = {
+    ...visible,
+    traceReference: traceForExport(visible.traceReference),
+  };
   if (!plan.calibration.calibrated)
     throw Error(
       "Calibrate a known distance before exporting a scaled floor plan.",
     );
-  if (!plan.items.length)
+  if (!plan.items.length && !plan.traceReference)
     throw Error("Add drawing objects before exporting a floor plan.");
   const b = planArtworkBounds(plan, undefined, false);
   const pad = 12;

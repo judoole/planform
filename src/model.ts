@@ -22,6 +22,7 @@ import {
 } from "./junctions";
 import type { Project } from "./project";
 import type { FurnitureKind } from "./furniture";
+import { traceBounds, type TraceReference } from "./reference";
 export type Point = { x: number; y: number };
 export type Box = Point & { w: number; h: number };
 export type Evidence = { basis: "measured" | "estimated"; note: string };
@@ -79,6 +80,7 @@ export type Plan = {
   items: Item[];
   showExteriorDimensions?: boolean;
   garage?: GarageDetails;
+  traceReference?: TraceReference;
   layers?: Layer[];
   activeLayerId?: string;
   renovationView?: RenovationView;
@@ -265,8 +267,11 @@ export function unionBoxes(boxes: Box[]): Box {
     ]),
   );
 }
-export const planBounds = (p: Plan) =>
-  unionBoxes(p.items.map((i) => bounds(i, p.items)));
+export function planBounds(p: Plan) {
+  const boxes = p.items.map((i) => bounds(i, p.items));
+  if (p.traceReference?.visible) boxes.push(traceBounds(p.traceReference));
+  return unionBoxes(boxes);
+}
 export function setCorner(
   plan: Plan,
   wallId: string,
@@ -476,6 +481,13 @@ export function calibrate(plan: Plan, measured: number, real: number): Plan {
       if (i.type === "wall") i.thickness *= s;
       else i.offset *= s;
     } else i.width *= s;
+  }
+  if (p.traceReference) {
+    const reference = p.traceReference;
+    reference.x *= s;
+    reference.y *= s;
+    reference.width *= s;
+    reference.calibrated = true;
   }
   p.calibration.calibrated = true;
   p.calibration.factor *= s;

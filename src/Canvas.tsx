@@ -1,3 +1,4 @@
+import { traceForExport } from "./reference";
 import { type Camera, screenToWorld, pinchCamera } from "./coordinates";
 import {
   useRef,
@@ -35,6 +36,7 @@ import {
   ExteriorDimensions,
   RenovationLegend,
   RoomLabels,
+  TraceReferenceArtwork,
 } from "./Drawing";
 import { findDimensionAnchor } from "./dimensions";
 import type { ExteriorContour } from "./exterior";
@@ -638,7 +640,14 @@ export default function Canvas({
   const legend =
     shown.renovationView ||
     shown.items.some((item) => item.type === "wall" && item.renovationStatus)
-      ? legendLayout(shown, planArtworkBounds(shown, exterior, false))
+      ? legendLayout(
+          shown,
+          planArtworkBounds(
+            { ...shown, traceReference: traceForExport(shown.traceReference) },
+            exterior,
+            false,
+          ),
+        )
       : undefined;
   const selected = shown.items.filter((i) => selection.includes(i.id)),
     box = selected.length
@@ -721,6 +730,7 @@ export default function Canvas({
           </pattern>
         </defs>
         <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.k})`}>
+          <TraceReferenceArtwork reference={plan.traceReference} preview />
           <rect
             {...{
               x: visible.x,

@@ -4,6 +4,7 @@ import comparisonSchema from "../public/agent/comparison.schema.json";
 import projectSchema from "../public/agent/project.schema.json";
 import type { Item, Plan, Point, RectItem, Wall } from "./model";
 import { wallEnds } from "./junctions";
+import { embeddedRasterProblem, referenceHeight } from "./reference";
 import { defaultLayer, drawingLayers } from "./layers";
 import {
   asMultiProject,
@@ -96,6 +97,22 @@ export function validateProject(input: unknown): Plan {
 
 function validateRelationships(plan: Plan, path: string) {
   const issues: Issue[] = [];
+  const reference = plan.traceReference;
+  if (reference) {
+    const problem = embeddedRasterProblem(reference.image);
+    if (problem)
+      issues.push({
+        path: `${path}/traceReference/image`,
+        code: "raster",
+        message: problem,
+      });
+    if (!Number.isFinite(referenceHeight(reference)))
+      issues.push({
+        path: `${path}/traceReference/width`,
+        code: "raster",
+        message: "Tracing reference dimensions must be finite.",
+      });
+  }
   const all = new Map<string, Item>();
   const junctions = new Map<string, Point>();
   const layers = new Set<string>();

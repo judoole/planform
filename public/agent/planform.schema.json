@@ -18,6 +18,9 @@
       "type": "string",
       "maxLength": 200
     },
+    "traceReference": {
+      "$ref": "#/$defs/traceReference"
+    },
     "units": {
       "const": "cm"
     },
@@ -189,6 +192,48 @@
       "minItems": 2,
       "maxItems": 150,
       "items": { "$ref": "#/$defs/point" }
+    },
+    "embeddedRaster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "dataUrl", "width", "height"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "dataUrl": {
+          "type": "string",
+          "maxLength": 3500000,
+          "pattern": "^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+        },
+        "width": { "type": "integer", "minimum": 1, "maximum": 3000 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 3000 },
+        "page": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "traceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "x",
+        "y",
+        "width",
+        "opacity",
+        "locked",
+        "visible",
+        "calibrated",
+        "includeInExport"
+      ],
+      "properties": {
+        "image": { "$ref": "#/$defs/embeddedRaster" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "locked": { "type": "boolean" },
+        "visible": { "type": "boolean" },
+        "calibrated": { "type": "boolean" },
+        "includeInExport": { "type": "boolean" }
+      }
     },
     "layerId": { "type": "string", "minLength": 1, "maxLength": 200 },
     "layer": {

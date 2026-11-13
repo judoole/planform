@@ -44,6 +44,7 @@ import {
   PanelRightClose,
   Link2,
   History as HistoryIcon,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   type Plan,
@@ -81,6 +82,13 @@ import {
   saveRecovery as saveLocalRevision,
   type RecoveryRevision,
 } from "./recovery";
+import ReferencePicker from "./ReferencePicker";
+import TraceReferenceDialog from "./TraceReferenceDialog";
+import {
+  traceForExport,
+  type EmbeddedRaster,
+  type TraceReference,
+} from "./reference";
 import LayerPanel from "./LayerPanel";
 import {
   activeLayer,
@@ -106,7 +114,7 @@ import {
   type ProjectDrawing,
   type Project,
 } from "./project";
-import { checkJsonSize, readProjectFile } from "./validation";
+import { checkJsonSize, readProjectFile, validateProject } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
@@ -242,6 +250,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [shareOpen, setShareOpen] = useState(false),
     [saveOpen, setSaveOpen] = useState(false),
     [busy, setBusy] = useState(false),
+    [referencePicker, setReferencePicker] = useState(false),
+    [referenceSettings, setReferenceSettings] = useState(false),
     [autosave, setAutosave] = useState(initial.status),
     [revisions, setRevisions] = useState<RecoveryRevision[] | null>(null),
     [replacement, setReplacement] = useState<{
@@ -410,7 +420,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [readExterior],
   );
   useEffect(() => {
-    if (activePlan(projectRef.current).items.length) fit();
+    const plan = activePlan(projectRef.current);
+    if (plan.items.length || plan.traceReference?.visible) fit();
   }, []);
   const saveRecovery = useCallback(() => {
     if (sharedProject || lastSaved.current === projectRef.current) return;
@@ -472,6 +483,56 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     updateProject(
       replaceActivePlan(current, withVisibility(activePlan(current))),
     );
+  }
+  function installReference(image: EmbeddedRaster) {
+    const current = projectRef.current;
+    const plan = activePlan(current);
+    const previous = plan.traceReference;
+    const reference: TraceReference = {
+      image,
+      x: previous?.x ?? 0,
+      y: previous?.y ?? 0,
+      width: previous?.width ?? Math.min(image.width, 1000),
+      opacity: previous?.opacity ?? 0.55,
+      locked: previous?.locked ?? true,
+      visible: true,
+      calibrated: false,
+      includeInExport: previous?.includeInExport ?? false,
+    };
+    const next = {
+      ...plan,
+      traceReference: reference,
+      calibration:
+        plan.items.length === 0
+          ? { ...plan.calibration, imported: true, calibrated: false }
+          : plan.calibration,
+    };
+    checkJsonSize(serialize(replaceActivePlan(current, next)));
+    validateProject(next);
+    clearDrawingContext();
+    commit(next, undefined, true);
+    setReferencePicker(false);
+    fit(next);
+    showNotice(
+      "Tracing reference imported. Calibrate a known distance to set its scale.",
+    );
+  }
+  function changeReference(reference?: TraceReference) {
+    const current = activePlan(projectRef.current);
+    let next: Plan;
+    if (reference) {
+      next = { ...current, traceReference: reference };
+    } else {
+      const { traceReference: _removed, ...remaining } = current;
+      next = remaining;
+    }
+    try {
+      validateProject(next);
+      commit(next, undefined, true);
+      if (!reference) setReferenceSettings(false);
+    } catch (error) {
+      showNotice((error as Error).message);
+    }
   }
   function switchVersion(next: string) {
     if (next === version) return;
@@ -867,9 +928,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   async function exporting(png: boolean) {
     setExportMenu(false);
     try {
+      const reference = traceForExport(shown.traceReference);
       const svg = exportSvg(
         svgRef.current!,
-        planArtworkBounds(shown, visibleExterior),
+        planArtworkBounds(
+          { ...shown, traceReference: reference },
+          visibleExterior,
+        ),
+        reference,
       );
       const name =
         project.version !== 2
@@ -894,6 +960,8 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
         saveOpen ||
         revisions ||
         replacement ||
+        referencePicker ||
+        referenceSettings ||
         busy
       )
         return;
@@ -1303,9 +1371,19 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
                 {ghost ? `${reference!.name} overlay` : "DESIGN MODE"}
               </b>
             </span>
-            <span className="private-badge">
-              {sharedProject ? "SHARED COPY" : "LOCAL & PRIVATE"}
-            </span>
+            <button
+              className="trace-reference-button"
+              onClick={() =>
+                plan.traceReference
+                  ? setReferenceSettings(true)
+                  : setReferencePicker(true)
+              }
+            >
+              <ImageIcon size={14} />
+              <span>
+                {plan.traceReference ? "Tracing reference" : "Import reference"}
+              </span>
+            </button>
           </div>
           {!plan.calibration.calibrated && (
             <div className="calibration-banner">
@@ -1714,6 +1792,28 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           action={replacement.action}
           onClose={() => setReplacement(null)}
           onContinue={continueReplacement}
+        />
+      )}
+      {referencePicker && (
+        <ReferencePicker
+          onApply={installReference}
+          onClose={() => setReferencePicker(false)}
+        />
+      )}
+      {referenceSettings && plan.traceReference && (
+        <TraceReferenceDialog
+          reference={plan.traceReference}
+          onChange={changeReference}
+          onClose={() => setReferenceSettings(false)}
+          onCalibrate={() => {
+            setReferenceSettings(false);
+            setTool("calibrate");
+          }}
+          onReplace={() => {
+            setReferenceSettings(false);
+            setReferencePicker(true);
+          }}
+          onRemove={() => changeReference()}
         />
       )}
       {saveOpen && (

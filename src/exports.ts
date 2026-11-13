@@ -1,4 +1,5 @@
 import type { Box } from "./model";
+import { traceForExport, type TraceReference } from "./reference";
 const NS = "http://www.w3.org/2000/svg";
 export function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
@@ -8,7 +9,11 @@ export function download(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-export function exportSvg(element: SVGSVGElement, box: Box): string {
+export function exportSvg(
+  element: SVGSVGElement,
+  box: Box,
+  reference?: TraceReference,
+): string {
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("xmlns", NS);
   const pad = Math.max(box.w, box.h) * 0.025 + 10;
@@ -25,6 +30,10 @@ export function exportSvg(element: SVGSVGElement, box: Box): string {
   bg.setAttribute("height", String(box.h + pad * 2));
   bg.setAttribute("fill", "white");
   svg.append(bg);
+  if (traceForExport(reference)) {
+    const image = element.querySelector("[data-trace-reference]");
+    if (image) svg.append(image.cloneNode(true));
+  }
   const drawing = element.querySelector("[data-drawing]");
   if (drawing) svg.append(drawing.cloneNode(true));
   svg.querySelectorAll("[data-hit]").forEach((n) => n.remove());

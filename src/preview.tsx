@@ -6,8 +6,10 @@ import {
   ExteriorDimensions,
   RenovationLegend,
   RoomLabels,
+  TraceReferenceArtwork,
 } from "./Drawing";
 import { geometryAnnotationBounds, visibleExteriorContour } from "./exterior";
+import { traceForExport } from "./reference";
 import { findRooms } from "./rooms";
 import type { Plan } from "./model";
 import { legendLayout, visiblePlan } from "./layers";
@@ -15,7 +17,11 @@ import { validateProject } from "./validation";
 
 /** Same architectural renderer as the editor, with no grid, selection or hit targets. */
 export function renderPlanSvg(input: Plan): string {
-  const plan = visiblePlan(validateProject(input)),
+  const visible = visiblePlan(validateProject(input));
+  const plan = {
+      ...visible,
+      traceReference: traceForExport(visible.traceReference),
+    },
     exterior = visibleExteriorContour(plan),
     b = planArtworkBounds(plan, exterior);
   const legend = legendLayout(plan, planArtworkBounds(plan, exterior, false));
@@ -46,6 +52,7 @@ export function renderPlanSvg(input: Plan): string {
 export function PlanArtwork({ plan }: { plan: Plan }) {
   return (
     <>
+      <TraceReferenceArtwork reference={traceForExport(plan.traceReference)} />
       {plan.items.map((item) => (
         <DrawItem key={item.id} item={item} plan={plan} interactive={false} />
       ))}

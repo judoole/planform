@@ -1,3 +1,4 @@
+import { referenceHeight, type TraceReference } from "./reference";
 import { Fragment, memo } from "react";
 import {
   drawRenovationStatus,
@@ -614,3 +615,25 @@ export const DrawItem = memo(
       !(a.item.type === "dimension" && a.item.anchors)) ||
       a.plan === b.plan),
 );
+
+export function TraceReferenceArtwork({
+  reference,
+  preview = false,
+}: {
+  reference?: TraceReference;
+  preview?: boolean;
+}) {
+  if (!reference?.visible) return null;
+  return (
+    <image
+      data-trace-reference={preview ? "" : undefined}
+      href={reference.image.dataUrl}
+      x={reference.x}
+      y={reference.y}
+      width={reference.width}
+      height={referenceHeight(reference)}
+      opacity={reference.opacity}
+      pointerEvents="none"
+    />
+  );
+}
