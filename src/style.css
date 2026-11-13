@@ -1335,7 +1335,7 @@ button svg {
     padding: 5px;
     border: 0;
   }
-  .header-actions > .dropdown-anchor > .primary {
+  .drawing-export-action > .primary {
     font-size: 10px;
     padding: 7px 9px;
     min-height: 32px;
@@ -1829,4 +1829,18 @@ button svg {
 }
 .site-features button {
   margin-left: 0.5rem;
+}
+
+.drawing-export-dialog {
+  width: min(530px, calc(100% - 32px));
+  max-width: none;
+  padding: clamp(18px, 4vw, 26px);
+}
+.drawing-export-dialog h2 {
+  margin: 0 28px 16px 0;
+  font-size: 24px;
+}
+.drawing-export-dialog .sheet-preview {
+  height: clamp(140px, 30vh, 260px);
+  object-fit: contain;
 }

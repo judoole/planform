@@ -44,6 +44,7 @@ import {
   PanelRightClose,
   Link2,
   History as HistoryIcon,
+  ClipboardList,
   Image as ImageIcon,
 } from "lucide-react";
 import {
@@ -72,10 +73,9 @@ import GarageSitePanel from "./GarageSitePanel";
 import { sitePlanSheet } from "./garageSite";
 import GarageViewsPanel from "./GarageViewsPanel";
 import { planArtworkBounds } from "./preview";
-import SheetExport from "./SheetExport";
-import { floorPlanSheet } from "./planSheet";
+import ExportDrawingDialog from "./ExportDrawingDialog";
 import { mapDimensionAnchors } from "./dimensions";
-import { download, exportSvg, exportPng } from "./exports";
+import { download } from "./exports";
 import ShareDialog from "./ShareDialog";
 import SaveDialog from "./SaveDialog";
 import ProposalManager from "./ProposalManager";
@@ -87,11 +87,7 @@ import {
 } from "./recovery";
 import ReferencePicker from "./ReferencePicker";
 import TraceReferenceDialog from "./TraceReferenceDialog";
-import {
-  traceForExport,
-  type EmbeddedRaster,
-  type TraceReference,
-} from "./reference";
+import type { EmbeddedRaster, TraceReference } from "./reference";
 import LayerPanel from "./LayerPanel";
 import {
   activeLayer,
@@ -244,8 +240,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     [overlap, setOverlap] = useState<string[]>([]),
     [overlapOpen, setOverlapOpen] = useState(false),
     [menu, setMenu] = useState(false),
-    [exportMenu, setExportMenu] = useState(false),
-    [sheetOpen, setSheetOpen] = useState(false),
+    [exportOpen, setExportOpen] = useState(false),
     [garageOpen, setGarageOpen] = useState(false),
     [garageTab, setGarageTab] = useState<"area" | "views" | "site" | "package">(
       "area",
@@ -936,38 +931,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       setBusy(false);
     }
   }
-  async function exporting(png: boolean) {
-    setExportMenu(false);
-    try {
-      const reference = traceForExport(shown.traceReference);
-      const svg = exportSvg(
-        svgRef.current!,
-        planArtworkBounds(
-          { ...shown, traceReference: reference },
-          visibleExterior,
-        ),
-        reference,
-      );
-      const name =
-        project.version !== 2
-          ? `${project.name} - ${activeDrawing.name}`
-          : plan.name;
-      if (png) await exportPng(svg, `${name}.png`);
-      else download(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
-      showNotice(
-        `${png ? "PNG" : "SVG"} exported with a white background, without the editing grid or selection.`,
-      );
-    } catch (e) {
-      showNotice((e as Error).message);
-    }
-  }
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (e.key === "Escape" && !referencePicker) {
-        if (sheetOpen) {
-          setSheetOpen(false);
-          return;
-        }
         if (garageOpen) {
           setGarageOpen(false);
           return;
@@ -975,7 +941,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
       }
       if (
         garageOpen ||
-        sheetOpen ||
+        exportOpen ||
         shareOpen ||
         manageOpen ||
         saveOpen ||
@@ -1146,35 +1112,18 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             <Link2 size={16} />
             <span>Share</span>
           </button>
-          <div className="dropdown-anchor">
-            <button
-              className="primary"
-              onClick={() => setExportMenu(!exportMenu)}
-            >
-              Export <ChevronDown size={14} />
+          <button
+            title="Garage permit"
+            aria-label="Garage permit"
+            onClick={() => setGarageOpen(true)}
+          >
+            <ClipboardList size={16} />
+            <span>Garage permit</span>
+          </button>
+          <div className="drawing-export-action">
+            <button className="primary" onClick={() => setExportOpen(true)}>
+              Export
             </button>
-            {exportMenu && (
-              <div className="dropdown">
-                <button onClick={() => exporting(false)}>SVG · drawing</button>
-                <button onClick={() => exporting(true)}>PNG · image</button>
-                <button
-                  onClick={() => {
-                    setExportMenu(false);
-                    setSheetOpen(true);
-                  }}
-                >
-                  PDF · scaled sheet
-                </button>
-                <button
-                  onClick={() => {
-                    setExportMenu(false);
-                    setGarageOpen(true);
-                  }}
-                >
-                  Garage permit
-                </button>
-              </div>
-            )}
           </div>
           <button
             className="mobile-menu"
@@ -1207,6 +1156,14 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             }}
           >
             Save project
+          </button>
+          <button
+            onClick={() => {
+              setMenu(false);
+              setGarageOpen(true);
+            }}
+          >
+            Garage permit
           </button>
         </div>
       )}
@@ -1797,28 +1754,16 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
           </section>
         </div>
       )}
-      {sheetOpen && (
-        <div className="modal-backdrop">
-          <section
-            className="modal sheet-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sheet-title"
-          >
-            <button
-              className="modal-close"
-              aria-label="Close scaled sheet"
-              onClick={() => setSheetOpen(false)}
-            >
-              <X size={16} />
-            </button>
-            <h2 id="sheet-title">Scaled PDF sheet</h2>
-            <SheetExport
-              build={() => floorPlanSheet(drawing)}
-              name={drawing.name}
-            />
-          </section>
-        </div>
+      {exportOpen && (
+        <ExportDrawingDialog
+          plan={drawing}
+          name={
+            project.version === 2
+              ? drawing.name
+              : `${project.name} - ${activeDrawing.name}`
+          }
+          onClose={() => setExportOpen(false)}
+        />
       )}
       {revisions && (
         <RecoveryDialog
