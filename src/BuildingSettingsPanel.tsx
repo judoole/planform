@@ -34,13 +34,21 @@ export default function BuildingSettingsPanel({
         <p className="muted">
           Applies to existing and new walls that use the floor default.
         </p>
-        <NumberField
-          label="Finished floor level"
-          value={settings.floorLevel ?? 0}
-          onChange={(floorLevel) => onChange({ ...settings, floorLevel })}
-          min={-1000000}
-          max={1000000}
-        />
+        <details className="optional-floor-settings">
+          <summary>Floor elevation (optional)</summary>
+          <NumberField
+            label="Floor elevation"
+            value={settings.floorLevel ?? 0}
+            onChange={(floorLevel) => onChange({ ...settings, floorLevel })}
+            min={-1000000}
+            max={1000000}
+          />
+          <p className="muted">
+            The height of the floor surface where you walk, measured from a
+            reference you choose. Leave it at 0 for a sketch. For example, enter
+            30 if the floor is 30 cm above the ground you use as zero.
+          </p>
+        </details>
       </section>
       <section className="panel-section" aria-labelledby="roof-settings">
         <h3 id="roof-settings">Roof</h3>

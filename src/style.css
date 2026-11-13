@@ -1883,3 +1883,12 @@ button svg {
 .more-drawings-button {
   margin-top: 14px;
 }
+
+.optional-floor-settings {
+  margin-top: 16px;
+}
+.optional-floor-settings summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #426752;
+}
