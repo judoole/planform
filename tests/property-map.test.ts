@@ -3,7 +3,7 @@ import { drawingPdfOptions, drawingPdfPages } from "../src/drawingPdfPages";
 import { dist, emptyPlan, type Wall } from "../src/model";
 import { applyCommands } from "../src/commands";
 import {
-  boundaryMeasurement,
+  boundaryMeasurements,
   groundScale,
   mapFootprint,
   placedFootprint,
@@ -60,13 +60,53 @@ describe("Property map", () => {
       { x: edge - 50, y: origin.y - 50 },
     ];
     expect(
-      boundaryMeasurement(
+      boundaryMeasurements(
         corners,
         [{ number: map.property.number, rings: [ring] }],
         location,
-      )?.label,
-    ).toBe("4.0 m to mapped boundary");
-    expect(boundaryMeasurement(corners, [], location)).toBeUndefined();
+      )?.summary,
+    ).toBe("Nearest mapped boundary: 4.0 m");
+    expect(boundaryMeasurements(corners, [], location)).toBeUndefined();
+  });
+
+  it("shows up to four nearby directions without treating a split border as two sides", () => {
+    const origin = projectLocation(location);
+    const scale = groundScale(location);
+    const point = (x: number, y: number) => ({
+      x: origin.x + x / scale.x,
+      y: origin.y + y / scale.y,
+    });
+    const corners = [
+      point(-3, -3.5),
+      point(3, -3.5),
+      point(3, 3.5),
+      point(-3, 3.5),
+    ];
+    const parcel = {
+      number: map.property.number,
+      rings: [
+        [
+          point(-15, -12.5),
+          point(7, -12.5),
+          point(7, 0),
+          point(7, 15.5),
+          point(-15, 15.5),
+          point(-15, -12.5),
+        ],
+      ],
+    };
+    const distances = boundaryMeasurements(
+      corners,
+      [parcel],
+      location,
+    )?.distances;
+    expect(distances?.map(({ meters }) => Math.round(meters))).toEqual([
+      4, 9, 12, 12,
+    ]);
+    parcel.rings[0][2] = point(2, 0);
+    const touching = boundaryMeasurements(corners, [parcel], location);
+    expect(touching?.distances).toHaveLength(1);
+    expect(touching?.summary).toMatch(/touches or crosses/);
   });
 
   it("retains placement through agent edits and uses the map's own sheet scale", () => {

@@ -8,13 +8,13 @@ import {
   type BackgroundId,
 } from "./mapProvider";
 import {
-  MapMeasurement,
+  MapMeasurements,
   mapPoints,
   NorthArrow,
   ParcelArtwork,
 } from "./PropertyMapArtwork";
 import {
-  boundaryMeasurement,
+  boundaryMeasurements,
   groundScale,
   mapFootprint,
   mapLocation,
@@ -143,9 +143,9 @@ export default function MapWorkspace({
   const placement = draft ?? map?.placement;
   const corners =
     footprint && placement ? placedFootprint(footprint, placement) : undefined;
-  const measurement =
+  const measurements =
     corners && placement
-      ? boundaryMeasurement(corners, parcels.data.selected, placement.center)
+      ? boundaryMeasurements(corners, parcels.data.selected, placement.center)
       : undefined;
 
   useEffect(() => () => searchRequest.current?.abort(), []);
@@ -473,7 +473,11 @@ export default function MapWorkspace({
                 strokeWidth={2.2}
               />
             )}
-            <MapMeasurement measurement={measurement} toView={toView} />
+            <MapMeasurements
+              distances={measurements?.distances}
+              toView={toView}
+              bounds={{ x: 0, y: 0, w: size.width, h: size.height }}
+            />
             {rotationHandle && (
               <g stroke="#18583f" strokeWidth={2}>
                 <line
@@ -555,8 +559,8 @@ export default function MapWorkspace({
               <p role="status">Loading parcel boundaries…</p>
             ) : (
               <>
-                {measurement ? (
-                  <p className="map-measurement">{measurement.label}</p>
+                {measurements ? (
+                  <p className="map-measurement">{measurements.summary}</p>
                 ) : (
                   !parcels.data.selected.length && (
                     <p>Selected parcel boundary unavailable.</p>
@@ -567,7 +571,7 @@ export default function MapWorkspace({
                 )}
               </>
             )}
-            {measurement && <p>Mapped boundaries are approximate.</p>}
+            {measurements && <p>Mapped boundaries are approximate.</p>}
             {imageError && source.imageUrl && (
               <p>
                 {parcels.data.selected.length || parcels.data.nearby.length
