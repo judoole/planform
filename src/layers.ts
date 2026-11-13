@@ -1,4 +1,4 @@
-import type { Item, Plan } from "./model";
+import type { Box, Item, Plan } from "./model";
 
 export type Layer = {
   id: string;
@@ -6,6 +6,111 @@ export type Layer = {
   visible: boolean;
   locked: boolean;
 };
+
+export type RenovationStatus = "existing" | "demolish" | "new";
+export type RenovationView = "all" | "existing" | "demolition" | "proposed";
+
+export const renovationStyles = {
+  existing: {
+    label: "Existing",
+    fill: "#52645a",
+    line: "#344b3f",
+    opening: "#dfedf0",
+  },
+  demolish: {
+    label: "To demolish",
+    fill: "#f4d4ca",
+    line: "#994126",
+    opening: "#f5dbd4",
+    dash: "5 3",
+  },
+  new: { label: "New", fill: "#287f94", line: "#125365", opening: "#d9ecf2" },
+} satisfies Record<
+  RenovationStatus,
+  {
+    label: string;
+    fill: string;
+    line: string;
+    opening: string;
+    dash?: string;
+  }
+>;
+
+export const renovationViews: Record<
+  RenovationView,
+  { title: string; statuses: RenovationStatus[] }
+> = {
+  all: { title: "All objects", statuses: ["existing", "demolish", "new"] },
+  existing: { title: "Existing", statuses: ["existing", "demolish"] },
+  demolition: { title: "Demolition", statuses: ["existing", "demolish"] },
+  proposed: { title: "Proposed", statuses: ["existing", "new"] },
+};
+
+export function renovationStatus(
+  plan: Plan,
+  item: Item,
+): RenovationStatus | undefined {
+  if (item.type === "wall") return item.renovationStatus ?? "existing";
+  if (item.type === "door" || item.type === "window") {
+    const host = plan.items.find((entry) => entry.id === item.hostId);
+    return host?.type === "wall"
+      ? (host.renovationStatus ?? "existing")
+      : undefined;
+  }
+  return undefined;
+}
+
+function showRenovationStatus(
+  view: RenovationView | undefined,
+  status?: RenovationStatus,
+): boolean {
+  return !view || !status || renovationViews[view].statuses.includes(status);
+}
+
+export function phaseLegendStyles(plan: Plan) {
+  if (
+    !plan.renovationView &&
+    !plan.items.some((item) => item.type === "wall" && item.renovationStatus)
+  )
+    return undefined;
+  const view = renovationViews[plan.renovationView ?? "all"];
+  return {
+    title: `Renovation view: ${view.title}`,
+    entries: (plan.renovationView === "existing"
+      ? ["existing" as const]
+      : view.statuses
+    ).map((status) => renovationStyles[status]),
+  };
+}
+
+export function drawRenovationStatus(
+  plan: Plan,
+  status?: RenovationStatus,
+): RenovationStatus {
+  return plan.renovationView === "existing"
+    ? "existing"
+    : (status ?? "existing");
+}
+
+export function phaseLegend(plan: Plan): string[] {
+  const legend = phaseLegendStyles(plan);
+  return legend
+    ? [legend.title, ...legend.entries.map((entry) => entry.label)]
+    : [];
+}
+
+export function legendLayout(plan: Plan, drawing: Box) {
+  const labels = phaseLegend(plan);
+  if (!labels.length) return undefined;
+  const fontSize = 16;
+  const w =
+    Math.max(...labels.map((label) => label.length)) * fontSize * 0.68 +
+    fontSize * 2.8;
+  const h = labels.length * fontSize * 1.4;
+  const x = drawing.x;
+  const y = drawing.y + drawing.h + fontSize * 1.5;
+  return { fontSize, x, y, bounds: { x, y, w, h } };
+}
 
 export const defaultLayer: Layer = {
   id: "default",
@@ -63,25 +168,39 @@ export function isItemLocked(plan: Plan, item: Item): boolean {
 }
 
 export function isEditProtected(plan: Plan, item: Item): boolean {
-  return !isLayerVisible(plan, item) || isItemLocked(plan, item);
+  return (
+    !isLayerVisible(plan, item) ||
+    !showRenovationStatus(plan.renovationView, renovationStatus(plan, item)) ||
+    isItemLocked(plan, item)
+  );
 }
 
 export function visiblePlan(plan: Plan): Plan {
-  if (!plan.layers) return plan;
-  const idToLayer = new Map(plan.layers.map((layer, i) => [layer.id, i]));
-  const wallToLayer = new Map(
+  if (!plan.layers && !plan.renovationView) return plan;
+  const layers = drawingLayers(plan);
+  const idToLayer = new Map(layers.map((layer, i) => [layer.id, i]));
+  const walls = new Map(
     plan.items
       .filter((item) => item.type === "wall")
-      .map((wall) => [wall.id, wall.layerId ?? defaultLayer.id]),
+      .map((wall) => [wall.id, wall]),
   );
-  const byLayer: Item[][] = plan.layers.map(() => []);
+  const byLayer: Item[][] = layers.map(() => []);
   for (const item of plan.items) {
-    const id =
-      item.type === "door" || item.type === "window"
-        ? wallToLayer.get(item.hostId)
-        : (item.layerId ?? defaultLayer.id);
-    const index = id === undefined ? undefined : idToLayer.get(id);
-    if (index !== undefined && plan.layers[index].visible)
+    const wall =
+      item.type === "wall"
+        ? item
+        : item.type === "door" || item.type === "window"
+          ? walls.get(item.hostId)
+          : undefined;
+    const index = idToLayer.get((wall ?? item).layerId ?? defaultLayer.id);
+    if (
+      index !== undefined &&
+      layers[index].visible &&
+      showRenovationStatus(
+        plan.renovationView,
+        wall?.renovationStatus ?? "existing",
+      )
+    )
       byLayer[index].push(item);
   }
   const items = byLayer.flat();
@@ -96,7 +215,15 @@ export function placeOnActiveLayer<T extends Item>(plan: Plan, item: T): T {
   if (!layer.visible || layer.locked)
     throw Error("Choose a visible, unlocked layer to place objects.");
   if (item.type === "door" || item.type === "window") return item;
-  return layer.id === defaultLayer.id ? item : { ...item, layerId: layer.id };
+  const layered =
+    layer.id === defaultLayer.id ? item : { ...item, layerId: layer.id };
+  if (
+    layered.type === "wall" &&
+    plan.renovationView === "proposed" &&
+    !layered.renovationStatus
+  )
+    return { ...layered, renovationStatus: "new" };
+  return layered;
 }
 
 export function moveToLayer(plan: Plan, ids: string[], target: string): Plan {
@@ -151,6 +278,10 @@ export function blockedDrawingEdit(
         item.locked &&
         updated.locked === false &&
         isLayerVisible(before, item) &&
+        showRenovationStatus(
+          before.renovationView,
+          renovationStatus(before, item),
+        ) &&
         !isLayerLocked(before, item);
       if (
         JSON.stringify(mayUnlock ? { ...item, locked: false } : item) !==

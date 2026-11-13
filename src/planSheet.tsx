@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { visiblePlan } from "./layers";
+import { phaseLegend, visiblePlan } from "./layers";
 import type { Plan } from "./model";
 import { PlanArtwork, planArtworkBounds } from "./preview";
 import type { SheetDrawing } from "./sheets";
@@ -12,11 +12,12 @@ export function floorPlanSheet(input: Plan): SheetDrawing {
     );
   if (!plan.items.length)
     throw Error("Add drawing objects before exporting a floor plan.");
-  const b = planArtworkBounds(plan);
+  const b = planArtworkBounds(plan, undefined, false);
   const pad = 12;
   return {
     title: "Floor plan - Ground floor",
     bounds: { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad },
+    legend: phaseLegend(plan),
     markup: renderToStaticMarkup(<PlanArtwork plan={plan} />),
   };
 }

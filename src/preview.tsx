@@ -1,11 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { GarageSectionMark, garageSectionBounds } from "./garageViews";
 import { unionBoxes } from "./model";
-import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
-import { annotatedPlanBounds, visibleExteriorContour } from "./exterior";
+import {
+  DrawItem,
+  ExteriorDimensions,
+  RenovationLegend,
+  RoomLabels,
+} from "./Drawing";
+import { geometryAnnotationBounds, visibleExteriorContour } from "./exterior";
 import { findRooms } from "./rooms";
 import type { Plan } from "./model";
-import { visiblePlan } from "./layers";
+import { legendLayout, visiblePlan } from "./layers";
 import { validateProject } from "./validation";
 
 /** Same architectural renderer as the editor, with no grid, selection or hit targets. */
@@ -13,6 +18,7 @@ export function renderPlanSvg(input: Plan): string {
   const plan = visiblePlan(validateProject(input)),
     exterior = visibleExteriorContour(plan),
     b = planArtworkBounds(plan, exterior);
+  const legend = legendLayout(plan, planArtworkBounds(plan, exterior, false));
   const pad = Math.max(b.w, b.h) * 0.025 + 30;
   const x = b.x - pad,
     y = b.y - pad,
@@ -31,6 +37,7 @@ export function renderPlanSvg(input: Plan): string {
       <title>{plan.name}</title>
       <rect x={x} y={y} width={w} height={h} fill="white" />
       <PlanArtwork plan={plan} />
+      {legend && <RenovationLegend plan={plan} {...legend} />}
     </svg>,
   );
 }
@@ -55,8 +62,11 @@ export function PlanArtwork({ plan }: { plan: Plan }) {
 export function planArtworkBounds(
   plan: Plan,
   exterior = visibleExteriorContour(plan),
+  includeLegend = true,
 ) {
-  const bounds = annotatedPlanBounds(plan, exterior);
+  const geometry = geometryAnnotationBounds(plan, exterior);
   const section = garageSectionBounds(plan);
-  return section ? unionBoxes([bounds, section]) : bounds;
+  const bounds = section ? unionBoxes([geometry, section]) : geometry;
+  const legend = includeLegend && legendLayout(plan, bounds);
+  return legend ? unionBoxes([bounds, legend.bounds]) : bounds;
 }

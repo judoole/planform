@@ -87,6 +87,7 @@ import {
   isItemLocked,
   placeOnActiveLayer,
   visiblePlan,
+  type RenovationView,
 } from "./layers";
 import { isShareHash, readShareHash } from "./share";
 import {
@@ -356,6 +357,15 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     },
     [showNotice, updateProject],
   );
+  function setRenovationView(view: RenovationView) {
+    const current = projectRef.current;
+    const update = (plan: Plan) => ({ ...plan, renovationView: view });
+    drawingHistory(activeDrawingId(current)).updateSnapshots(update);
+    setPreview(null);
+    setOverlapOpen(false);
+    setCancelToken((id) => id + 1);
+    updateProject(replaceActivePlan(current, update(activePlan(current))));
+  }
   function previewEdit(next: Plan | null) {
     if (next && blockedDrawingEdit(drawing, next)) {
       setPreview(null);
@@ -1457,6 +1467,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onDelete={del}
               onError={showNotice}
               onShowExteriorDimensions={setExteriorDimensions}
+              onRenovationView={setRenovationView}
             />
           ) : tab === "layers" ? (
             <LayerPanel

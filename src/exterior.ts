@@ -1,3 +1,4 @@
+import { legendLayout } from "./layers";
 import {
   add,
   angle,
@@ -244,6 +245,15 @@ export function exteriorLabelLayout(
 
 /** Include the dimension marks and their text when fitting or exporting. */
 export function annotatedPlanBounds(
+  plan: Plan,
+  exterior: ExteriorContour | undefined,
+) {
+  const geometry = geometryAnnotationBounds(plan, exterior);
+  const legend = legendLayout(plan, geometry);
+  return legend ? unionBoxes([geometry, legend.bounds]) : geometry;
+}
+
+export function geometryAnnotationBounds(
   plan: Plan,
   exterior: ExteriorContour | undefined,
 ) {

@@ -34,3 +34,14 @@ The setting is saved per drawing. Turning the labels on or off preserves the dra
 In the inspector's Layers tab, create and name layers, reorder them from back to front, and choose the active layer for new objects. Hide a layer to remove its objects from the canvas, selection, snapping and drawing exports. A locked layer stays visible. Unlock it to edit its objects. A connected edit that would move a hidden or locked object is blocked. Calibration rescales the entire floor plan, including hidden and locked objects.
 
 Version 1 and earlier version 2 architectural drawings open with a single Default layer and unchanged geometry. Doors and windows inherit the host wall's layer, and grouped symbols share their group's layer. Move symbols onto the same layer before grouping them. Deleting a layer moves its objects to the Default layer. Layer edits are undoable and remain independent across proposals.
+
+### Renovation views
+
+Select walls and set their renovation status in Properties. Doors and windows inherit their host wall's status. Older walls count as Existing. Symbols and annotations remain available across phases, subject to layer visibility. New walls drawn in the Proposed view start with the New status.
+
+- **All objects** shows every classification for editing.
+- **Existing** shows the walls present before work and styles future demolition as existing work.
+- **Demolition** shows the same walls with demolition work highlighted in dashed terracotta.
+- **Proposed** shows retained walls and new work, with new work in blue.
+
+Changing the view preserves geometry and does not consume an undo step. Classification edits are undoable. The current view and its legend are included in drawing exports.

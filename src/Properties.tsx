@@ -26,7 +26,15 @@ import {
   ungroupItems,
 } from "./model";
 import type { Tool } from "./Canvas";
-import { isEditProtected, isLayerLocked } from "./layers";
+import {
+  isEditProtected,
+  isLayerLocked,
+  renovationStatus,
+  renovationStyles,
+  renovationViews,
+  type RenovationStatus,
+  type RenovationView,
+} from "./layers";
 import { type Room, formatRoomArea } from "./rooms";
 import type { ExteriorContour } from "./exterior";
 import WallJunctionControls from "./WallJunctionControls";
@@ -138,6 +146,7 @@ export default function Properties({
   onDelete,
   onError,
   onShowExteriorDimensions,
+  onRenovationView,
 }: {
   plan: Plan;
   rooms: Room[];
@@ -151,6 +160,7 @@ export default function Properties({
   onDelete: () => void;
   onError: (s: string) => void;
   onShowExteriorDimensions: (show: boolean) => void;
+  onRenovationView?: (view: RenovationView) => void;
 }) {
   const items = plan.items.filter((i) => selection.includes(i.id)),
     item = items.length === 1 ? items[0] : null;
@@ -162,6 +172,12 @@ export default function Properties({
   );
   const allLocked = lockableItems.every((item) => item.locked);
   const groupProtected = items.some((item) => isEditProtected(plan, item));
+  const selectedWalls = new Set(
+    items
+      .filter((item) => item.type === "wall" && !isEditProtected(plan, item))
+      .map((item) => item.id),
+  );
+  const statuses = new Set(items.map((item) => renovationStatus(plan, item)));
   const units = plan.calibration.calibrated ? "cm" : "units";
   function patch(changes: Partial<Item>) {
     if (!item || itemProtected) return;
@@ -313,6 +329,66 @@ export default function Properties({
           </>
         )}
       </div>
+      {onRenovationView && (
+        <div className="panel-section">
+          <label className="field">
+            <span>Renovation view</span>
+            <select
+              aria-label="Renovation view"
+              value={plan.renovationView ?? "all"}
+              onChange={(event) =>
+                onRenovationView(event.target.value as RenovationView)
+              }
+            >
+              {Object.entries(renovationViews).map(([value, view]) => (
+                <option key={value} value={value}>
+                  {view.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedWalls.size > 0 && (
+            <label className="field">
+              <span>Renovation status</span>
+              <select
+                aria-label="Renovation status"
+                value={statuses.size === 1 ? [...statuses][0] : ""}
+                onChange={(event) => {
+                  const renovationStatus = event.target
+                    .value as RenovationStatus;
+                  commit({
+                    ...plan,
+                    items: plan.items.map((entry) =>
+                      entry.type === "wall" && selectedWalls.has(entry.id)
+                        ? { ...entry, renovationStatus }
+                        : entry,
+                    ),
+                  });
+                }}
+              >
+                <option value="" disabled>
+                  Mixed
+                </option>
+                {Object.entries(renovationStyles).map(([value, style]) => (
+                  <option key={value} value={value}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {(item?.type === "door" || item?.type === "window") && (
+            <p className="muted">
+              Renovation status follows its wall (
+              {
+                renovationStyles[renovationStatus(plan, item) ?? "existing"]
+                  .label
+              }
+              ).
+            </p>
+          )}
+        </div>
+      )}
       {item?.evidence && (
         <div className="panel-section">
           <h3>

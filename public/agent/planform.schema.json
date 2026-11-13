@@ -107,6 +107,9 @@
       "items": { "$ref": "#/$defs/layer" }
     },
     "activeLayerId": { "$ref": "#/$defs/layerId" },
+    "renovationView": {
+      "enum": ["all", "existing", "demolition", "proposed"]
+    },
     "grid": {
       "type": "number",
       "minimum": 1,
@@ -291,6 +294,10 @@
           "maxLength": 200
         },
         "layerId": { "$ref": "#/$defs/layerId" },
+        "renovationStatus": {
+          "enum": ["existing", "demolish", "new"],
+          "description": "Omitted means existing. Doors and windows inherit their wall status."
+        },
         "locked": {
           "type": "boolean"
         },

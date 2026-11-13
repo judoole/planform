@@ -1,4 +1,10 @@
 import { Fragment, memo } from "react";
+import {
+  drawRenovationStatus,
+  phaseLegendStyles,
+  renovationStatus,
+  renovationStyles,
+} from "./layers";
 import { type Room, formatRoomArea } from "./rooms";
 import {
   dimensionFontSize,
@@ -22,6 +28,52 @@ import {
 } from "./model";
 const ink = "#34443f",
   light = "#e5ebe5";
+
+export function RenovationLegend({
+  plan,
+  x,
+  y,
+  fontSize = 16,
+}: {
+  plan: Plan;
+  x: number;
+  y: number;
+  fontSize?: number;
+}) {
+  const legend = phaseLegendStyles(plan);
+  if (!legend) return null;
+  return (
+    <g
+      data-renovation-legend="true"
+      transform={`translate(${x} ${y})`}
+      fill={ink}
+      fontSize={fontSize}
+      fontFamily="Arial, sans-serif"
+      pointerEvents="none"
+    >
+      <text y={fontSize}>{legend.title}</text>
+      {legend.entries.map((entry, index) => {
+        const baseline = fontSize * (2.4 + index * 1.4);
+        return (
+          <g key={entry.label}>
+            <rect
+              x={0}
+              y={baseline - fontSize * 0.75}
+              width={fontSize * 1.25}
+              height={fontSize * 0.7}
+              fill={entry.fill}
+              stroke={entry.line}
+              strokeDasharray={"dash" in entry ? entry.dash : undefined}
+            />
+            <text x={fontSize * 1.65} y={baseline}>
+              {entry.label}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 
 function DimensionMark({
   a,
@@ -369,6 +421,8 @@ function WallShape({
   interactive: boolean;
 }) {
   const len = dist(w.a, w.b);
+  const style =
+    renovationStyles[drawRenovationStatus(plan, w.renovationStatus)];
   const openings = plan.items
     .filter(
       (i) => (i.type === "door" || i.type === "window") && i.hostId === w.id,
@@ -404,8 +458,9 @@ function WallShape({
           y={-w.thickness / 2}
           width={s.end - s.start}
           height={w.thickness}
-          fill="#52645a"
-          stroke="#344b3f"
+          fill={style.fill}
+          stroke={style.line}
+          strokeDasharray={"dash" in style ? style.dash : undefined}
           strokeWidth={1}
         />
       ))}
@@ -421,7 +476,7 @@ function WallShape({
             cx={n ? len : 0}
             cy={0}
             r={w.thickness / 2}
-            fill="#52645a"
+            fill={style.fill}
           />
         ) : null,
       )}
@@ -439,17 +494,21 @@ export const DrawItem = memo(
     interactive?: boolean;
   }) {
     let shape;
+    const status = renovationStatus(plan, i);
     if (i.type === "wall")
       shape = <WallShape wall={i} plan={plan} interactive={interactive} />;
     else if (i.type === "door" || i.type === "window") {
       const f = openingFrame(i, plan.items);
       if (!f) return null;
+      const displayStatus = drawRenovationStatus(plan, status);
+      const style = renovationStyles[displayStatus];
       const w = i.width,
         t = f.wall.thickness;
       shape = (
         <g
           transform={`translate(${f.center.x} ${f.center.y}) rotate(${f.angle})`}
-          stroke={ink}
+          stroke={displayStatus === "existing" ? ink : style.line}
+          strokeDasharray={"dash" in style ? style.dash : undefined}
           strokeWidth={1.5}
         >
           {interactive && (
@@ -465,7 +524,13 @@ export const DrawItem = memo(
           )}
           {i.type === "window" ? (
             <>
-              <rect x={-w / 2} y={-t / 2} width={w} height={t} fill="#dfedf0" />
+              <rect
+                x={-w / 2}
+                y={-t / 2}
+                width={w}
+                height={t}
+                fill={style.opening}
+              />
               <line x1={-w / 2} x2={w / 2} y1={0} y2={0} />
               <line x1={-w / 2 + 4} x2={-w / 2 + 4} y1={-t / 2} y2={t / 2} />
               <line x1={w / 2 - 4} x2={w / 2 - 4} y1={-t / 2} y2={t / 2} />
@@ -526,7 +591,12 @@ export const DrawItem = memo(
       );
     }
     return (
-      <g data-item-id={i.id} data-item-type={i.type} opacity={1}>
+      <g
+        data-item-id={i.id}
+        data-item-type={i.type}
+        data-renovation-status={status}
+        opacity={1}
+      >
         {shape}
       </g>
     );

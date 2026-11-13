@@ -1,4 +1,10 @@
-import { defaultLayer, itemLayerId, type Layer } from "./layers";
+import {
+  defaultLayer,
+  itemLayerId,
+  type Layer,
+  type RenovationStatus,
+  type RenovationView,
+} from "./layers";
 import { readProject } from "./validation";
 import type { GarageDetails } from "./garage";
 import {
@@ -26,6 +32,7 @@ export type Wall = Base & {
   b: Point;
   thickness: number;
   junctions?: Partial<Record<WallEnd, string>>;
+  renovationStatus?: RenovationStatus;
 };
 export type DoorStyle = "hinged" | "sliding";
 export type Opening = Base & {
@@ -66,6 +73,7 @@ export type Plan = {
   garage?: GarageDetails;
   layers?: Layer[];
   activeLayerId?: string;
+  renovationView?: RenovationView;
   calibration: {
     calibrated: boolean;
     imported: boolean;

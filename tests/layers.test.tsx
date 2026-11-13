@@ -167,3 +167,70 @@ describe("Drawing layers", () => {
     expect(readProjectFile(JSON.stringify(project))).toEqual(project);
   });
 });
+
+describe("Renovation views", () => {
+  function classified(view: Plan["renovationView"]): Plan {
+    const initial = plan();
+    return {
+      ...initial,
+      renovationView: view,
+      items: initial.items.map((item) =>
+        item.type !== "wall"
+          ? item
+          : {
+              ...item,
+              renovationStatus: item.id === "wall" ? "demolish" : "new",
+            },
+      ),
+    };
+  }
+
+  it("reuses layer visibility and wall classification for all hosted openings", () => {
+    const initial = classified("existing");
+    const ids = (source: Plan) => visiblePlan(source).items.map(({ id }) => id);
+    expect(ids(initial)).toEqual(["wall", "door", "label-a", "label-b"]);
+    expect(ids({ ...initial, renovationView: "demolition" })).toEqual(
+      ids(initial),
+    );
+    expect(ids({ ...initial, renovationView: "proposed" })).toEqual([
+      "other",
+      "label-a",
+      "label-b",
+    ]);
+    expect(ids({ ...initial, renovationView: "all" })).toHaveLength(5);
+    expect(
+      ids({
+        ...initial,
+        layers: [
+          { ...defaultLayer },
+          { ...initial.layers![1], visible: false },
+        ],
+      }),
+    ).toEqual([]);
+    expect(initial.items).toHaveLength(5);
+  });
+
+  it("exports a visible phase legend, styles demolition separately and round-trips status", () => {
+    const initial = classified("demolition");
+    const svg = renderPlanSvg(initial);
+    expect(svg).toContain('data-renovation-legend="true"');
+    expect(svg).toContain('stroke-dasharray="5 3"');
+    expect(svg).toContain(
+      'data-item-id="door" data-item-type="door" data-renovation-status="demolish"',
+    );
+    expect(svg).not.toContain('data-item-id="other"');
+    expect(
+      renderPlanSvg({ ...initial, renovationView: "existing" }),
+    ).not.toContain('stroke-dasharray="5 3"');
+    expect(readProject(JSON.stringify(initial))).toEqual(initial);
+    expect(() =>
+      validateProject({ ...initial, renovationView: "archived" }),
+    ).toThrow();
+  });
+
+  it("blocks connected edits to phase-hidden walls", () => {
+    const initial = classified("existing");
+    const changed = setCorner(initial, "wall", "b", { x: 400, y: 0 });
+    expect(blockedDrawingEdit(initial, changed)?.id).toBe("other");
+  });
+});

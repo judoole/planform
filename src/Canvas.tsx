@@ -27,8 +27,14 @@ import {
   snapPoint,
   rotate,
 } from "./model";
+import { planArtworkBounds } from "./preview";
 import { GarageSectionMark } from "./garageViews";
-import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
+import {
+  DrawItem,
+  ExteriorDimensions,
+  RenovationLegend,
+  RoomLabels,
+} from "./Drawing";
 import type { ExteriorContour } from "./exterior";
 import { furniture, type FurnitureKind } from "./furniture";
 import type { Room } from "./rooms";
@@ -36,6 +42,7 @@ import {
   activeLayer,
   isEditProtected,
   isItemLocked,
+  legendLayout,
   placeOnActiveLayer,
 } from "./layers";
 export type Tool =
@@ -596,6 +603,11 @@ export default function Canvas({
     onStatus("Choose a visible, unlocked layer to place objects.");
     return false;
   }
+  const legend =
+    shown.renovationView ||
+    shown.items.some((item) => item.type === "wall" && item.renovationStatus)
+      ? legendLayout(shown, planArtworkBounds(shown, exterior, false))
+      : undefined;
   const selected = shown.items.filter((i) => selection.includes(i.id)),
     box = selected.length
       ? unionBoxes(selected.map((i) => bounds(i, plan.items)))
@@ -708,7 +720,8 @@ export default function Canvas({
               calibrated={plan.calibration.calibrated}
             />
             <ExteriorDimensions contour={exterior} />
-            <GarageSectionMark plan={plan} />
+            <GarageSectionMark plan={shown} />
+            {legend && <RenovationLegend plan={shown} {...legend} />}
           </g>
           <g className="selection-overlay">
             {box && (
