@@ -46,6 +46,7 @@ export type Plan = {
   name: string;
   units: "cm";
   items: Item[];
+  showExteriorDimensions?: boolean;
   calibration: {
     calibrated: boolean;
     imported: boolean;
@@ -450,6 +451,10 @@ export class History {
     this.past.push(p);
     if (this.past.length > 60) this.past.shift();
     this.future = [];
+  }
+  updateSnapshots(update: (p: Plan) => Plan) {
+    this.past = this.past.map(update);
+    this.future = this.future.map(update);
   }
   undo(current: Plan) {
     const p = this.past.pop();

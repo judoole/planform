@@ -27,6 +27,15 @@ import {
 } from "./model";
 import type { Tool } from "./Canvas";
 import { type Room, formatRoomArea } from "./rooms";
+import type { ExteriorContour } from "./exterior";
+
+const exteriorMessages = {
+  open: "Close the wall loop to show exterior dimensions.",
+  unsupported:
+    "Use one convex wall loop with no extra walls, including partitions or stubs. Keep corners distinct and leave space inside the walls.",
+  uncalibrated: "Calibrate scale to show exterior dimensions in meters.",
+};
+
 export function DoorStyleSelect({
   label = "Door type",
   value,
@@ -118,6 +127,7 @@ export default function Properties({
   plan,
   rooms,
   roomError,
+  exterior,
   selection,
   commit,
   setSelection,
@@ -125,10 +135,12 @@ export default function Properties({
   onDuplicate,
   onDelete,
   onError,
+  onShowExteriorDimensions,
 }: {
   plan: Plan;
   rooms: Room[];
   roomError?: string;
+  exterior: ExteriorContour;
   selection: string[];
   commit: (p: Plan) => void;
   setSelection: (s: string[]) => void;
@@ -136,6 +148,7 @@ export default function Properties({
   onDuplicate: () => void;
   onDelete: () => void;
   onError: (s: string) => void;
+  onShowExteriorDimensions: (show: boolean) => void;
 }) {
   const items = plan.items.filter((i) => selection.includes(i.id)),
     item = items.length === 1 ? items[0] : null;
@@ -287,6 +300,21 @@ export default function Properties({
           <p className="notice">{item.evidence.note}</p>
         </div>
       )}
+      <section className="panel-section" aria-label="Exterior dimensions">
+        <label className="property-checkbox">
+          <input
+            type="checkbox"
+            checked={Boolean(plan.showExteriorDimensions)}
+            onChange={(event) => onShowExteriorDimensions(event.target.checked)}
+          />
+          Show exterior wall lengths
+        </label>
+        {exterior.status !== "ready" && (
+          <p className="notice" role="status">
+            {exteriorMessages[exterior.status]}
+          </p>
+        )}
+      </section>
       <section className="panel-section room-areas" aria-label="Room areas">
         <h3>Room areas</h3>
         {roomError ? (

@@ -55,7 +55,6 @@ import {
   removeItems,
   duplicateItems,
   History,
-  planBounds,
   calibrate,
   dist,
   serialize,
@@ -87,6 +86,11 @@ import { checkJsonSize, readProjectFile } from "./validation";
 import Canvas, { type Tool, type Camera } from "./Canvas";
 import Properties, { DoorStyleSelect, NumberField } from "./Properties";
 import { findRooms } from "./rooms";
+import {
+  annotatedPlanBounds,
+  createExteriorContourReader,
+  visibleExteriorContour,
+} from "./exterior";
 const RECOVERY = "planform-recovery-v4";
 const palette: {
   tool: Tool;
@@ -251,6 +255,9 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   }
   const history = drawingHistory(version);
   const ghost = overlay ? reference?.plan : undefined;
+  const [readExterior] = useState(createExteriorContourReader);
+  const exterior = readExterior(plan);
+  const visibleExterior = visibleExteriorContour(plan, readExterior);
   const { rooms, roomError } = useMemo(() => {
     try {
       return { rooms: findRooms(plan.items), roomError: undefined };
@@ -282,28 +289,34 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
     },
     [updateProject],
   );
-  const fit = useCallback((p: Plan = activePlan(projectRef.current)) => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const box = planBounds(p),
-      b = svg.getBoundingClientRect(),
-      pad = Math.min(90, b.width * 0.12),
-      k = Math.min(
-        3,
-        Math.max(
-          0.02,
-          Math.min(
-            (b.width - pad * 2) / Math.max(box.w, 1),
-            (b.height - pad * 2) / Math.max(box.h, 1),
-          ),
+  const fit = useCallback(
+    (p: Plan = activePlan(projectRef.current)) => {
+      const svg = svgRef.current;
+      if (!svg) return;
+      const box = annotatedPlanBounds(
+          p,
+          visibleExteriorContour(p, readExterior),
         ),
-      );
-    setCamera({
-      k,
-      x: (b.width - box.w * k) / 2 - box.x * k,
-      y: (b.height - box.h * k) / 2 - box.y * k,
-    });
-  }, []);
+        b = svg.getBoundingClientRect(),
+        pad = Math.min(90, b.width * 0.12),
+        k = Math.min(
+          3,
+          Math.max(
+            0.02,
+            Math.min(
+              (b.width - pad * 2) / Math.max(box.w, 1),
+              (b.height - pad * 2) / Math.max(box.h, 1),
+            ),
+          ),
+        );
+      setCamera({
+        k,
+        x: (b.width - box.w * k) / 2 - box.x * k,
+        y: (b.height - box.h * k) / 2 - box.y * k,
+      });
+    },
+    [readExterior],
+  );
   useEffect(() => {
     if (activePlan(projectRef.current).items.length) fit();
   }, []);
@@ -366,6 +379,18 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   function redo() {
     clearDrawingContext();
     updateProject(replaceActivePlan(project, history.redo(drawing)));
+  }
+  function setExteriorDimensions(show: boolean) {
+    const current = projectRef.current;
+    const withVisibility = (p: Plan) => ({
+      ...p,
+      showExteriorDimensions: show,
+    });
+    drawingHistory(activeDrawingId(current)).updateSnapshots(withVisibility);
+    if (preview) cancel();
+    updateProject(
+      replaceActivePlan(current, withVisibility(activePlan(current))),
+    );
   }
   function switchVersion(next: string) {
     if (next === version) return;
@@ -641,7 +666,10 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
   async function exporting(png: boolean) {
     setExportMenu(false);
     try {
-      const svg = exportSvg(svgRef.current!, planBounds(plan));
+      const svg = exportSvg(
+        svgRef.current!,
+        annotatedPlanBounds(plan, visibleExterior),
+      );
       const name =
         project.version !== 2
           ? `${project.name} - ${activeDrawing.name}`
@@ -1105,6 +1133,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
             plan={plan}
             ghost={ghost}
             rooms={rooms}
+            exterior={visibleExterior}
             setPreview={setPreview}
             commit={commit}
             selection={selection}
@@ -1215,6 +1244,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               plan={plan}
               rooms={rooms}
               roomError={roomError}
+              exterior={exterior}
               selection={selection}
               commit={commit}
               setSelection={setSelection}
@@ -1222,6 +1252,7 @@ function Editor({ sharedProject }: { sharedProject?: Project }) {
               onDuplicate={duplicate}
               onDelete={del}
               onError={showNotice}
+              onShowExteriorDimensions={setExteriorDimensions}
             />
           ) : (
             <div className="objects-panel">

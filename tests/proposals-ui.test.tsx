@@ -67,6 +67,43 @@ async function select(id: string) {
 const selected = () =>
   host.querySelector<HTMLSelectElement>('[aria-label="Active drawing"]')!.value;
 
+it("keeps exterior visibility out of geometry undo and redo", async () => {
+  const initial = emptyPlan();
+  initial.items = [
+    {
+      id: "wall",
+      name: "Wall",
+      type: "wall",
+      a: { x: 0, y: 0 },
+      b: { x: 400, y: 0 },
+      thickness: 20,
+    },
+  ];
+  localStorage.setItem("planform-recovery-v2", serialize(initial));
+  await act(async () => root.render(<App />));
+  await click("Objects");
+  await act(async () =>
+    host.querySelector<HTMLButtonElement>(".object-list button")!.click(),
+  );
+  await click("Delete");
+  await click("Properties");
+  const checkbox = () =>
+    host.querySelector<HTMLInputElement>(".property-checkbox input")!;
+  await act(async () => checkbox().click());
+  await click("Undo");
+  expect(checkbox().checked).toBe(true);
+  expect(host.querySelectorAll('[data-item-type="wall"]')).toHaveLength(1);
+  await act(async () => checkbox().click());
+  await click("Redo");
+  expect(checkbox().checked).toBe(false);
+  expect(host.querySelectorAll('[data-item-type="wall"]')).toHaveLength(0);
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
+  expect(
+    activePlan(readProjectFile(localStorage.getItem("planform-recovery-v4")!))
+      .showExteriorDimensions,
+  ).toBe(false);
+});
+
 it("restores deleted proposals with their own undo history and saves every drawing", async () => {
   const initial = {
     ...emptyPlan(),

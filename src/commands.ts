@@ -33,6 +33,7 @@ type Operation =
     }
   | { op: "corner"; wallId: string; end: "a" | "b"; point: Point }
   | { op: "update"; id: string; changes: Record<string, unknown> }
+  | { op: "setExteriorDimensions"; show: boolean }
   | { op: "delete"; ids: string[]; cascade?: boolean };
 export type CommandBatch = {
   format: "planform-commands";
@@ -127,6 +128,8 @@ export function applyCommands(
         i.id === item.id ? ({ ...i, ...op.changes } as Item) : i,
       );
       changed.add(item.id);
+    } else if (op.op === "setExteriorDimensions") {
+      plan.showExteriorDimensions = op.show;
     } else {
       const ids = new Set(op.ids);
       op.ids.forEach(editable);

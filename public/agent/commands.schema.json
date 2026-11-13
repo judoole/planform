@@ -142,6 +142,19 @@
             "additionalProperties": false,
             "properties": {
               "op": {
+                "const": "setExteriorDimensions"
+              },
+              "show": {
+                "type": "boolean"
+              }
+            },
+            "required": ["op", "show"]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "op": {
                 "const": "delete"
               },
               "ids": {

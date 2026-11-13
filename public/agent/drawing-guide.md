@@ -14,9 +14,11 @@ You are creating a single-floor, 2D architectural drawing. Return a downloadable
 ## Project envelope
 
 Required: `format: "planform"`, `version: 2`, `name`, `units: "cm"`, `items`.
-Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrated": true, "imported": false, "factor": 1 }`), `source: { "file": "house.pdf", "page": 1, "notes": ["..."] }`, `$schema`.
+Optional: `grid` (1–1000 cm; default 10), `calibration` (default `{ "calibrated": true, "imported": false, "factor": 1 }`), `showExteriorDimensions` (boolean; hidden when omitted), `source: { "file": "house.pdf", "page": 1, "notes": ["..."] }`, `$schema`.
 
 `calibration.factor` is cumulative scaling history; changing this number does not scale geometry. All stored coordinates are already in centimeters. Set `imported: true` for reconstructed source drawings. Never claim unknown dimensions are measured.
+
+Set `showExteriorDimensions` to true to annotate a calibrated, convex loop of connected straight walls. The editor and rendered exports label each exterior wall between the intersections of adjoining outside faces, including angled corners. For a 600 × 700 cm rectangular exterior with 20 cm walls, draw the centerlines 580 × 680 cm apart.
 
 Every item requires `id`, `name`, `type`. Optional `locked` and `evidence: { "basis": "measured" | "estimated", "note": "Source dimension or explicit assumption" }`. IDs are unique across the entire document, including groups. Unknown properties and arbitrary SVG markup are rejected.
 
@@ -60,6 +62,8 @@ For file-based updates, return the complete project and keep existing IDs. Alter
 ```
 
 Operations: `add` with `items`; `opening` with center `offset` in centimeters (not t); `corner` with `wallId`, `end:"a"|"b"`, `point`; `update` with `id` and `changes`; `delete` with `ids` and optional `cascade:true` for hosted openings. Update cannot change IDs, types, endpoints or group structure. Use corner for shared endpoint edits. Object commands target top-level objects. Locked objects require a separate unlock operation (`update` with only `locked:false`) first. Connected locked walls block a corner edit.
+
+Use `{ "op": "setExteriorDimensions", "show": true }` to show exterior wall labels for the drawing, or set `show` to false to hide them.
 
 Batches are atomic, apply in order, and validate the final result. Invalid openings are rejected, never silently moved/shrunk/deleted. A wall resize retains opening t, so center distance changes proportionally; update t as part of the same batch if a fixed distance is needed. Dependent objects may be added later in the same batch. If shrinking a wall, fix its openings in that batch. Deleting a host wall requires explicitly including its openings or `cascade:true`; deleted IDs are reported.
 

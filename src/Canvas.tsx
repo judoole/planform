@@ -25,10 +25,10 @@ import {
   setCorner,
   project,
   snapPoint,
-  planBounds,
   rotate,
 } from "./model";
-import { DrawItem, RoomLabels } from "./Drawing";
+import { DrawItem, ExteriorDimensions, RoomLabels } from "./Drawing";
+import type { ExteriorContour } from "./exterior";
 import { furniture, type FurnitureKind } from "./furniture";
 import type { Room } from "./rooms";
 export type Tool =
@@ -75,6 +75,7 @@ export default function Canvas({
   plan,
   ghost,
   rooms,
+  exterior,
   setPreview,
   commit,
   selection,
@@ -96,6 +97,7 @@ export default function Canvas({
   plan: Plan;
   ghost?: Plan;
   rooms: Room[];
+  exterior?: ExteriorContour;
   setPreview: (p: Plan | null) => void;
   commit: (p: Plan, base?: Plan) => void;
   selection: string[];
@@ -655,6 +657,7 @@ export default function Canvas({
               rooms={rooms}
               calibrated={plan.calibration.calibrated}
             />
+            <ExteriorDimensions contour={exterior} />
           </g>
           <g className="selection-overlay">
             {box && (
